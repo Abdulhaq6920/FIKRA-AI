@@ -1,0 +1,126 @@
+# ─── Build ───────────────────────────────────────────────────────────────
+# Dependency management: uv  (https://docs.astral.sh/uv/)
+#   uv venv .venv
+#   uv pip install -e ".[dev]"
+# ─────────────────────────────────────────────────────────────────────────
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "fikra-backend"
+version = "0.1.0"
+description = "FIKRA AI - Production-Grade Multi-Tenant RAG Chatbot Backend"
+requires-python = ">=3.11"
+dependencies = [
+    # Web framework
+    "fastapi==0.111.0",
+    "uvicorn[standard]==0.30.1",
+    "python-multipart==0.0.9",
+    # Pydantic
+    "pydantic==2.7.4",
+    "pydantic-settings==2.3.4",
+    "email-validator==2.2.0",
+    # Database
+    "sqlalchemy==2.0.31",
+    "asyncpg==0.29.0",
+    "alembic==1.13.2",
+    "pgvector==0.3.2",
+    # Security / Auth
+    "passlib[argon2]==1.7.4",
+    "argon2-cffi==23.1.0",
+    "python-jose[cryptography]==3.3.0",
+    "PyJWT==2.8.0",
+    # Redis & Celery
+    "redis==5.0.7",
+    "celery==5.4.0",
+    "flower==2.0.1",
+    # Groq
+    "groq>=0.30.0,<1.0.0",
+    # Document processing
+    "PyMuPDF==1.24.5",
+    "python-docx==1.1.2",
+    "pytesseract==0.3.13",
+    "Pillow>=10.4.0,<14.0.0",
+    "markdown==3.6",
+    "beautifulsoup4==4.12.3",
+    "lxml==5.2.2",
+    "python-magic==0.4.27",
+    "pandas==2.2.3",
+    "openpyxl==3.1.5",
+    "xlrd==2.0.1",
+    "odfpy==1.4.1",
+    "python-pptx==1.0.2",
+    "rapidocr-onnxruntime==1.4.4",
+    # NLP / Embeddings
+    "sentence-transformers==3.0.1",
+    "torch==2.3.1",
+    "transformers==4.42.4",
+    "tokenizers==0.19.1",
+    "numpy==1.26.4",
+    "tiktoken==0.7.0",
+    "langchain-text-splitters>=0.3.8,<1.0.0",
+    "langchain-groq>=0.2.0,<2.0.0",
+    "langchain-huggingface>=0.1.2,<2.0.0",
+    # Logging & Observability
+    "structlog==24.2.0",
+    "opentelemetry-api==1.25.0",
+    "opentelemetry-sdk==1.25.0",
+    "opentelemetry-instrumentation-fastapi==0.46b0",
+    "opentelemetry-instrumentation-sqlalchemy==0.46b0",
+    "prometheus-client==0.20.0",
+    # HTTP client
+    "httpx==0.27.0",
+    # Utilities
+    "python-slugify==8.0.4",
+    "tenacity==8.4.1",
+    "anyio==4.4.0",
+    "aiofiles==23.2.1",
+    "python-dateutil==2.9.0.post0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.2.2",
+    "pytest-asyncio==0.23.7",
+    "pytest-cov==5.0.0",
+    "httpx==0.27.0",
+    "factory-boy==3.3.0",
+    "faker==26.0.0",
+    "ruff==0.5.1",
+    "mypy==1.10.1",
+    "types-python-jose==3.3.4.20240106",
+    "types-passlib==1.7.7.20240327",
+    "types-aiofiles==23.2.0.20240403",
+    "types-python-slugify==8.0.2.20240310",
+    "types-Pillow==10.2.0.20240520",
+    "types-beautifulsoup4==4.12.0.20240511",
+    "types-Markdown==3.6.0.20240316",
+    "greenlet==3.0.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "W", "F", "I", "B", "C4", "UP", "N", "ANN", "S", "T20", "RUF"]
+ignore = ["ANN101", "ANN102", "ANN401", "S101", "S105"]
+exclude = ["alembic/versions"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+exclude = ["alembic/versions"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "--cov=app --cov-report=term-missing --cov-report=html"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
