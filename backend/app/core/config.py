@@ -47,9 +47,13 @@ class Settings(BaseSettings):
     # Database
     # ------------------------------------------------------------------
     database_url: str = Field(default="postgresql+asyncpg://postgres:root@localhost:5432/rag-prod")
-    database_pool_size: int = Field(default=20, ge=1)
-    database_max_overflow: int = Field(default=40, ge=0)
+    # Cloud deployments (Neon free = max 10 connections): set pool_size=5, max_overflow=5
+    # Local development: pool_size=20, max_overflow=40 are fine
+    database_pool_size: int = Field(default=5, ge=1)
+    database_max_overflow: int = Field(default=5, ge=0)
     database_pool_timeout: int = Field(default=30, ge=5)
+    # Set DATABASE_SSL=true when connecting to Neon or any cloud Postgres
+    database_ssl: bool = Field(default=False)
 
     # ------------------------------------------------------------------
     # Redis

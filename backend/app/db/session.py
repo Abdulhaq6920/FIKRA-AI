@@ -9,6 +9,12 @@ Usage in FastAPI endpoints via the dependency:
 The session is committed automatically on success and rolled back on any
 exception, then closed. Never call session.commit() directly in route
 handlers — use the service layer where appropriate.
+
+Cloud / Neon notes:
+- Set DATABASE_SSL=true in your .env when connecting to Neon or any cloud
+  Postgres. asyncpg requires ssl="require" in connect_args (not in the URL).
+- Set DATABASE_POOL_SIZE=5 and DATABASE_MAX_OVERFLOW=5 for Neon free tier
+  (max 10 simultaneous connections on the pooled endpoint).
 """
 
 from __future__ import annotations
@@ -25,6 +31,14 @@ from sqlalchemy.ext.asyncio import (
 from app.core.config import settings
 
 # ---------------------------------------------------------------------------
+# SSL connect_args — required for Neon and most cloud Postgres providers.
+# asyncpg does NOT read sslmode from the URL; it must be passed here.
+# ---------------------------------------------------------------------------
+_connect_args: dict[str, Any] = {}
+if settings.database_ssl:
+    _connect_args["ssl"] = "require"
+
+# ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
 _engine_kwargs: dict[str, Any] = {
@@ -34,6 +48,7 @@ _engine_kwargs: dict[str, Any] = {
     "pool_timeout": settings.database_pool_timeout,
     "pool_pre_ping": True,      # detect stale connections
     "pool_recycle": 1800,       # recycle connections after 30 minutes
+    "connect_args": _connect_args,
 }
 
 engine = create_async_engine(settings.database_url, **_engine_kwargs)

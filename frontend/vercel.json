@@ -5,5 +5,10 @@
   "installCommand": "npm install --legacy-peer-deps",
   "env": {
     "NEXT_PUBLIC_APP_NAME": "FIKRA AI"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_APP_NAME": "FIKRA AI"
+    }
   }
 }

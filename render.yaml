@@ -1,0 +1,155 @@
+# render.yaml — FIKRA AI Infrastructure
+#
+# Deploy with one click: https://render.com/deploy
+# Connect your GitHub repo and Render reads this file automatically.
+#
+# Services:
+#   fikra-backend  — FastAPI web service (Docker)
+#   fikra-worker   — Celery document-ingestion worker (Docker)
+#   fikra-redis    — Redis broker + cache (free managed instance)
+#
+# Before deploying, set these secret env vars in the Render dashboard
+# (do NOT put real values here — this file is committed to GitHub):
+#   GROQ_API_KEY, SECRET_KEY, JWT_SECRET_KEY, DATABASE_URL
+#
+# Free tier notes:
+#   - Web services sleep after 15 min of inactivity; first request takes ~30s
+#   - Redis free plan: 25MB, no persistence
+#   - Worker free plan: 512MB RAM, 0.1 CPU
+
+services:
+  # ── FastAPI Backend ──────────────────────────────────────────────────────
+  - type: web
+    name: fikra-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: APP_NAME
+        value: FIKRA AI
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+
+      # ── Secrets (set these in Render dashboard, not here) ──
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+      # ── Database (Neon) ──
+      - key: DATABASE_URL
+        sync: false          # paste your Neon postgresql+asyncpg:// URL here
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_POOL_SIZE
+        value: "5"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "5"
+
+      # ── Redis (auto-filled by Render from the redis service below) ──
+      - key: REDIS_URL
+        fromService:
+          name: fikra-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: fikra-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: fikra-redis
+          type: redis
+          property: connectionString
+
+      # ── CORS — replace with your actual Vercel URL ──
+      - key: ALLOWED_ORIGINS
+        value: https://fikra-ai.vercel.app
+
+      # ── App settings ──
+      - key: LOG_LEVEL
+        value: INFO
+      - key: LOG_FORMAT
+        value: json
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: EMBEDDING_DIMENSIONS
+        value: "384"
+      - key: RERANKER_ENABLED
+        value: "true"
+      - key: RETRIEVAL_TOP_K
+        value: "20"
+      - key: RERANKER_TOP_N
+        value: "5"
+      - key: MIN_RELEVANCE_SCORE
+        value: "0.3"
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "50"
+      - key: UPLOAD_DIR
+        value: /app/uploads
+      - key: GROQ_PRIMARY_MODEL
+        value: llama-3.1-8b-instant
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+
+  # ── Celery Worker ────────────────────────────────────────────────────────
+  - type: worker
+    name: fikra-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    startCommand: celery -A app.workers.celery_app worker --loglevel=info -Q default,ingestion --concurrency=2
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_POOL_SIZE
+        value: "3"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "2"
+      - key: SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: fikra-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: fikra-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: fikra-redis
+          type: redis
+          property: connectionString
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: EMBEDDING_DIMENSIONS
+        value: "384"
+      - key: UPLOAD_DIR
+        value: /app/uploads
+
+  # ── Redis ────────────────────────────────────────────────────────────────
+  - type: redis
+    name: fikra-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
