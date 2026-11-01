@@ -48,7 +48,7 @@ cmd /c ".venv\Scripts\python.exe -m pytest tests/integration/ -v --override-ini=
 Or use a test database URL:
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgresql+asyncpg://fikra:fikrapass@localhost:5432/FIKRA AI_test"
+$env:TEST_DATABASE_URL = "postgresql+asyncpg://postgres:root@localhost:5432/rag-prod AI_test"
 cmd /c ".venv\Scripts\python.exe -m pytest tests/integration/ -v --override-ini=addopts="
 ```
 

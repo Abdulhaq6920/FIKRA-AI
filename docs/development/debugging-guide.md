@@ -68,7 +68,7 @@ uv pip install pgvector
 docker compose ps postgres
 
 # Check the DATABASE_URL in .env matches the container
-# Default: postgresql+asyncpg://fikra:fikrapass@localhost:5432/FIKRA AI
+# Default: postgresql+asyncpg://postgres:root@localhost:5432/rag-prod AI
 ```
 
 ### Alembic migration fails: "relation already exists"

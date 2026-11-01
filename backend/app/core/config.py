@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Database
     # ------------------------------------------------------------------
-    database_url: str = Field(default="postgresql+asyncpg://fikra:fikrapass@localhost:5432/fikra")
+    database_url: str = Field(default="postgresql+asyncpg://postgres:root@localhost:5432/rag-prod")
     database_pool_size: int = Field(default=20, ge=1)
     database_max_overflow: int = Field(default=40, ge=0)
     database_pool_timeout: int = Field(default=30, ge=5)

@@ -27,7 +27,7 @@ All configuration is loaded from environment variables (or `.env` file in develo
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://fikra:fikrapass@localhost:5432/FIKRA AI` | **Yes** | Async PostgreSQL connection string |
+| `DATABASE_URL` | `postgresql+asyncpg://postgres:root@localhost:5432/rag-prod AI` | **Yes** | Async PostgreSQL connection string |
 | `DATABASE_POOL_SIZE` | `20` | No | Connection pool size |
 | `DATABASE_MAX_OVERFLOW` | `40` | No | Max additional connections |
 | `DATABASE_POOL_TIMEOUT` | `30` | No | Connection acquisition timeout (seconds) |
