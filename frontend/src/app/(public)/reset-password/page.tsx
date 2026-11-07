@@ -50,13 +50,13 @@ function ResetPasswordContent() {
 
   return (
     <div className="min-h-screen bg-surface-950 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-[#0a0f1e] to-brand-950" />
+      <div className="absolute inset-0 auth-canvas" />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 w-full max-w-md"
       >
-        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 shadow-2xl">
+        <div className="rounded-2xl glass-panel p-8">
           <Link href="/login" className="inline-flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to sign in
           </Link>
@@ -64,12 +64,12 @@ function ResetPasswordContent() {
           {done ? (
             <div className="text-center py-4">
               <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-              <h1 className="text-xl font-semibold text-white mb-2">Password updated</h1>
+              <h1 className="text-xl font-semibold text-surface-100 mb-2">Password updated</h1>
               <p className="text-surface-400 text-sm">Redirecting you to sign in…</p>
             </div>
           ) : (
             <>
-              <h1 className="text-2xl font-semibold text-white mb-1">Set new password</h1>
+              <h1 className="text-2xl font-semibold text-surface-100 mb-1">Set new password</h1>
               <p className="text-surface-400 text-sm mb-6">Choose a strong password for your account.</p>
 
               <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -81,7 +81,7 @@ function ResetPasswordContent() {
                       type={showPassword ? "text" : "password"}
                       autoComplete="new-password"
                       className={cn(
-                        "w-full px-4 pr-10 py-2.5 rounded-lg bg-surface-800/60 border text-white placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
+                        "w-full px-4 pr-10 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
                         errors.new_password ? "border-red-500/60" : "border-surface-600/60"
                       )}
                       placeholder="••••••••"
@@ -103,7 +103,7 @@ function ResetPasswordContent() {
                     type="password"
                     autoComplete="new-password"
                     className={cn(
-                      "w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-white placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
+                      "w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
                       errors.confirm_password ? "border-red-500/60" : "border-surface-600/60"
                     )}
                     placeholder="••••••••"

@@ -23,6 +23,7 @@ import {
   FileText,
   Settings,
   Shield,
+  BarChart3,
   LogOut,
   Menu,
   X,
@@ -34,12 +35,18 @@ import {
   Check,
   MoreHorizontal,
   Bell,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
+import { CurrencySwitch } from "@/features/currency/CurrencySwitch";
 import { chatApi } from "@/lib/api/chat";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
 import { api } from "@/lib/api/client";
+import { useHistoryNavigation } from "@/lib/hooks/useHistoryNavigation";
+import { NinjaArtwork } from "@/features/theme/NinjaArtwork";
+import { useTheme } from "@/features/theme/ThemeProvider";
 import type { Conversation } from "@/types";
 
 interface NavItem {
@@ -52,6 +59,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/chat",      label: "Chat",      icon: <MessageSquare className="w-4 h-4" /> },
   { href: "/documents", label: "Documents", icon: <FileText className="w-4 h-4" /> },
+  { href: "/analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
   { href: "/settings",  label: "Settings",  icon: <Settings className="w-4 h-4" /> },
   { href: "/admin",     label: "Admin",     icon: <Shield className="w-4 h-4" />, adminOnly: true },
 ];
@@ -80,6 +88,8 @@ export function AppShell({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, logout } = useAuth();
+  const { definition } = useTheme();
+  const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
 
   const isOnChat = pathname.startsWith("/chat");
   const selectedConversationId = isOnChat
@@ -137,7 +147,11 @@ export function AppShell({
       {/* Logo */}
       <div className="flex items-center h-14 px-4 border-b border-surface-800 gap-3 flex-shrink-0">
         <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-brand-600/30 border border-brand-500/40 flex items-center justify-center">
-          <Sparkles className="w-4 h-4 text-brand-400" />
+          {definition.artwork ? (
+            <NinjaArtwork variant={definition.artwork} className="h-6 w-7" />
+          ) : (
+            <Sparkles className="w-4 h-4 text-brand-400" />
+          )}
         </div>
         <AnimatePresence>
           {(!collapsed || isMobile) && (
@@ -145,7 +159,7 @@ export function AppShell({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="text-sm font-semibold text-white truncate"
+              className="text-sm font-semibold text-surface-100 truncate"
             >
               FIKRA AI
             </motion.span>
@@ -154,7 +168,7 @@ export function AppShell({
         {isMobile && (
           <button
             onClick={() => setMobileOpen(false)}
-            className="ml-auto text-surface-400 hover:text-white"
+            className="ml-auto text-surface-400 hover:text-surface-100"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
@@ -312,16 +326,57 @@ export function AppShell({
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <NotificationBell />
-        {/* Mobile header */}
-        <header className="flex items-center h-14 px-4 border-b border-surface-800 md:hidden bg-surface-900 flex-shrink-0">
-          <button onClick={() => setMobileOpen(true)} className="text-surface-400 hover:text-white" aria-label="Open menu">
+        {/* Unified top bar: history controls are shared by desktop and mobile */}
+        <header className="relative z-30 flex h-14 flex-shrink-0 items-center gap-1.5 border-b border-surface-800 bg-surface-900/70 px-3 backdrop-blur">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="rounded-lg p-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-100 md:hidden"
+            aria-label="Open menu"
+          >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="ml-3 text-sm font-semibold text-white">FIKRA AI</span>
+
+          <div className="flex items-center gap-1" role="group" aria-label="History navigation">
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={!canGoBack}
+              title="Go back"
+              aria-label="Go back"
+              className="rounded-lg border border-surface-800 bg-surface-900 p-1.5 text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface-900 disabled:hover:text-surface-300"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={goForward}
+              disabled={!canGoForward}
+              title="Go forward"
+              aria-label="Go forward"
+              className="rounded-lg border border-surface-800 bg-surface-900 p-1.5 text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface-900 disabled:hover:text-surface-300"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <span className="ml-2 text-sm font-semibold text-surface-100 md:hidden">FIKRA AI</span>
+
+          <div className="ml-auto flex items-center gap-2">
+            <CurrencySwitch />
+            <NotificationBell />
+          </div>
         </header>
 
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="relative flex-1 overflow-hidden">
+          {children}
+          {/* Decorative only. Hidden on chat so it never competes with the composer. */}
+          {definition.artwork && !isOnChat && (
+            <NinjaArtwork
+              variant={definition.artwork}
+              className="theme-watermark fixed bottom-3 right-2 z-20 hidden h-52 w-64 lg:block"
+            />
+          )}
+        </main>
       </div>
     </div>
   );
@@ -369,13 +424,13 @@ function NotificationBell() {
   };
 
   return (
-    <div className="absolute right-4 top-3 z-30 md:right-6">
+    <div className="relative">
       <button onClick={() => { setOpen((value) => !value); load(); }} className="relative rounded-xl border border-surface-700 bg-surface-900/90 p-2 text-surface-300 shadow-lg backdrop-blur hover:text-cyan-300" aria-label="Notifications">
         <Bell className="h-4 w-4" />
         {unread > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-brand-500 px-1 text-center text-[10px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-surface-700 bg-surface-900 shadow-2xl">
+        <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-surface-700 bg-surface-900 shadow-2xl">
           <p className="border-b border-surface-800 px-3 py-2 text-xs font-semibold text-surface-200">Notifications</p>
           {items.length ? items.map((item) => (
             <button key={item.id} onClick={() => openItem(item)} className={cn("block w-full border-b border-surface-800/70 px-3 py-3 text-left hover:bg-surface-800", !item.is_read && "bg-brand-500/5")}>
@@ -433,7 +488,7 @@ function ConversationItem({
             if (e.key === "Escape") onEditCancel();
           }}
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 bg-surface-700 text-white text-xs rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-brand-500 min-w-0"
+          className="flex-1 bg-surface-700 text-surface-100 text-xs rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-brand-500 min-w-0"
         />
       ) : (
         <span className="flex-1 truncate">{conv.title}</span>

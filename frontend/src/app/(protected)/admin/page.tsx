@@ -2,35 +2,42 @@
 
 /**
  * Organization Admin dashboard.
- * Tabs: Overview · Members · Feedback · Access Requests
+ * Tabs: Overview · Users · Questions · Documents · Feedback · Access Requests
+ *
+ * Organization analytics deliberately live on the Analytics page, which admins
+ * open with `/analytics?view=organization`. The legacy `?tab=Analytics` deep
+ * link redirects there.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
   FileText,
   MessageSquare,
-  Zap,
   Shield,
   AlertTriangle,
   RefreshCw,
   Search,
+  ArrowUpRight,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api } from "@/lib/api/client";
 import { adminApi } from "@/lib/api/admin";
-import type { AdminMember, FeedbackItem, AccessRequest, PagedResponse } from "@/lib/api/admin";
+import { DocumentsTab } from "@/features/admin/DocumentsTab";
+import { QuestionsTab } from "@/features/admin/QuestionsTab";
+import type {
+  AdminUser,
+  AdminUserRole,
+  FeedbackItem,
+  AccessRequest,
+  PagedResponse,
+} from "@/lib/api/admin";
 import { cn } from "@/lib/utils/cn";
 
 // ─── Types ────────────────────────────────────────────────────────────────
-
-interface OrgStats {
-  total_users: number;
-  total_documents: number;
-  total_conversations: number;
-  total_tokens_used: number;
-}
 
 interface FailedJob {
   id: string;
@@ -41,37 +48,69 @@ interface FailedJob {
   updated_at: string;
 }
 
-interface AdminOverview extends OrgStats {
-  users: AdminMember[];
-  users_page: number;
-  users_page_size: number;
+interface AdminOverview {
   failed_jobs: FailedJob[];
 }
 
-const STAT_CARDS = [
-  { key: "total_users",         label: "Users",         icon: Users,         color: "text-blue-400",   bg: "bg-blue-500/10"   },
-  { key: "total_documents",     label: "Documents",     icon: FileText,      color: "text-green-400",  bg: "bg-green-500/10"  },
-  { key: "total_conversations", label: "Conversations", icon: MessageSquare, color: "text-purple-400", bg: "bg-purple-500/10" },
-  { key: "total_tokens_used",   label: "Tokens Used",   icon: Zap,           color: "text-yellow-400", bg: "bg-yellow-500/10" },
+const TABS = [
+  "Overview",
+  "Users",
+  "Questions",
+  "Documents",
+  "Feedback",
+  "Access Requests",
 ] as const;
-
-const TABS = ["Overview", "Members", "Feedback", "Access Requests"] as const;
 type Tab = (typeof TABS)[number];
 
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("Overview");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const tabParam = searchParams.get("tab");
+  const legacyAnalytics = (tabParam ?? "").toLowerCase() === "analytics";
+  const activeTab: Tab =
+    TABS.find((tab) => tab.toLowerCase() === (tabParam ?? "").toLowerCase()) ?? "Overview";
+
+  // The Analytics tab moved to the dedicated Analytics page. Redirect old
+  // bookmarks and deep links instead of silently showing Overview.
+  useEffect(() => {
+    if (legacyAnalytics) router.replace("/analytics?view=organization");
+  }, [legacyAnalytics, router]);
+
+  const setActiveTab = useCallback(
+    (tab: Tab) => {
+      if (tab === activeTab) return;
+      const params = new URLSearchParams(searchParams.toString());
+      if (tab === "Overview") params.delete("tab");
+      else params.set("tab", tab);
+      // Member filters belong to the Questions tab only; switching tabs must
+      // not silently carry a stale deep-link filter with it.
+      if (tab !== "Questions") {
+        params.delete("user");
+        params.delete("userName");
+      }
+      const query = params.toString();
+      // URL-backed tabs make browser back/forward (and the app's history
+      // buttons) move between tabs instead of leaving the admin page.
+      router.push(query ? `${pathname}?${query}` : pathname);
+    },
+    [activeTab, pathname, router, searchParams]
+  );
 
   const isAdmin = user?.is_platform_admin || user?.organization_role === "org_admin";
+
+  if (legacyAnalytics) return null;
 
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-full bg-surface-950">
         <div className="text-center">
           <Shield className="w-12 h-12 text-surface-600 mx-auto mb-3" />
-          <h2 className="text-lg font-semibold text-white mb-1">Access Denied</h2>
+          <h2 className="text-lg font-semibold text-surface-100 mb-1">Access Denied</h2>
           <p className="text-sm text-surface-400">You do not have permission to view this page.</p>
         </div>
       </div>
@@ -83,12 +122,12 @@ export default function AdminPage() {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-xl font-semibold text-white">Admin Dashboard</h1>
+          <h1 className="text-xl font-semibold text-surface-100">Admin Dashboard</h1>
           <p className="text-sm text-surface-400 mt-0.5">Live organization overview and management</p>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-surface-800">
+        <div className="flex flex-wrap gap-1 mb-6 border-b border-surface-800">
           {TABS.map((tab) => (
             <button
               key={tab}
@@ -105,8 +144,10 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {activeTab === "Overview" && <OverviewTab />}
-        {activeTab === "Members" && <MembersTab />}
+        {activeTab === "Overview" && <OverviewTab onNavigate={setActiveTab} />}
+        {activeTab === "Users" && <UsersTab />}
+        {activeTab === "Questions" && <QuestionsTab />}
+        {activeTab === "Documents" && <DocumentsTab />}
         {activeTab === "Feedback" && <FeedbackTab />}
         {activeTab === "Access Requests" && <AccessRequestsTab />}
       </div>
@@ -116,7 +157,7 @@ export default function AdminPage() {
 
 // ─── Overview tab ─────────────────────────────────────────────────────────
 
-function OverviewTab() {
+function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const [stats, setStats] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +180,56 @@ function OverviewTab() {
     return () => { cancelled = true; window.clearInterval(interval); };
   }, []);
 
+  const quickLinks: Array<{
+    tab: Tab;
+    label: string;
+    description: string;
+    icon: typeof Users;
+    color: string;
+    bg: string;
+  }> = [
+    {
+      tab: "Users",
+      label: "Manage users",
+      description: "Add members, change roles, reset passwords.",
+      icon: Users,
+      color: "text-blue-300",
+      bg: "bg-blue-500/10",
+    },
+    {
+      tab: "Questions",
+      label: "Review questions",
+      description: "Inspect questions, answers, sources, and feedback.",
+      icon: MessageSquare,
+      color: "text-purple-300",
+      bg: "bg-purple-500/10",
+    },
+    {
+      tab: "Documents",
+      label: "Knowledge base",
+      description: "Upload, re-index, and check document status.",
+      icon: FileText,
+      color: "text-emerald-300",
+      bg: "bg-emerald-500/10",
+    },
+    {
+      tab: "Feedback",
+      label: "Feedback review",
+      description: "Triage negative answers and mark them solved.",
+      icon: AlertTriangle,
+      color: "text-amber-300",
+      bg: "bg-amber-500/10",
+    },
+    {
+      tab: "Access Requests",
+      label: "Admin requests",
+      description: "Approve or reject administrator access.",
+      icon: Shield,
+      color: "text-cyan-300",
+      bg: "bg-cyan-500/10",
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {error && (
@@ -148,35 +239,54 @@ function OverviewTab() {
         </div>
       )}
       {lastUpdated && (
-        <p className="text-xs text-surface-500">Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
+        <p className="text-xs text-surface-500">
+          Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+        </p>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {STAT_CARDS.map(({ key, label, icon: Icon, color, bg }, i) => (
-          <motion.div
-            key={key}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
-            className="rounded-xl bg-surface-900 border border-surface-800 p-4"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", bg)}>
-                <Icon className={cn("w-4 h-4", color)} />
+      {/* Analytics lives on its own page now; this card is the only cross-link. */}
+      <Link
+        href="/analytics?view=organization"
+        className="group flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-500/25 bg-brand-600/10 px-4 py-4 transition-colors hover:border-brand-400/40 hover:bg-brand-600/15 focus:outline-none focus:ring-2 focus:ring-brand-500"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-500/15">
+            <BarChart3 className="h-5 w-5 text-brand-300" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-surface-100">Organization analytics</p>
+            <p className="text-xs text-surface-400">
+              Questions, tokens, cost, top sources, and the member leaderboard.
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-300">
+          Open Analytics
+          <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+        </span>
+      </Link>
+
+      {/* Operational shortcuts — no stat tiles here; live totals live in Analytics. */}
+      <Section title="Management" icon={<Search className="w-4 h-4" />}>
+        <div className="grid grid-cols-1 divide-y divide-surface-800/80 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-3">
+          {quickLinks.map(({ tab, label, description, icon: Icon, color, bg }) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => onNavigate(tab)}
+              className="flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-800/40 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", bg)}>
+                <Icon className={cn("h-4 w-4", color)} />
               </div>
-              <span className="text-sm text-surface-400">{label}</span>
-            </div>
-            {loading ? (
-              <div className="h-8 w-20 bg-surface-800 animate-pulse rounded" />
-            ) : (
-              <p className="text-2xl font-semibold text-white">
-                {stats ? Number(stats[key as keyof OrgStats]).toLocaleString() : "—"}
-              </p>
-            )}
-          </motion.div>
-        ))}
-      </div>
+              <div className="min-w-0">
+                <p className="text-sm text-surface-200">{label}</p>
+                <p className="mt-0.5 text-xs text-surface-500">{description}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </Section>
 
       {/* Failed jobs */}
       <Section title="Failed Ingestion Jobs" icon={<AlertTriangle className="w-4 h-4" />}>
@@ -200,23 +310,73 @@ function OverviewTab() {
   );
 }
 
-// ─── Members tab ──────────────────────────────────────────────────────────
+// ─── Users tab ────────────────────────────────────────────────────────────
 
-function MembersTab() {
-  const [data, setData] = useState<PagedResponse<AdminMember> | null>(null);
+const ROLE_FILTERS = [
+  { value: "", label: "All roles" },
+  { value: "admin", label: "Admins" },
+  { value: "member", label: "Members" },
+] as const;
+
+const STATUS_FILTERS = [
+  { value: "", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+] as const;
+
+type RoleFilter = "" | "admin" | "member";
+type StatusFilter = "" | "active" | "inactive";
+
+interface UserFeedback {
+  kind: "error" | "success";
+  message: string;
+}
+
+function UsersTab() {
+  const { user: currentUser } = useAuth();
+  const [data, setData] = useState<PagedResponse<AdminUser> | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [feedback, setFeedback] = useState<UserFeedback | null>(null);
+  const [actioning, setActioning] = useState<string | null>(null);
+
+  // Create form
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createRole, setCreateRole] = useState<AdminUserRole>("member");
+  const [creating, setCreating] = useState(false);
+
+  // Password reset
+  const [resetFor, setResetFor] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await adminApi.getMembers(page, 20, search || undefined);
+      const result = await adminApi.listUsers({
+        page,
+        page_size: 20,
+        search: search || undefined,
+        role: roleFilter || undefined,
+        is_active: statusFilter === "" ? undefined : statusFilter === "active",
+      });
       setData(result);
-    } catch { /* keep previous data */ }
-    finally { setLoading(false); }
-  }, [page, search]);
+    } catch (err) {
+      setFeedback({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Could not load users.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, roleFilter, statusFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -226,51 +386,351 @@ function MembersTab() {
     setSearch(searchInput.trim());
   };
 
+  const runAction = async (successMessage: string, id: string, action: () => Promise<void>) => {
+    setActioning(id);
+    setFeedback(null);
+    try {
+      await action();
+      await load();
+      setFeedback({ kind: "success", message: successMessage });
+    } catch (err) {
+      setFeedback({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Action failed.",
+      });
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    setFeedback(null);
+    try {
+      await adminApi.createUser({
+        full_name: createName.trim(),
+        email: createEmail.trim(),
+        password: createPassword,
+        role: createRole,
+      });
+      setFeedback({ kind: "success", message: `Created ${createEmail.trim()}.` });
+      setCreateName("");
+      setCreateEmail("");
+      setCreatePassword("");
+      setCreateRole("member");
+      setShowCreate(false);
+      setPage(1);
+      await load();
+    } catch (err) {
+      setFeedback({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Could not create user.",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetFor) return;
+    setResetting(true);
+    setFeedback(null);
+    try {
+      await adminApi.resetUserPassword(resetFor, resetPassword);
+      setFeedback({
+        kind: "success",
+        message: "Password updated. Active sessions were signed out.",
+      });
+      setResetFor(null);
+      setResetPassword("");
+    } catch (err) {
+      setFeedback({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Could not reset password.",
+      });
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const totalPages = data ? Math.max(1, Math.ceil(data.total / 20)) : 1;
+  const canManagePlatformAdmins = Boolean(currentUser?.is_platform_admin);
+
+  const inputClass =
+    "w-full rounded-lg bg-surface-800 border border-surface-700 px-3 py-1.5 text-xs text-surface-100 placeholder:text-surface-500 outline-none focus:ring-1 focus:ring-brand-500";
 
   return (
-    <Section title="Organization Members" icon={<Users className="w-4 h-4" />}>
-      <div className="px-4 py-3 border-b border-surface-800">
-        <form onSubmit={handleSearch} className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-500" />
-            <input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by name or email…"
-              className="w-full rounded-lg bg-surface-800 border border-surface-700 pl-8 pr-3 py-1.5 text-xs text-surface-100 placeholder:text-surface-500 outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          </div>
-          <button type="submit" className="rounded-lg bg-brand-600/20 border border-brand-500/30 px-3 py-1.5 text-xs text-brand-300 hover:bg-brand-600/30">
-            Search
+    <Section title="Organization Users" icon={<Users className="w-4 h-4" />}>
+      {/* Toolbar */}
+      <div className="space-y-3 px-4 py-3 border-b border-surface-800">
+        <div className="flex flex-wrap items-center gap-2">
+          <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-[220px]">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-500" />
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search by name or email…"
+                className="w-full rounded-lg bg-surface-800 border border-surface-700 pl-8 pr-3 py-1.5 text-xs text-surface-100 placeholder:text-surface-500 outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <button type="submit" className="rounded-lg bg-brand-600/20 border border-brand-500/30 px-3 py-1.5 text-xs text-brand-300 hover:bg-brand-600/30">
+              Search
+            </button>
+          </form>
+          <button
+            type="button"
+            onClick={() => { setShowCreate((v) => !v); setFeedback(null); }}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors",
+              showCreate
+                ? "bg-surface-800 border-surface-700 text-surface-300 hover:text-surface-100"
+                : "bg-brand-600/20 border-brand-500/30 text-brand-300 hover:bg-brand-600/30"
+            )}
+          >
+            {showCreate ? "Cancel" : "+ Add user"}
           </button>
-        </form>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-wide text-surface-500">Role</span>
+            {ROLE_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setPage(1); setRoleFilter(value); }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] transition-colors",
+                  roleFilter === value
+                    ? "bg-brand-600/30 text-brand-300 border border-brand-500/30"
+                    : "bg-surface-800 text-surface-400 hover:text-surface-200"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-wide text-surface-500">Status</span>
+            {STATUS_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setPage(1); setStatusFilter(value); }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] transition-colors",
+                  statusFilter === value
+                    ? "bg-brand-600/30 text-brand-300 border border-brand-500/30"
+                    : "bg-surface-800 text-surface-400 hover:text-surface-200"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {feedback && (
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2 text-xs",
+              feedback.kind === "error"
+                ? "border-red-500/25 bg-red-500/10 text-red-200"
+                : "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"
+            )}
+          >
+            {feedback.message}
+          </div>
+        )}
+
+        {showCreate && (
+          <form onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-surface-800 bg-surface-950/40 p-3">
+            <input
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              placeholder="Full name"
+              required
+              maxLength={255}
+              className={inputClass}
+            />
+            <input
+              type="email"
+              value={createEmail}
+              onChange={(e) => setCreateEmail(e.target.value)}
+              placeholder="Email address"
+              required
+              className={inputClass}
+            />
+            <input
+              type="password"
+              value={createPassword}
+              onChange={(e) => setCreatePassword(e.target.value)}
+              placeholder="Password (min 8 characters)"
+              required
+              minLength={8}
+              maxLength={128}
+              className={inputClass}
+            />
+            <div className="flex gap-2">
+              <select
+                value={createRole}
+                onChange={(e) => setCreateRole(e.target.value as AdminUserRole)}
+                className={cn(inputClass, "flex-1")}
+                aria-label="Role for new user"
+              >
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button
+                type="submit"
+                disabled={creating}
+                className="rounded-lg bg-brand-600/30 border border-brand-500/40 px-3 py-1.5 text-xs font-medium text-brand-200 hover:bg-brand-600/40 disabled:opacity-40"
+              >
+                {creating ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {loading ? <Skeleton rows={5} /> : data?.items.length ? (
         <>
           <div className="divide-y divide-surface-800/80">
-            {data.items.map((member) => (
-              <div key={member.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-300 flex-shrink-0">
-                  {member.full_name.slice(0, 1).toUpperCase()}
+            {data.items.map((member) => {
+              const platformBlocked = member.is_platform_admin && !canManagePlatformAdmins;
+              const busy = actioning === member.id;
+              const controlsDisabled = busy || member.is_self || platformBlocked;
+              return (
+                <div key={member.id} className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold flex-shrink-0",
+                        member.is_active
+                          ? "bg-brand-500/15 text-brand-300"
+                          : "bg-surface-800 text-surface-500"
+                      )}
+                    >
+                      {member.full_name.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className={cn("truncate text-sm", member.is_active ? "text-surface-200" : "text-surface-500")}>
+                          {member.full_name}
+                        </p>
+                        {member.is_self && (
+                          <span className="rounded-full bg-surface-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-surface-400">
+                            You
+                          </span>
+                        )}
+                        {member.is_platform_admin && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-cyan-300">
+                            <Shield className="h-2.5 w-2.5" /> Platform
+                          </span>
+                        )}
+                      </div>
+                      <p className="truncate text-xs text-surface-500">{member.email}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                          member.is_active
+                            ? "bg-emerald-500/10 text-emerald-300"
+                            : "bg-surface-800 text-surface-500"
+                        )}
+                      >
+                        {member.is_active ? "Active" : "Inactive"}
+                      </span>
+
+                      <select
+                        value={member.role}
+                        disabled={controlsDisabled}
+                        onChange={(e) => {
+                          const nextRole = e.target.value as AdminUserRole;
+                          runAction(`Role updated to ${nextRole}.`, member.id, () =>
+                            adminApi
+                              .updateUser(member.id, { role: nextRole })
+                              .then(() => undefined)
+                          );
+                        }}
+                        aria-label={`Role for ${member.full_name}`}
+                        className="rounded-lg bg-surface-800 border border-surface-700 px-2 py-1 text-[11px] text-surface-200 outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-40"
+                      >
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        disabled={controlsDisabled}
+                        onClick={() =>
+                          runAction(
+                            member.is_active ? "User deactivated." : "User activated.",
+                            member.id,
+                            () =>
+                              adminApi
+                                .updateUser(member.id, { is_active: !member.is_active })
+                                .then(() => undefined)
+                          )
+                        }
+                        className={cn(
+                          "rounded px-2.5 py-1 text-[11px] transition-colors disabled:opacity-40",
+                          member.is_active
+                            ? "bg-red-400/10 text-red-200 hover:bg-red-400/20"
+                            : "bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20"
+                        )}
+                      >
+                        {member.is_active ? "Deactivate" : "Activate"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy || platformBlocked}
+                        onClick={() => {
+                          setResetFor(resetFor === member.id ? null : member.id);
+                          setResetPassword("");
+                          setFeedback(null);
+                        }}
+                        className="rounded px-2.5 py-1 text-[11px] text-surface-300 hover:bg-surface-800 disabled:opacity-40"
+                      >
+                        {resetFor === member.id ? "Cancel" : "Reset password"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {resetFor === member.id && (
+                    <form onSubmit={handleReset} className="mt-2 flex flex-wrap gap-2">
+                      <input
+                        type="password"
+                        value={resetPassword}
+                        onChange={(e) => setResetPassword(e.target.value)}
+                        placeholder="New password (min 8 characters)"
+                        required
+                        minLength={8}
+                        maxLength={128}
+                        className={cn(inputClass, "flex-1 min-w-[200px]")}
+                      />
+                      <button
+                        type="submit"
+                        disabled={resetting || resetPassword.length < 8}
+                        className="rounded-lg bg-brand-600/30 border border-brand-500/40 px-3 py-1.5 text-xs font-medium text-brand-200 hover:bg-brand-600/40 disabled:opacity-40"
+                      >
+                        {resetting ? "Saving…" : "Save password"}
+                      </button>
+                    </form>
+                  )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-surface-200">{member.full_name}</p>
-                  <p className="truncate text-xs text-surface-500">{member.email}</p>
-                </div>
-                <span className={cn(
-                  "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide flex-shrink-0",
-                  member.role === "admin" ? "bg-cyan-400/10 text-cyan-300" : "bg-surface-800 text-surface-400"
-                )}>
-                  {member.role === "admin" ? "Admin" : "Member"}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <Pagination page={page} totalPages={totalPages} total={data.total} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
         </>
-      ) : <EmptyRow text="No members found." />}
+      ) : <EmptyRow text="No users found." />}
     </Section>
   );
 }

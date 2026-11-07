@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 import uuid
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -27,7 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser, get_groq
 from app.core.config import settings
-from app.core.exceptions import ConversationNotFoundError, PermissionDeniedError
+from app.core.exceptions import (
+    AppError,
+    ConversationNotFoundError,
+    PermissionDeniedError,
+)
 from app.db.models.audit import Notification
 from app.db.models.conversation import (
     Conversation,
@@ -36,7 +40,7 @@ from app.db.models.conversation import (
     Message,
     MessageRole,
 )
-from app.db.models.user import OrgRole, OrganizationMembership
+from app.db.models.user import OrganizationMembership, OrgRole
 from app.db.session import get_db
 from app.providers.groq_client import GroqClient
 from app.schemas.chat import (
@@ -191,6 +195,9 @@ async def ask(
             "page_number": c.page_number,
             "section_heading": c.section_heading,
             "excerpt": c.excerpt,
+            "chunk_id": c.chunk_id,
+            "retrieval_method": c.retrieval_method,
+            "similarity": c.similarity,
         }
         for c in result.citations
     ]
@@ -207,6 +214,8 @@ async def ask(
         citations=citations_data or None,
     )
     db.add(asst_msg)
+    # Flush so the usage record can reference the assistant message.
+    await db.flush()
 
     # Update conversation metadata
     conv = await db.get(Conversation, body.conversation_id)
@@ -219,6 +228,7 @@ async def ask(
         organization_id=org_id,
         user_id=user.id,
         conversation_id=body.conversation_id,
+        message_id=asst_msg.id,
         model=result.model_used,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
@@ -273,10 +283,9 @@ async def ask_stream(
 
     rag = RAGService(db=db, groq=groq)
 
-    async def event_stream():
+    async def event_stream() -> AsyncIterator[str]:
         answer_parts: list[str] = []
         client_disconnected = False
-        started_at = time.perf_counter()
         try:
             async for chunk in rag.answer_stream(
                 question=body.question,
@@ -293,7 +302,22 @@ async def ask_stream(
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
 
             answer = "".join(answer_parts)
-            if answer and not client_disconnected:
+            result = rag.last_stream_result
+            if answer and not client_disconnected and result is not None:
+                citations_data = [
+                    {
+                        "source_number": citation.source_number,
+                        "document_id": citation.document_id,
+                        "document_title": citation.document_title,
+                        "page_number": citation.page_number,
+                        "section_heading": citation.section_heading,
+                        "excerpt": citation.excerpt,
+                        "chunk_id": citation.chunk_id,
+                        "retrieval_method": citation.retrieval_method,
+                        "similarity": citation.similarity,
+                    }
+                    for citation in result.citations
+                ]
                 user_message = Message(
                     conversation_id=body.conversation_id,
                     organization_id=org_id,
@@ -307,15 +331,59 @@ async def ask_stream(
                     user_id=user.id,
                     role=MessageRole.ASSISTANT,
                     content=answer,
-                    model_used=settings.groq_primary_model,
-                    latency_ms=int((time.perf_counter() - started_at) * 1000),
+                    model_used=result.model_used or settings.groq_primary_model,
+                    input_tokens=result.input_tokens,
+                    output_tokens=result.output_tokens,
+                    latency_ms=result.latency_ms,
+                    citations=citations_data or None,
                 )
                 db.add_all([user_message, assistant_message])
+                # Flush so the usage record can reference the assistant message.
+                await db.flush()
+
+                from app.db.models.audit import UsageRecord
+
+                db.add(
+                    UsageRecord(
+                        organization_id=org_id,
+                        user_id=user.id,
+                        conversation_id=body.conversation_id,
+                        message_id=assistant_message.id,
+                        model=result.model_used or settings.groq_primary_model,
+                        input_tokens=result.input_tokens,
+                        output_tokens=result.output_tokens,
+                        total_tokens=result.input_tokens + result.output_tokens,
+                        request_latency_ms=result.latency_ms,
+                        retrieval_latency_ms=result.retrieval_latency_ms,
+                    )
+                )
+
                 conversation = await db.get(Conversation, body.conversation_id)
                 if conversation:
                     conversation.message_count += 2
                 await db.commit()
+
+                # Final metadata event so the client can show citations and
+                # use the real message IDs (feedback) without reloading.
+                meta_event = {
+                    "meta": {
+                        "user_message_id": str(user_message.id),
+                        "assistant_message_id": str(assistant_message.id),
+                        "model_used": assistant_message.model_used,
+                        "citations": citations_data,
+                    }
+                }
+                yield f"data: {json.dumps(meta_event)}\n\n"
+        except AppError as exc:
+            # Typed application errors carry a stable code and a user-safe
+            # message (e.g. the provider rate limit being reached).
+            yield (
+                "data: "
+                + json.dumps({"error": exc.error_code, "message": exc.message})
+                + "\n\n"
+            )
         except Exception as exc:
+            # Unexpected failures stay opaque to the client.
             yield f"data: {json.dumps({'error': type(exc).__name__})}\n\n"
         finally:
             # Always clean up the cancel event

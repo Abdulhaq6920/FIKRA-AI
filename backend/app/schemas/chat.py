@@ -38,6 +38,11 @@ class CitationOut(BaseModel):
     page_number: int | None
     section_heading: str | None
     excerpt: str
+    # Retrieval provenance — absent on citations stored before this field
+    # was added, so keep them optional rather than failing validation.
+    chunk_id: str | None = None
+    retrieval_method: str | None = None
+    similarity: float | None = None
 
 
 class ChatResponse(BaseModel):

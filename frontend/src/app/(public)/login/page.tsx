@@ -65,7 +65,7 @@ export default function LoginPage() {
 
       {/* ── Static background (reduced-motion or fallback) ──────────────── */}
       {prefersReduced && (
-        <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-brand-950" />
+        <div className="absolute inset-0 auth-canvas" />
       )}
 
       {/* ── Login card ──────────────────────────────────────────────────── */}
@@ -75,7 +75,7 @@ export default function LoginPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative z-10 w-full max-w-md px-4"
       >
-        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md shadow-2xl shadow-black/40 p-8">
+        <div className="rounded-2xl glass-panel p-8">
           {/* Logo & heading */}
           <div className="text-center mb-8">
             <motion.div
@@ -86,7 +86,7 @@ export default function LoginPage() {
             >
               <Sparkles className="w-7 h-7 text-brand-400" aria-hidden="true" />
             </motion.div>
-            <h1 className="text-2xl font-semibold text-white">
+            <h1 className="text-2xl font-semibold text-surface-100">
               FIKRA AI
             </h1>
             <p className="text-sm text-surface-300 mt-1">
@@ -118,7 +118,7 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   className={cn(
-                    "w-full pl-10 pr-4 py-2.5 rounded-lg bg-surface-800/60 border text-white",
+                    "w-full pl-10 pr-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100",
                     "placeholder:text-surface-500 focus:outline-none focus:ring-2",
                     "focus:ring-brand-500 transition-colors text-sm",
                     errors.email
@@ -164,7 +164,7 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   className={cn(
-                    "w-full pl-10 pr-10 py-2.5 rounded-lg bg-surface-800/60 border text-white",
+                    "w-full pl-10 pr-10 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100",
                     "placeholder:text-surface-500 focus:outline-none focus:ring-2",
                     "focus:ring-brand-500 transition-colors text-sm",
                     errors.password
@@ -257,7 +257,7 @@ function AnimatedBackground() {
   return (
     <>
       {/* Base gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-[#0a0f1e] to-brand-950" />
+      <div className="absolute inset-0 auth-canvas" />
 
       {/* Grid overlay */}
       <div

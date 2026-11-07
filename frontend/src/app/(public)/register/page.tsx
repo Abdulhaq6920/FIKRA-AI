@@ -45,18 +45,18 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-surface-950 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-[#0a0f1e] to-brand-950" />
+      <div className="absolute inset-0 auth-canvas" />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 w-full max-w-md"
       >
-        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 shadow-2xl">
+        <div className="rounded-2xl glass-panel p-8">
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-brand-600/20 border border-brand-500/30 mb-3">
               <Sparkles className="w-6 h-6 text-brand-400" />
             </div>
-            <h1 className="text-2xl font-semibold text-white">Create account</h1>
+            <h1 className="text-2xl font-semibold text-surface-100">Create account</h1>
             <p className="text-sm text-surface-400 mt-1">Join FIKRA AI</p>
           </div>
 
@@ -67,7 +67,7 @@ export default function RegisterPage() {
                 id="full_name"
                 type="text"
                 autoComplete="name"
-                className={cn("w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-white placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.full_name ? "border-red-500/60" : "border-surface-600/60")}
+                className={cn("w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.full_name ? "border-red-500/60" : "border-surface-600/60")}
                 placeholder="Jane Smith"
                 {...register("full_name")}
               />
@@ -80,7 +80,7 @@ export default function RegisterPage() {
                 id="email"
                 type="email"
                 autoComplete="email"
-                className={cn("w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-white placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.email ? "border-red-500/60" : "border-surface-600/60")}
+                className={cn("w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.email ? "border-red-500/60" : "border-surface-600/60")}
                 placeholder="you@company.com"
                 {...register("email")}
               />
@@ -94,7 +94,7 @@ export default function RegisterPage() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
-                  className={cn("w-full pr-10 px-4 py-2.5 rounded-lg bg-surface-800/60 border text-white placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.password ? "border-red-500/60" : "border-surface-600/60")}
+                  className={cn("w-full pr-10 px-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.password ? "border-red-500/60" : "border-surface-600/60")}
                   placeholder="••••••••"
                   {...register("password")}
                 />
@@ -111,7 +111,7 @@ export default function RegisterPage() {
                 id="confirm_password"
                 type="password"
                 autoComplete="new-password"
-                className={cn("w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-white placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.confirm_password ? "border-red-500/60" : "border-surface-600/60")}
+                className={cn("w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors", errors.confirm_password ? "border-red-500/60" : "border-surface-600/60")}
                 placeholder="••••••••"
                 {...register("confirm_password")}
               />

@@ -7,19 +7,17 @@ the environment variable USE_POSTGRES_TEST=1 is set.
 
 from __future__ import annotations
 
-import asyncio
 import os
 from collections.abc import AsyncGenerator
 
-import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.db.base import Base
-from app.main import app as fastapi_app
 from app.db.session import get_db
-
+from app.main import app as fastapi_app
 
 # ---------------------------------------------------------------------------
 # Database
@@ -34,7 +32,10 @@ TEST_DATABASE_URL = os.getenv(
 @pytest_asyncio.fixture(scope="session")
 async def test_engine():
     """Create a test database engine. Session-scoped so schema is created once."""
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    # NullPool: pytest-asyncio runs each test in its own event loop, so pooled
+    # asyncpg/aiosqlite connections must not be reused across loops (reuse
+    # raises "another operation is in progress").
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine

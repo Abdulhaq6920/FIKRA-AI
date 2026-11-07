@@ -119,7 +119,7 @@ export default function DocumentsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-xl font-semibold text-white">Documents</h1>
+            <h1 className="text-xl font-semibold text-surface-100">Documents</h1>
             <p className="text-sm text-surface-400 mt-0.5">
               {documents.length} document{documents.length !== 1 ? "s" : ""} in your organization
             </p>
@@ -240,7 +240,7 @@ function DocumentRow({
       <FileText className="w-8 h-8 text-brand-400 flex-shrink-0" />
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{doc.title}</p>
+        <p className="text-sm font-medium text-surface-100 truncate">{doc.title}</p>
         <p className="text-xs text-surface-500 mt-0.5">
           {formatBytes(doc.file_size_bytes)}
           {doc.page_count != null && ` · ${doc.page_count} pages`}

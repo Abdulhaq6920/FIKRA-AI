@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import OrgAdminUser
 from app.db.models.audit import Notification, RoleRequest, RoleRequestStatus, UsageRecord
-from app.db.models.conversation import Conversation, Feedback, Message
+from app.db.models.conversation import Conversation, Feedback, Message, MessageRole
 from app.db.models.document import Document, DocumentProcessingJob, JobStatus
-from app.db.models.user import OrgRole, OrganizationMembership, User
+from app.db.models.user import OrganizationMembership, OrgRole, User
 from app.db.session import get_db
 from app.schemas.workflow import FeedbackReviewUpdate, ReviewDecision
 
@@ -45,6 +45,12 @@ async def organization_overview(
         select(func.count(Conversation.id)).where(
             Conversation.organization_id == org_id,
             Conversation.is_active == True,  # noqa: E712
+        )
+    )
+    total_questions = await db.scalar(
+        select(func.count(Message.id)).where(
+            Message.organization_id == org_id,
+            Message.role == MessageRole.USER,
         )
     )
     total_tokens_used = await db.scalar(
@@ -103,6 +109,7 @@ async def organization_overview(
         "total_users": total_users or 0,
         "total_documents": total_documents or 0,
         "total_conversations": total_conversations or 0,
+        "total_questions": int(total_questions or 0),
         "total_tokens_used": int(total_tokens_used or 0),
         "users": users,
         "users_page": page,

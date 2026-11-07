@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     groq_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     groq_timeout_seconds: int = Field(default=60, ge=5)
     groq_max_concurrent_requests: int = Field(default=10, ge=1)
+    # Approximate token pricing used for analytics cost estimates (USD per
+    # million tokens). Defaults suit the small Groq models used by this app;
+    # override them in .env when you switch providers or models.
+    groq_input_cost_per_million_usd: float = Field(default=0.10, ge=0.0)
+    groq_output_cost_per_million_usd: float = Field(default=0.50, ge=0.0)
 
     # ------------------------------------------------------------------
     # Database
@@ -100,6 +105,8 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=20, ge=1, le=100)
     reranker_top_n: int = Field(default=5, ge=1, le=20)
     min_relevance_score: float = Field(default=0.3, ge=0.0, le=1.0)
+    # Candidate pool passed to fusion/reranking before the prompt is built.
+    rag_retrieval_candidates: int = Field(default=12, ge=1, le=100)
 
     # ------------------------------------------------------------------
     # Upload / Documents
@@ -145,6 +152,19 @@ class Settings(BaseSettings):
     max_output_tokens: int = Field(default=2048, ge=256)
     max_context_messages: int = Field(default=20, ge=2)
     summarize_after_messages: int = Field(default=30, ge=10)
+    # RAG prompt budget. Groq's free tier enforces a low tokens-per-minute
+    # limit, so keeping each request small is what allows several consecutive
+    # questions without a 429. These are deliberately independent of the
+    # retrieval knobs above: retrieve a wide candidate pool, send a small,
+    # high-signal prompt.
+    rag_context_max_passages: int = Field(default=5, ge=1, le=20)
+    rag_context_chars_per_passage: int = Field(default=600, ge=200, le=4000)
+    rag_history_max_messages: int = Field(default=6, ge=0, le=50)
+    rag_history_max_tokens: int = Field(default=600, ge=0, le=8000)
+    rag_prompt_max_tokens: int = Field(default=2200, ge=1000, le=30000)
+    # Chat answers are concise; reserving fewer output tokens keeps the
+    # provider's tokens-per-minute accounting low enough for rapid follow-ups.
+    rag_answer_max_tokens: int = Field(default=1024, ge=256, le=8192)
 
     # ------------------------------------------------------------------
     # Rate limits

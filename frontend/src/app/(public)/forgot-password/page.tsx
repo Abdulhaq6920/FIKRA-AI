@@ -32,13 +32,13 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-surface-950 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-[#0a0f1e] to-brand-950" />
+      <div className="absolute inset-0 auth-canvas" />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 w-full max-w-md"
       >
-        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 shadow-2xl">
+        <div className="rounded-2xl glass-panel p-8">
           <Link
             href="/login"
             className="inline-flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 mb-6 focus:outline-none focus:underline"
@@ -50,14 +50,14 @@ export default function ForgotPasswordPage() {
           {submitted ? (
             <div className="text-center py-4">
               <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-              <h1 className="text-xl font-semibold text-white mb-2">Check your email</h1>
+              <h1 className="text-xl font-semibold text-surface-100 mb-2">Check your email</h1>
               <p className="text-surface-400 text-sm">
                 If an account exists for that email, we&apos;ve sent a password reset link.
               </p>
             </div>
           ) : (
             <>
-              <h1 className="text-2xl font-semibold text-white mb-1">Reset password</h1>
+              <h1 className="text-2xl font-semibold text-surface-100 mb-1">Reset password</h1>
               <p className="text-surface-400 text-sm mb-6">
                 Enter your email and we&apos;ll send you a reset link.
               </p>
@@ -74,7 +74,7 @@ export default function ForgotPasswordPage() {
                       type="email"
                       autoComplete="email"
                       className={cn(
-                        "w-full pl-10 pr-4 py-2.5 rounded-lg bg-surface-800/60 border text-white",
+                        "w-full pl-10 pr-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100",
                         "placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
                         errors.email ? "border-red-500/60" : "border-surface-600/60"
                       )}

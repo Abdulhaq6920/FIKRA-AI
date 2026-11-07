@@ -8,35 +8,50 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Send,
   Copy,
   ThumbsUp,
   ThumbsDown,
-  BookOpen,
   MessageSquare,
-  ChevronRight,
   Radio,
   Cpu,
   Zap,
   Square,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { chatApi } from "@/lib/api/chat";
-import { api, ApiRequestError } from "@/lib/api/client";
+import { ApiRequestError } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
 import type { Message, Citation } from "@/types";
 import { useAuth } from "@/features/auth/AuthContext";
+import { MarkdownContent } from "@/features/chat/MarkdownContent";
 
 // ─── Context bridge — AppShell needs to know about active conversation ─────
 // We use a global event bus so AppShell can react to new conversations
 // created from within this page.
 const CONV_REFRESH_EVENT = "fikra:conv-refresh";
+
+/** Final SSE event emitted after a streamed answer is persisted. */
+interface StreamMeta {
+  user_message_id: string;
+  assistant_message_id: string;
+  model_used: string | null;
+  citations: Citation[];
+}
+
+/** User-safe labels for provider errors streamed by the backend. */
+const PROVIDER_ERROR_MESSAGES: Record<string, string> = {
+  PROVIDER_RATE_LIMITED:
+    "The AI is handling a lot of requests right now. Please wait a few seconds and try again.",
+  ProviderRateLimitError:
+    "The AI is handling a lot of requests right now. Please wait a few seconds and try again.",
+  PROVIDER_UNAVAILABLE:
+    "The AI provider is temporarily unavailable. Please try again in a moment.",
+  ProviderUnavailableError:
+    "The AI provider is temporarily unavailable. Please try again in a moment.",
+};
 
 export default function ChatPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -54,7 +69,6 @@ export default function ChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [accessRequestMessage, setAccessRequestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const conversationId = searchParams.get("conversation");
@@ -142,6 +156,8 @@ export default function ChatPage() {
       const decoder = new TextDecoder();
       let accumulated = "";
       let eventBuffer = "";
+      let meta: StreamMeta | null = null;
+      let streamFailed = false;
       setStreamingSessions((previous) => ({ ...previous, [convId]: "" }));
 
       const processEvents = () => {
@@ -157,11 +173,23 @@ export default function ChatPage() {
           if (!data || data === "[DONE]") continue;
 
           try {
-            const payload = JSON.parse(data) as { text?: string; error?: string };
+            const payload = JSON.parse(data) as {
+              text?: string;
+              error?: string;
+              message?: string;
+              meta?: StreamMeta;
+            };
             if (payload.error) {
-              setSessionError(convId, "The AI provider encountered an error. Please try again.");
+              streamFailed = true;
+              setSessionError(
+                convId,
+                payload.message ??
+                  PROVIDER_ERROR_MESSAGES[payload.error] ??
+                  "The AI provider encountered an error. Please try again."
+              );
               continue;
             }
+            if (payload.meta) meta = payload.meta;
             if (payload.text) {
               accumulated += payload.text;
               setStreamingSessions((previous) => ({ ...previous, [convId]: accumulated }));
@@ -181,15 +209,21 @@ export default function ChatPage() {
       eventBuffer += decoder.decode();
       processEvents();
 
-      if (!controller.signal.aborted && activeConversationRef.current === convId) {
+      if (
+        !streamFailed &&
+        !controller.signal.aborted &&
+        activeConversationRef.current === convId
+      ) {
         setMessages((previous) => [
-          ...previous,
+          ...previous.map((msg) =>
+            meta && msg.id === tempMsg.id ? { ...msg, id: meta.user_message_id } : msg
+          ),
           {
-            id: `stream-${Date.now()}`,
+            id: meta?.assistant_message_id ?? `stream-${Date.now()}`,
             role: "assistant",
             content: accumulated,
-            citations: null,
-            model_used: null,
+            citations: meta?.citations ?? null,
+            model_used: meta?.model_used ?? null,
             created_at: new Date().toISOString(),
           },
         ]);
@@ -218,17 +252,6 @@ export default function ChatPage() {
       if (input || activeConvId) {
         chatApi.cancelStream("", activeConvId).catch(() => {});
       }
-    }
-  };
-
-  const requestAdminAccess = async () => {
-    const reason = window.prompt("Why do you need organization-admin access?")?.trim();
-    if (reason === undefined) return;
-    try {
-      await api.post("/access-requests", { reason: reason || null });
-      setAccessRequestMessage("Request sent to your organization administrators.");
-    } catch (err) {
-      setAccessRequestMessage(err instanceof Error ? err.message : "Could not send the request.");
     }
   };
 
@@ -262,15 +285,10 @@ export default function ChatPage() {
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300/70">AI Knowledge Assistant</p>
-            <h1 className="text-sm font-semibold text-white">FIKRA AI</h1>
+            <h1 className="text-sm font-semibold text-surface-100">FIKRA AI</h1>
           </div>
         </div>
         <div className="mr-12 hidden items-center gap-2 sm:flex">
-          {!user?.is_platform_admin && user?.organization_role !== "org_admin" && (
-            <button onClick={requestAdminAccess} className="rounded-full border border-cyan-300/20 bg-cyan-400/5 px-3 py-1.5 text-[11px] font-medium text-cyan-200 hover:bg-cyan-400/10">
-              Request admin access
-            </button>
-          )}
           <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-[11px] font-medium text-emerald-300">
             <Radio className="h-3 w-3 animate-pulse" />
             System online
@@ -300,10 +318,6 @@ export default function ChatPage() {
             </div>
           </div>
         )}
-        {accessRequestMessage && (
-          <div className="flex justify-center"><div className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs text-cyan-100">{accessRequestMessage}</div></div>
-        )}
-
         <div ref={bottomRef} />
       </div>
 
@@ -322,7 +336,7 @@ export default function ChatPage() {
                   : "Start a new conversation by asking a question…"
               }
               rows={1}
-              className="flex-1 bg-transparent text-white text-sm resize-none outline-none placeholder:text-surface-500 max-h-36 overflow-y-auto"
+              className="flex-1 bg-transparent text-surface-100 text-sm resize-none outline-none placeholder:text-surface-500 max-h-36 overflow-y-auto"
               aria-label="Chat input"
               style={{ lineHeight: "1.5" }}
               onInput={(e) => {
@@ -382,7 +396,6 @@ function MessageBubble({
   onFeedback: (id: string, type: "thumbs_up" | "thumbs_down") => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [showCitations, setShowCitations] = useState(false);
   const isUser = message.role === "user";
 
   const handleCopy = async () => {
@@ -400,63 +413,22 @@ function MessageBubble({
       <div className={cn("max-w-3xl w-full float-in", isUser ? "ml-12" : "mr-12")}>
         <div
           className={cn(
-            "rounded-2xl px-4 py-3 text-sm shadow-lg",
+            "text-sm shadow-lg",
             isUser
-              ? "rounded-tr-sm border border-cyan-300/25 bg-gradient-to-br from-brand-600/45 to-cyan-500/20 text-white shadow-cyan-950/30"
-              : "rounded-tl-sm border border-surface-700/70 bg-surface-900/75 text-surface-100 shadow-black/20 backdrop-blur-sm"
+              ? "rounded-2xl rounded-tr-sm border border-cyan-300/25 bg-gradient-to-br from-brand-600/35 to-cyan-500/15 px-4 py-3 text-surface-100 shadow-cyan-950/20"
+              : "rounded-2xl rounded-tl-sm border border-surface-700/70 bg-surface-900/75 px-4 py-3 text-surface-100 shadow-black/20 backdrop-blur-sm"
           )}
         >
           {isUser ? (
             <p className="whitespace-pre-wrap">{message.content}</p>
           ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                code({ className, children, ...props }) {
-                  const match = /language-(\w+)/.exec(className || "");
-                  const inline = !match;
-                  return inline ? (
-                    <code className="bg-surface-700 px-1 py-0.5 rounded text-xs font-mono" {...props}>
-                      {children}
-                    </code>
-                  ) : (
-                    <SyntaxHighlighter
-                      style={oneDark as Record<string, React.CSSProperties>}
-                      language={match[1]}
-                      PreTag="div"
-                      className="rounded-lg text-xs my-2"
-                    >
-                      {String(children).replace(/\n$/, "")}
-                    </SyntaxHighlighter>
-                  );
-                },
-                p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                li: ({ children }) => <li className="text-sm">{children}</li>,
-                h1: ({ children }) => <h1 className="text-base font-semibold mb-2">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-sm font-semibold mb-2">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-sm font-medium mb-1">{children}</h3>,
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
+            <MarkdownContent content={message.content} />
           )}
         </div>
 
         {!isUser && (
           <div className="flex items-center gap-2 mt-1.5 ml-1">
-            {message.citations && message.citations.length > 0 && (
-              <button
-                onClick={() => setShowCitations((s) => !s)}
-                className="flex items-center gap-1 text-xs text-surface-500 hover:text-brand-400 transition-colors focus:outline-none"
-              >
-                <BookOpen className="w-3 h-3" />
-                {message.citations.length} source{message.citations.length !== 1 ? "s" : ""}
-                <ChevronRight className={cn("w-3 h-3 transition-transform", showCitations && "rotate-90")} />
-              </button>
-            )}
-            <button onClick={handleCopy} className="text-xs text-surface-500 hover:text-surface-300 flex items-center gap-1 focus:outline-none" aria-label="Copy">
+            <button onClick={handleCopy} className="text-xs text-surface-500 hover:text-surface-300 flex items-center gap-1 focus:outline-none" aria-label="Copy answer">
               <Copy className="w-3 h-3" />
               {copied ? "Copied!" : "Copy"}
             </button>
@@ -468,12 +440,6 @@ function MessageBubble({
             </button>
           </div>
         )}
-
-        <AnimatePresence>
-          {showCitations && message.citations && message.citations.length > 0 && (
-            <CitationsPanel citations={message.citations} />
-          )}
-        </AnimatePresence>
       </div>
     </motion.div>
   );
@@ -487,41 +453,9 @@ function StreamingBubble({ text }: { text: string }) {
           <Radio className="h-3 w-3 animate-pulse" />
           Synthesizing answer
         </div>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-        <span className="ml-1 inline-block h-4 w-1.5 animate-pulse align-middle bg-cyan-300" />
+        <MarkdownContent content={text} streaming />
       </div>
     </div>
-  );
-}
-
-function CitationsPanel({ citations }: { citations: Citation[] }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      className="mt-2 ml-1 space-y-2 overflow-hidden"
-    >
-      {citations.map((c) => (
-        <div
-          key={c.source_number}
-          className="flex gap-2 p-2.5 rounded-lg bg-surface-800/60 border border-surface-700/40 text-xs"
-        >
-          <span className="flex-shrink-0 w-5 h-5 rounded bg-brand-600/30 text-brand-400 flex items-center justify-center font-medium text-[10px]">
-            {c.source_number}
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-surface-200 truncate">{c.document_title}</p>
-            <p className="text-surface-500">
-              {c.page_number && `Page ${c.page_number}`}
-              {c.page_number && c.section_heading && " · "}
-              {c.section_heading}
-            </p>
-            <p className="text-surface-400 mt-0.5 line-clamp-2">{c.excerpt}</p>
-          </div>
-        </div>
-      ))}
-    </motion.div>
   );
 }
 
@@ -531,7 +465,7 @@ function EmptyState({ name }: { name?: string }) {
       <div className="w-14 h-14 rounded-2xl bg-brand-600/20 border border-brand-500/30 flex items-center justify-center mb-4">
         <MessageSquare className="w-6 h-6 text-brand-400" />
       </div>
-      <h2 className="text-lg font-semibold text-white mb-1">Welcome{name ? `, ${name}` : ""}</h2>
+      <h2 className="text-lg font-semibold text-surface-100 mb-1">Welcome{name ? `, ${name}` : ""}</h2>
       <p className="text-sm text-surface-400 max-w-sm">
         I’m ready to explore your organization’s knowledge. Ask anything to begin a focused conversation.
       </p>
