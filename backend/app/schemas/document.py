@@ -38,7 +38,7 @@ class ProcessingJobOut(BaseModel):
     attempt_number: int
     error_type: str | None
     error_message: str | None
-    started_at: str | None
-    completed_at: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
 
     model_config = {"from_attributes": True}

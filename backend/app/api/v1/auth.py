@@ -96,7 +96,7 @@ async def login(
     )
 
 
-@router.post("/logout", status_code=204)
+@router.post("/logout", status_code=204, response_model=None)
 async def logout(
     request: Request,
     response: Response,
@@ -159,7 +159,7 @@ async def refresh(
     )
 
 
-@router.post("/password-reset/initiate", status_code=204)
+@router.post("/password-reset/initiate", status_code=204, response_model=None)
 async def initiate_password_reset(
     body: PasswordResetInitRequest,
     db: AsyncSession = Depends(get_db),
@@ -179,7 +179,7 @@ async def initiate_password_reset(
             logger.warning("dev_password_reset_token", token=token)
 
 
-@router.post("/password-reset/complete", status_code=204)
+@router.post("/password-reset/complete", status_code=204, response_model=None)
 async def complete_password_reset(
     body: PasswordResetCompleteRequest,
     db: AsyncSession = Depends(get_db),

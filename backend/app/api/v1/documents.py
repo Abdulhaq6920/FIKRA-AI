@@ -198,7 +198,7 @@ async def get_document(
     return DocumentOut.model_validate(doc)
 
 
-@router.delete("/{doc_id}", status_code=204)
+@router.delete("/{doc_id}", status_code=204, response_model=None)
 async def delete_document(
     doc_id: uuid.UUID,
     ctx: OrgAdminUser,

@@ -1,0 +1,36 @@
+# Agent-only guidance — never copy into images or build contexts.
+.opencode/
+AGENTS.md
+
+# VCS / IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Local env, secrets, logs
+.env
+.env.*
+*.log
+*.pem
+*.key
+
+# Python artefacts
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Node / Next.js artefacts
+node_modules/
+.next/
+out/
+test-results/
+playwright-report/
+*.tsbuildinfo

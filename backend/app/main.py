@@ -61,6 +61,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("database_connection_failed", error=str(exc))
         raise
 
+    # Verify Redis (Celery broker/cache). Non-fatal: ingestion falls back to
+    # inline processing when Redis/Celery is unavailable.
+    from app.core.redis import ping_redis
+    try:
+        await ping_redis()
+        logger.info("redis_connection_ok")
+    except Exception as exc:
+        logger.warning("redis_connection_failed", error=str(exc))
+
     # Pre-load the embedding model in a thread so first requests don't time out
     # The model is ~130MB and takes 5-30s to download/load on first use
     logger.info("preloading_embedding_model", model=settings.embedding_model)

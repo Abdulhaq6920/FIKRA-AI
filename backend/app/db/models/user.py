@@ -62,7 +62,10 @@ class User(UUIDMixin, TimestampMixin, Base):
         "RefreshSession", back_populates="user", cascade="all, delete-orphan"
     )
     feedback: Mapped[list["Feedback"]] = relationship(  # noqa: F821
-        "Feedback", back_populates="user", cascade="all, delete-orphan"
+        "Feedback",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="Feedback.user_id",
     )
 
     def __repr__(self) -> str:

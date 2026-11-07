@@ -93,7 +93,7 @@ async def create_initial_data() -> None:
             )
             print(f"Created admin user: {ADMIN_EMAIL}")
             print(f"  Password: {ADMIN_PASSWORD}")
-            print("  ⚠️  Change this password after first login!")
+            print("  WARNING: Change this password after first login!")
 
         # ── Membership ────────────────────────────────────────────────────
         existing_mem = await conn.fetchval(
@@ -115,7 +115,7 @@ async def create_initial_data() -> None:
     finally:
         await conn.close()
 
-    print(f"\n✓ Initial data ready.")
+    print("\nInitial data ready.")
     print(f"  Organization ID for login: {ORG_ID}")
     print(f"  Login at: http://localhost:3000/login")
 

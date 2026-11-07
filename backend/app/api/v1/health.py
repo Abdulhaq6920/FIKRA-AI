@@ -34,7 +34,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> dict:
 
     Checks:
     - PostgreSQL connectivity
-    - (Redis/Groq checks can be added here)
+    - Redis connectivity (Celery broker/cache)
     """
     checks: dict[str, str] = {}
 
@@ -43,6 +43,13 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> dict:
         checks["database"] = "ok"
     except Exception as exc:
         checks["database"] = f"error: {type(exc).__name__}"
+
+    from app.core.redis import ping_redis
+    try:
+        await ping_redis()
+        checks["redis"] = "ok"
+    except Exception as exc:
+        checks["redis"] = f"error: {type(exc).__name__}"
 
     all_ok = all(v == "ok" for v in checks.values())
 

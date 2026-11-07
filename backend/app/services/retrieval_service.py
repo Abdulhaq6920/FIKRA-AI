@@ -42,6 +42,9 @@ class RetrievedPassage:
     section_heading: str | None
     score: float
     retrieval_method: str  # "vector", "keyword", or "reranked"
+    # Cosine similarity from the vector search (None for keyword-only hits).
+    # Kept separately because RRF overwrites `score` with a small fusion value.
+    similarity: float | None = None
 
 
 async def retrieve(
@@ -103,8 +106,14 @@ async def retrieve(
             reranked.append(p)
         return reranked
 
-    # Filter by minimum relevance
-    filtered = [p for p in fused[:k] if p.score >= settings.min_relevance_score]
+    # Filter by minimum relevance. RRF scores are rank-based (bounded well below
+    # 1.0), so the threshold is applied to the vector similarity instead;
+    # keyword-only hits have no similarity and are kept.
+    filtered = [
+        p
+        for p in fused[:k]
+        if p.similarity is None or p.similarity >= settings.min_relevance_score
+    ]
     return filtered
 
 
@@ -155,6 +164,7 @@ async def _vector_search(
                 section_heading=row.section_heading,
                 score=float(row.score),
                 retrieval_method="vector",
+                similarity=float(row.score),
             )
         )
     return results

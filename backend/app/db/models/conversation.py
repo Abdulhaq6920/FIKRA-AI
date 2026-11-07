@@ -147,4 +147,6 @@ class Feedback(UUIDMixin, TimestampMixin, Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     message: Mapped["Message"] = relationship("Message", back_populates="feedback")
-    user: Mapped["User"] = relationship("User", back_populates="feedback")  # noqa: F821
+    user: Mapped["User"] = relationship(  # noqa: F821
+        "User", back_populates="feedback", foreign_keys=[user_id]
+    )

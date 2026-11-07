@@ -62,3 +62,6 @@ playwright/.cache/
 # ── pgvector Windows binaries (local dev only) ────────────────────────────
 pgvector-pg18/
 pgvector-pg18.zip
+
+# ── Agent-only guidance (never shipped) ───────────────────────────────────
+.opencode/

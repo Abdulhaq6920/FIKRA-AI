@@ -47,7 +47,7 @@ async def list_notifications(
     }
 
 
-@router.patch("/{notification_id}/read", status_code=204)
+@router.patch("/{notification_id}/read", status_code=204, response_model=None)
 async def mark_read(
     notification_id: uuid.UUID,
     ctx: CurrentUser,

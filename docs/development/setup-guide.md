@@ -7,7 +7,7 @@ This guide takes you from a clean machine to a running FIKRA AI development envi
 | Tool | Version | Install |
 |------|---------|---------|
 | Docker Desktop | 4.x+ | https://docker.com/products/docker-desktop |
-| Python | 3.11+ | https://python.org or `pyenv` |
+| Python | 3.12 | https://python.org or `uv python install 3.12` |
 | Node.js | 20 LTS | https://nodejs.org or `nvm` |
 | uv | latest | https://docs.astral.sh/uv/getting-started/installation/ |
 | Git | 2.x+ | Pre-installed on most systems |
@@ -55,19 +55,18 @@ docker compose ps
 
 ---
 
-## Step 3: Backend — create venv and install dependencies
+## Step 3: Create the shared Python environment and install backend dependencies
 
 ```powershell
+# From the repository root. Python 3.12 supports the pinned PyTorch version.
+uv python install 3.12
+uv venv --python 3.12 .venv
+
+# Install backend dependencies into the shared root environment
 cd backend
 
-# Create the virtual environment with uv
-uv venv .venv
-
-# Activate it (Windows PowerShell)
-.venv\Scripts\activate
-
 # Install all dependencies including dev tools
-uv pip install -e ".[dev]"
+uv pip install --python ..\.venv\Scripts\python.exe -e ".[dev]"
 ```
 
 > **Note**: `torch` and `sentence-transformers` are large (~2 GB).
@@ -79,11 +78,11 @@ uv pip install -e ".[dev]"
 ## Step 4: Run database migrations
 
 ```powershell
-# In backend/ with .venv activated
-alembic upgrade head
+# From backend/, use the shared root environment
+..\.venv\Scripts\python.exe -m alembic upgrade head
 
 # Verify
-alembic current
+..\.venv\Scripts\python.exe -m alembic current
 # Expected: 0001 (head)
 ```
 
@@ -92,7 +91,7 @@ alembic current
 ## Step 5: Create initial organization and admin user
 
 ```powershell
-python ..\scripts\create_initial_org.py
+..\.venv\Scripts\python.exe ..\scripts\create_initial_org.py
 ```
 
 Creates:
@@ -106,8 +105,8 @@ Creates:
 ## Step 6: Start the backend
 
 ```powershell
-# In backend/ with .venv activated
-uvicorn app.main:app --reload --port 8000
+# From backend/, use the shared root environment
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
 Verify:
@@ -121,9 +120,9 @@ Verify:
 Open a new terminal:
 
 ```powershell
+# From the repository root
 cd backend
-.venv\Scripts\activate
-celery -A app.workers.celery_app worker --loglevel=info -Q default,ingestion
+..\.venv\Scripts\python.exe -m celery -A app.workers.celery_app worker --loglevel=info -Q default,ingestion
 ```
 
 ---
@@ -131,12 +130,22 @@ celery -A app.workers.celery_app worker --loglevel=info -Q default,ingestion
 ## Step 8: Frontend
 
 ```powershell
+# In a new terminal from the repository root
 cd frontend
-npm install --legacy-peer-deps
-npm run dev
+npm.cmd install --legacy-peer-deps
+npm.cmd run dev
 ```
 
 Open: http://localhost:3000
+
+## Install OpenCode CLI
+
+OpenCode is a Node.js CLI, not a Python package. If it is not already installed, install it with npm:
+
+```powershell
+npm.cmd install --global opencode-ai
+opencode.cmd --version
+```
 
 ---
 
@@ -144,19 +153,18 @@ Open: http://localhost:3000
 
 ```powershell
 cd backend
-.venv\Scripts\activate
 
 # Unit tests — no database or external services needed
-pytest tests/unit/ -v
+..\.venv\Scripts\python.exe -m pytest tests/unit/ -v
 
 # Tenant isolation unit tests
-pytest tests/tenant_isolation/ -v
+..\.venv\Scripts\python.exe -m pytest tests/tenant_isolation/ -v
 
 # Integration tests — require PostgreSQL running
-pytest tests/integration/ -v
+..\.venv\Scripts\python.exe -m pytest tests/integration/ -v
 
 # All tests with coverage
-pytest -v --cov=app --cov-report=term-missing
+..\.venv\Scripts\python.exe -m pytest -v --cov=app --cov-report=term-missing
 ```
 
 ---
@@ -165,11 +173,11 @@ pytest -v --cov=app --cov-report=term-missing
 
 ```powershell
 # Linting + formatting (auto-fix)
-ruff check app/ --fix
-ruff format app/
+..\.venv\Scripts\ruff.exe check app/ --fix
+..\.venv\Scripts\ruff.exe format app/
 
 # Type checking
-mypy app/
+..\.venv\Scripts\mypy.exe app/
 ```
 
 ---

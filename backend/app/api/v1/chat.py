@@ -114,7 +114,7 @@ async def rename_conversation(
     return ConversationOut.model_validate(conv)
 
 
-@router.delete("/conversations/{conv_id}", status_code=204)
+@router.delete("/conversations/{conv_id}", status_code=204, response_model=None)
 async def delete_conversation(
     conv_id: uuid.UUID,
     ctx: CurrentUser,
@@ -242,7 +242,7 @@ async def ask(
     )
 
 
-@router.post("/ask/stream/cancel", status_code=204)
+@router.post("/ask/stream/cancel", status_code=204, response_model=None)
 async def cancel_stream(
     body: ChatRequest,
     ctx: CurrentUser,

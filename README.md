@@ -37,28 +37,29 @@ docker compose up -d postgres redis
 ### 4. Backend setup
 
 ```powershell
+uv python install 3.12
+uv venv --python 3.12 .venv
 cd backend
-uv venv .venv              # create virtualenv
-.venv\Scripts\activate
-uv pip install -e ".[dev]" # install all deps fast
-alembic upgrade head
-python ..\scripts\create_initial_org.py
-uvicorn app.main:app --reload --port 8000
+uv pip install --python ..\.venv\Scripts\python.exe -e ".[dev]"
+..\.venv\Scripts\python.exe -m alembic upgrade head
+..\.venv\Scripts\python.exe ..\scripts\create_initial_org.py
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
 ### 5. Worker
 
 ```powershell
-# New terminal, in backend/ with .venv activated
-celery -A app.workers.celery_app worker --loglevel=info -Q default,ingestion
+# New terminal, from the repository root
+cd backend
+..\.venv\Scripts\python.exe -m celery -A app.workers.celery_app worker --loglevel=info -Q default,ingestion
 ```
 
 ### 6. Frontend
 
 ```powershell
 cd frontend
-npm install --legacy-peer-deps
-npm run dev
+npm.cmd install --legacy-peer-deps
+npm.cmd run dev
 ```
 
 Open **http://localhost:3000**
@@ -88,8 +89,7 @@ Full documentation: [`docs/`](docs/)
 
 ```powershell
 cd backend
-.venv\Scripts\activate
-pytest tests/unit/ tests/tenant_isolation/ -v
+..\.venv\Scripts\python.exe -m pytest tests/unit/ tests/tenant_isolation/ -v
 ```
 
 ## API documentation

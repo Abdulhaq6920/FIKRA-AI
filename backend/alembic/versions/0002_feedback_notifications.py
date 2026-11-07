@@ -44,7 +44,9 @@ def upgrade() -> None:
     op.create_index("ix_notifications_recipient", "notifications", ["recipient_user_id"])
     op.create_index("ix_notifications_is_read", "notifications", ["is_read"])
 
-    role_status = sa.Enum("pending", "approved", "rejected", name="role_request_status")
+    role_status = postgresql.ENUM(
+        "pending", "approved", "rejected", name="role_request_status", create_type=False
+    )
     role_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "role_requests",
