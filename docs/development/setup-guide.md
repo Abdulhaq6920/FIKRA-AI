@@ -27,20 +27,25 @@ cd C:\Users\Lenovo\Desktop\RAG
 Copy-Item backend\.env.example backend\.env
 ```
 
-Edit `backend\.env` and fill in:
+Edit `backend\.env` and choose a model provider. For the Ollama model you
+already downloaded:
 
 ```env
-GROQ_API_KEY=gsk_your_actual_key_here
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=deepseek-r1:8b
 SECRET_KEY=<generate below>
 JWT_SECRET_KEY=<generate below>
 ```
+
+Keep Ollama running while you use the app. If you run the backend in Docker
+Desktop, use `OLLAMA_BASE_URL=http://host.docker.internal:11434`. To use Groq
+instead, set `LLM_PROVIDER=groq` and add a Groq API key.
 
 Generate secure secrets:
 ```powershell
 python -c "import secrets; print(secrets.token_hex(64))"
 ```
-
-Get a Groq API key at https://console.groq.com (free tier available).
 
 ---
 
@@ -185,7 +190,8 @@ cd backend
 ## Common issues
 
 ### "GROQ_API_KEY is not configured"
-Set `GROQ_API_KEY=gsk_...` in `backend/.env`. The app fails at startup if missing.
+Set `LLM_PROVIDER=groq` and `GROQ_API_KEY=gsk_...` in `backend/.env`, or set
+`LLM_PROVIDER=ollama` to use your local Ollama server without a Groq key.
 
 ### "pgvector extension not found"
 Use the `pgvector/pgvector:pg16` Docker image, not plain `postgres:16`.

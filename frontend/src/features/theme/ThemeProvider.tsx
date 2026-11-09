@@ -6,6 +6,10 @@
  * The root layout runs a tiny blocking script before paint so the selected
  * palette is already on `<html>` when the first frame renders. React state
  * catches up on mount, which avoids both a flash and a hydration mismatch.
+ *
+ * Switching burns a brief full-screen veil: the palette changes underneath a
+ * soft fade, so even a drastic light → dark swap reads as an intentional
+ * transition instead of a hard repaint.
  */
 
 import {
@@ -14,6 +18,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -24,6 +29,7 @@ import {
   type ThemeDefinition,
   type ThemeId,
 } from "./themes";
+import { signalCompanion } from "@/lib/companion";
 
 interface ThemeContextValue {
   theme: ThemeId;
@@ -35,24 +41,37 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(DEFAULT_THEME);
+  const themeRef = useRef<ThemeId>(DEFAULT_THEME);
+  const [veil, setVeil] = useState(0);
+  const [veilOn, setVeilOn] = useState(false);
+  const veilTimer = useRef<number | undefined>(undefined);
 
   // The inline script in layout.tsx has already resolved the persisted value.
   useEffect(() => {
     const applied = document.documentElement.dataset.theme;
     if (isThemeId(applied)) {
+      themeRef.current = applied;
       setThemeState(applied);
       return;
     }
     try {
       const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (isThemeId(stored)) setThemeState(stored);
+      if (isThemeId(stored)) {
+        themeRef.current = stored;
+        setThemeState(stored);
+      }
     } catch {
       // Private browsing can deny localStorage; the default theme still applies.
     }
   }, []);
 
+  useEffect(() => () => window.clearTimeout(veilTimer.current), []);
+
   const setTheme = useCallback((next: ThemeId) => {
+    if (themeRef.current === next) return;
+    themeRef.current = next;
     setThemeState(next);
+
     const root = document.documentElement;
     root.dataset.theme = next;
     root.dataset.tone = getTheme(next).mode;
@@ -61,6 +80,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Persistence is a convenience, not a requirement.
     }
+
+    // Retrigger the veil animation for every switch, even rapid ones.
+    setVeil((value) => value + 1);
+    setVeilOn(true);
+    window.clearTimeout(veilTimer.current);
+    veilTimer.current = window.setTimeout(() => setVeilOn(false), 700);
+
+    // A palette change reads as a transformation — the companion celebrates.
+    signalCompanion("success", 1700);
   }, []);
 
   const value = useMemo(
@@ -68,7 +96,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [theme, setTheme]
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+      {veilOn && <div key={veil} aria-hidden="true" className="theme-veil" />}
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme(): ThemeContextValue {

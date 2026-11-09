@@ -19,7 +19,6 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
 
 import groq
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -32,6 +31,7 @@ from app.core.exceptions import (
     ProviderUnavailableError,
 )
 from app.core.logging import get_logger
+from app.providers.llm import ChatMessage, GenerationResult, UsageMetadata
 
 logger = get_logger(__name__)
 
@@ -71,29 +71,6 @@ def _retry_delay(exc: BaseException, attempt: int) -> float:
         except (TypeError, ValueError):
             pass
     return min(_RETRY_BASE_SECONDS * (2**attempt), _RETRY_MAX_SECONDS)
-
-
-@dataclass
-class UsageMetadata:
-    model: str
-    input_tokens: int = 0
-    output_tokens: int = 0
-    total_tokens: int = 0
-    latency_ms: int = 0
-    error_category: str | None = None
-
-
-@dataclass
-class GenerationResult:
-    content: str
-    usage: UsageMetadata
-    finish_reason: str = "stop"
-
-
-@dataclass
-class ChatMessage:
-    role: str   # "user" | "assistant" | "system"
-    content: str
 
 
 def _is_retryable(exc: BaseException) -> bool:

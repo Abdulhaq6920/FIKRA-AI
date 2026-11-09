@@ -21,25 +21,24 @@ const themeInitScript = `
 (function () {
   try {
     var themes = {
+      "royal-glass": "dark",
       aurora: "light", parchment: "light", ocean: "light", emerald: "light",
-      sunset: "light", lavender: "light", quartz: "light", cobalt: "light",
-      midnight: "dark", graphite: "dark",
+      sunset: "light", midnight: "dark", graphite: "dark",
       "naruto-leaf": "light", "naruto-sharingan": "dark",
-      "enchanted-dawn": "light", "fae-meadowlight": "light",
-      "crystal-realm": "light", "celestial-voyage": "light",
-      "blossom-breeze": "light",
+      "solo-jinwoo": "dark", "solo-igris": "dark",
+      "enchanted-dawn": "light", "blossom-breeze": "light",
       "arcane-midnight": "dark", "ember-abyss": "dark",
       "frozen-citadel": "dark", "void-nebula": "dark",
       "emerald-enigma": "dark"
     };
     var stored = localStorage.getItem("fikra-theme");
-    var theme = stored && themes[stored] ? stored : "aurora";
+    var theme = stored && themes[stored] ? stored : "royal-glass";
     var root = document.documentElement;
     root.dataset.theme = theme;
     root.dataset.tone = themes[theme];
   } catch (error) {
-    document.documentElement.dataset.theme = "aurora";
-    document.documentElement.dataset.tone = "light";
+    document.documentElement.dataset.theme = "royal-glass";
+    document.documentElement.dataset.tone = "dark";
   }
 })();
 `;

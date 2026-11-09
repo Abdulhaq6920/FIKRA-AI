@@ -21,7 +21,7 @@ sequenceDiagram
     participant PG as PostgreSQL+pgvector
     participant RR as Reranker (local)
     participant RAG as RAGService
-    participant Groq as Groq API
+    participant LLM as Configured LLM (Groq or Ollama)
 
     U->>API: POST /api/v1/chat/ask {question, conversation_id}
     API->>API: Verify JWT → extract user_id, org_id
@@ -38,8 +38,8 @@ sequenceDiagram
     RAG->>PG: Load recent messages (bounded by MAX_CONTEXT_MESSAGES)
     RAG->>RAG: Build context: numbered [Source N] blocks
     RAG->>RAG: Assemble chat messages (history + context + question)
-    RAG->>Groq: chat.completions.create(messages, system_prompt)
-    Groq-->>RAG: answer text
+    RAG->>LLM: Generate answer
+    LLM-->>RAG: answer text
     RAG->>RAG: Extract [Source N] references from answer
     RAG->>RAG: Build Citation objects from server-side source_map
     RAG-->>API: RAGResult {answer, citations, usage}

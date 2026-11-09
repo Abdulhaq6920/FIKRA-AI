@@ -49,7 +49,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         name=settings.app_name,
         env=settings.app_env,
         debug=settings.debug,
-        primary_model=settings.groq_primary_model,
+        llm_provider=settings.llm_provider,
+        primary_model=settings.active_llm_model,
     )
 
     # Verify database connection

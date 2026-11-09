@@ -4,6 +4,9 @@
  * Document library page — read-only view of the organization's documents.
  * Admins have a Documents entry point inside the Admin area; this page
  * intentionally shows no management controls (upload/delete/reindex).
+ *
+ * Every row ends with a kebab menu (view details, download, copy title) so the
+ * row stays uncluttered while every action is one deliberate click away.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -16,9 +19,12 @@ import {
   Clock,
   Loader2,
   Download,
+  Copy,
   Shield,
+  X,
 } from "lucide-react";
 import { documentsApi } from "@/lib/api/documents";
+import { ActionMenu } from "@/components/ui/ActionMenu";
 import { useAuth } from "@/features/auth/AuthContext";
 import { cn } from "@/lib/utils/cn";
 import { formatBytes, relativeTime } from "@/lib/utils/format";
@@ -39,6 +45,8 @@ export default function DocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [detail, setDetail] = useState<Document | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
 
   const DOC_PAGE_SIZE = 20;
   const totalPages = Math.max(1, Math.ceil(total / DOC_PAGE_SIZE));
@@ -85,6 +93,23 @@ export default function DocumentsPage() {
     const interval = window.setInterval(() => { loadDocuments(false); }, 1500);
     return () => window.clearInterval(interval);
   }, [documents, loadDocuments]);
+
+  // Auto-dismiss the clipboard toast.
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+
+  const copyTitle = useCallback(async (title: string) => {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(title);
+      setFlash("Document title copied");
+    } catch {
+      setFlash("Could not copy the title");
+    }
+  }, []);
 
   return (
     <div className="h-full overflow-y-auto bg-surface-950 p-6">
@@ -136,7 +161,12 @@ export default function DocumentsPage() {
           <div className="space-y-2">
             <AnimatePresence>
               {documents.map((doc) => (
-                <DocumentRow key={doc.id} doc={doc} />
+                <DocumentRow
+                  key={doc.id}
+                  doc={doc}
+                  onOpen={() => setDetail(doc)}
+                  onCopy={() => void copyTitle(doc.title)}
+                />
               ))}
             </AnimatePresence>
           </div>
@@ -167,19 +197,133 @@ export default function DocumentsPage() {
           </div>
         )}
       </div>
+
+      {/* Row details — a quiet overlay with no navigation or destructive action. */}
+      <AnimatePresence>
+        {detail && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+            onClick={() => setDetail(null)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="document-detail-title"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-lg overflow-hidden rounded-2xl border border-surface-700 bg-surface-900 shadow-2xl"
+            >
+              <div className="flex items-start gap-3 border-b border-surface-800 px-5 py-4">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-300">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id="document-detail-title"
+                    className="truncate text-base font-semibold text-surface-100"
+                  >
+                    {detail.title}
+                  </h2>
+                  <p className="mt-0.5 truncate text-xs text-surface-500">
+                    {detail.original_filename}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetail(null)}
+                  aria-label="Close document details"
+                  className="rounded-lg p-1.5 text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2">
+                <DetailItem
+                  label="Status"
+                  value={
+                    <span className={cn("font-medium", STATUS_CONFIG[detail.status]?.color)}>
+                      {STATUS_CONFIG[detail.status]?.label ?? detail.status}
+                    </span>
+                  }
+                />
+                <DetailItem label="File type" value={detail.mime_type} />
+                <DetailItem label="Size" value={formatBytes(detail.file_size_bytes)} />
+                <DetailItem label="Pages" value={detail.page_count ?? "—"} />
+                <DetailItem label="Chunks" value={detail.chunk_count} />
+                <DetailItem
+                  label="Access"
+                  value={detail.access_level === "restricted" ? "Restricted" : "Organization"}
+                />
+                <DetailItem label="Added" value={relativeTime(detail.created_at)} />
+                <DetailItem label="Updated" value={relativeTime(detail.updated_at)} />
+              </dl>
+
+              <div className="flex items-center justify-end gap-2 border-t border-surface-800 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => setDetail(null)}
+                  className="rounded-lg border border-surface-700 px-3 py-1.5 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100"
+                >
+                  Close
+                </button>
+                <a
+                  href={documentsApi.downloadUrl(detail.id)}
+                  download
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-500"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download
+                </a>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Clipboard confirmation — fade only. */}
+      <AnimatePresence>
+        {flash && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, x: "-50%" }}
+            animate={{ opacity: 1, scale: 1, x: "-50%" }}
+            exit={{ opacity: 0, scale: 0.97, x: "-50%" }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            role="status"
+            className="fixed bottom-6 left-1/2 z-[75] rounded-full border border-surface-700 bg-surface-900 px-4 py-2 text-xs font-medium text-surface-200 shadow-xl"
+          >
+            {flash}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function DocumentRow({ doc }: { doc: Document }) {
+function DocumentRow({
+  doc,
+  onOpen,
+  onCopy,
+}: {
+  doc: Document;
+  onOpen: () => void;
+  onCopy: () => void;
+}) {
   const status = STATUS_CONFIG[doc.status] ?? STATUS_CONFIG.pending;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -8 }}
-      className="flex items-center gap-4 p-4 rounded-xl bg-surface-900/60 border border-surface-800 hover:border-surface-700 transition-colors"
+      initial={{ opacity: 0, scale: 0.99 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.99 }}
+      className="depth-hover flex items-center gap-4 p-4 rounded-xl bg-surface-900/60 border border-surface-800 hover:border-surface-700"
     >
       <FileText className="w-8 h-8 text-brand-400 flex-shrink-0" />
 
@@ -200,15 +344,48 @@ function DocumentRow({ doc }: { doc: Document }) {
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0">
-        <a
-          href={documentsApi.downloadUrl(doc.id)}
-          className="p-1.5 rounded-lg text-surface-400 hover:text-surface-200 hover:bg-surface-800 focus:outline-none"
-          aria-label="Download"
-          download
-        >
-          <Download className="w-3.5 h-3.5" />
-        </a>
+        <ActionMenu
+          label={`Actions for ${doc.title}`}
+          triggerClassName="rounded-lg p-1.5"
+          items={[
+            {
+              key: "details",
+              label: "View details",
+              icon: <FileText className="h-3.5 w-3.5" />,
+              onSelect: onOpen,
+              reaction: "read",
+            },
+            {
+              key: "download",
+              label: "Download",
+              icon: <Download className="h-3.5 w-3.5" />,
+              href: documentsApi.downloadUrl(doc.id),
+              download: true,
+            },
+            {
+              key: "copy",
+              label: "Copy title",
+              icon: <Copy className="h-3.5 w-3.5" />,
+              onSelect: onCopy,
+            },
+          ]}
+        />
       </div>
     </motion.div>
+  );
+}
+
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] uppercase tracking-wide text-surface-500">{label}</dt>
+      <dd className="mt-0.5 truncate text-xs text-surface-200">{value}</dd>
+    </div>
   );
 }

@@ -20,7 +20,7 @@ graph TB
     Storage["Local/S3 Storage\n(Uploaded documents)"]
     Embed["Embedding Model\n(BAAI/bge-small-en-v1.5\nlocal, CPU)"]
     Rerank["Reranker\n(BAAI/bge-reranker-base\nlocal, optional)"]
-    Groq["Groq API\n(llama3-8b-8192\nhosted inference)"]
+    LLM["Configured LLM\n(Groq or local Ollama)"]
     Otel["OpenTelemetry\n+ Prometheus + Grafana"]
 
     Browser --> Frontend
@@ -31,7 +31,7 @@ graph TB
     Backend --> Worker
     Backend --> Embed
     Backend --> Rerank
-    Backend --> Groq
+    Backend --> LLM
     Worker --> Storage
     Worker --> DB
     Worker --> Embed
@@ -39,7 +39,7 @@ graph TB
     Worker --> Otel
 ```
 
-**Synchronous path** (blue): Browser → Frontend → Backend → PostgreSQL/Groq → response  
+**Synchronous path** (blue): Browser → Frontend → Backend → PostgreSQL/LLM → response
 **Asynchronous path** (orange): Upload → Backend → Redis queue → Worker → Storage → DB
 
 ---

@@ -34,8 +34,8 @@ export default function SettingsPage() {
         <h1 className="mb-6 text-xl font-semibold text-surface-100">Settings</h1>
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           className="mb-4 overflow-hidden rounded-xl border border-surface-800 bg-surface-900"
         >
           <div className="border-b border-surface-800 px-5 py-4">
@@ -98,8 +98,8 @@ export default function SettingsPage() {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           transition={{ delay: 0.06 }}
           className="mb-4 overflow-hidden rounded-xl border border-surface-800 bg-surface-900"
         >
@@ -113,8 +113,8 @@ export default function SettingsPage() {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           transition={{ delay: 0.1 }}
           className="overflow-hidden rounded-xl border border-surface-800 bg-surface-900"
         >

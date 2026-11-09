@@ -25,7 +25,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_groq
+from app.api.dependencies import get_llm_client
 from app.core.security import hash_password
 from app.db.models.audit import UsageRecord
 from app.db.models.conversation import Conversation, Message, MessageRole
@@ -148,7 +148,7 @@ async def test_stream_persists_citations_and_usage(
     admin_user: User,
 ) -> None:
     await _login(client, admin_user.email)
-    fastapi_app.dependency_overrides[get_groq] = lambda: object()
+    fastapi_app.dependency_overrides[get_llm_client] = lambda: object()
 
     try:
         created = await client.post(
@@ -232,4 +232,4 @@ async def test_stream_persists_citations_and_usage(
             "feedback",
         ]
     finally:
-        fastapi_app.dependency_overrides.pop(get_groq, None)
+        fastapi_app.dependency_overrides.pop(get_llm_client, None)

@@ -89,12 +89,14 @@ def _citation_elements() -> Any:
 
 
 def _cost_usd(input_tokens: int, output_tokens: int) -> float:
-    """Estimate provider spend in USD from token counts.
+    """Estimate hosted-provider spend in USD from token counts.
 
-    Rates are configured per million tokens so the estimate follows whichever
-    Groq model is deployed. The frontend converts the USD value into the
+    Local Ollama inference has no provider-billed token cost. For Groq, rates
+    are configured per million tokens and converted by the frontend to the
     currency selected by the user (USD or INR).
     """
+    if settings.llm_provider == "ollama":
+        return 0.0
     return round(
         (input_tokens / 1_000_000) * settings.groq_input_cost_per_million_usd
         + (output_tokens / 1_000_000) * settings.groq_output_cost_per_million_usd,

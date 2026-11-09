@@ -25,6 +25,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import (
     AuthenticationError,
     InvalidTokenError,
@@ -32,9 +33,11 @@ from app.core.exceptions import (
     TokenExpiredError,
 )
 from app.core.security import decode_token
-from app.db.models.user import OrgRole, OrganizationMembership, User, UserStatus
+from app.db.models.user import OrganizationMembership, OrgRole, User, UserStatus
 from app.db.session import get_db
-from app.providers.groq_client import GroqClient, get_groq_client
+from app.providers.groq_client import get_groq_client
+from app.providers.llm import LLMClient
+from app.providers.ollama_client import OllamaClient
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -149,8 +152,16 @@ async def require_platform_admin(
     return ctx
 
 
-def get_groq() -> GroqClient:
-    """FastAPI dependency for the Groq client."""
+_ollama_client: OllamaClient | None = None
+
+
+def get_llm_client() -> LLMClient:
+    """Return the configured chat model provider."""
+    global _ollama_client
+    if settings.llm_provider == "ollama":
+        if _ollama_client is None:
+            _ollama_client = OllamaClient()
+        return _ollama_client
     return get_groq_client()
 
 

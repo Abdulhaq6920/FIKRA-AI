@@ -387,8 +387,8 @@ export function Modal({
         aria-hidden="true"
       />
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, scale: 0.985 }}
+        animate={{ opacity: 1, scale: 1 }}
         className="relative z-10 flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-surface-700 bg-surface-900 shadow-2xl"
         role="dialog"
         aria-modal="true"

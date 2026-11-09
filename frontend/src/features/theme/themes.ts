@@ -9,6 +9,9 @@
 export type ThemeMode = "light" | "dark";
 export type ThemeCollection = "professional" | "anime" | "fantasy";
 
+/** Original hand-built illustration variants shipped with anime themes. */
+export type ThemeArtwork = "leaf" | "sharingan" | "jinwoo" | "igris";
+
 export interface ThemeDefinition {
   id: ThemeId;
   name: string;
@@ -17,32 +20,29 @@ export interface ThemeDefinition {
   collection: ThemeCollection;
   /** Three representative colours used by the picker preview. */
   swatches: readonly [string, string, string];
-  /** Anime themes also render an original chibi-ninja illustration. */
-  artwork?: "leaf" | "sharingan";
+  /** Anime themes render an original character illustration. */
+  artwork?: ThemeArtwork;
   /**
-   * Fantasy themes ship an animated ambient backdrop (drifting nebulae,
-   * twinkling stars, rising embers…) rendered purely in CSS.
+   * Themes with a richer ambient backdrop (drifting nebulae, twinkling
+   * stars, rising embers…) rendered purely in CSS.
    */
   animated?: boolean;
 }
 
 export type ThemeId =
+  | "royal-glass"
   | "aurora"
   | "parchment"
   | "ocean"
   | "emerald"
   | "sunset"
-  | "lavender"
-  | "quartz"
-  | "cobalt"
   | "midnight"
   | "graphite"
   | "naruto-leaf"
   | "naruto-sharingan"
+  | "solo-jinwoo"
+  | "solo-igris"
   | "enchanted-dawn"
-  | "fae-meadowlight"
-  | "crystal-realm"
-  | "celestial-voyage"
   | "blossom-breeze"
   | "arcane-midnight"
   | "ember-abyss"
@@ -51,6 +51,16 @@ export type ThemeId =
   | "emerald-enigma";
 
 export const THEMES: readonly ThemeDefinition[] = [
+  // ─── Professional — eight focused, production-grade palettes ─────────────
+  {
+    id: "royal-glass",
+    name: "Royal Glass",
+    description: "Charcoal and navy glass lit by amber, bronze and royal indigo.",
+    mode: "dark",
+    collection: "professional",
+    swatches: ["#0d0d10", "#121118", "#d4af37"],
+    animated: true,
+  },
   {
     id: "aurora",
     name: "Aurora",
@@ -92,30 +102,6 @@ export const THEMES: readonly ThemeDefinition[] = [
     swatches: ["#fff8f5", "#fffdfc", "#e11d48"],
   },
   {
-    id: "lavender",
-    name: "Lavender",
-    description: "Soft violet light with a refined, modern mood.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#faf8ff", "#ffffff", "#7c3aed"],
-  },
-  {
-    id: "quartz",
-    name: "Quartz",
-    description: "Neutral stone tones for distraction-free long sessions.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#f8fafc", "#ffffff", "#475569"],
-  },
-  {
-    id: "cobalt",
-    name: "Cobalt Studio",
-    description: "Crisp white workspace with a bold cobalt signature.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#f7faff", "#ffffff", "#1d4ed8"],
-  },
-  {
     id: "midnight",
     name: "Midnight Ink",
     description: "Deep ink surfaces and luminous indigo highlights.",
@@ -131,6 +117,8 @@ export const THEMES: readonly ThemeDefinition[] = [
     collection: "professional",
     swatches: ["#090d14", "#111827", "#60a5fa"],
   },
+
+  // ─── Anime — two ninja worlds + two Solo Leveling worlds ─────────────────
   {
     id: "naruto-leaf",
     name: "Konoha Dawn",
@@ -149,8 +137,28 @@ export const THEMES: readonly ThemeDefinition[] = [
     swatches: ["#0b0505", "#140a0a", "#ef4444"],
     artwork: "sharingan",
   },
+  {
+    id: "solo-jinwoo",
+    name: "Sung Jinwoo",
+    description: "Shadow-monarch navy lit by violet mana and rising shadow motes.",
+    mode: "dark",
+    collection: "anime",
+    swatches: ["#05060f", "#0b1024", "#818cf8"],
+    artwork: "jinwoo",
+    animated: true,
+  },
+  {
+    id: "solo-igris",
+    name: "Igris",
+    description: "Crimson knight plate, ember sparks, and a blood-red command glow.",
+    mode: "dark",
+    collection: "anime",
+    swatches: ["#080505", "#170b0b", "#ef4444"],
+    artwork: "igris",
+    animated: true,
+  },
 
-  // ─── Fantasy — five animated light worlds ────────────────────────────────
+  // ─── Fantasy — seven animated storybook worlds ───────────────────────────
   {
     id: "enchanted-dawn",
     name: "Enchanted Dawn",
@@ -158,33 +166,6 @@ export const THEMES: readonly ThemeDefinition[] = [
     mode: "light",
     collection: "fantasy",
     swatches: ["#fdf6ec", "#fffdf9", "#d97706"],
-    animated: true,
-  },
-  {
-    id: "fae-meadowlight",
-    name: "Fae Meadowlight",
-    description: "A moonlit fae glade where tiny lights drift upward.",
-    mode: "light",
-    collection: "fantasy",
-    swatches: ["#f8fdfa", "#fefffe", "#0d9488"],
-    animated: true,
-  },
-  {
-    id: "crystal-realm",
-    name: "Crystal Realm",
-    description: "Frozen amethyst halls shifting with icy shimmer.",
-    mode: "light",
-    collection: "fantasy",
-    swatches: ["#f8f8fe", "#fcfcff", "#8b5cf6"],
-    animated: true,
-  },
-  {
-    id: "celestial-voyage",
-    name: "Celestial Voyage",
-    description: "A sky-ship deck beneath drifting, twinkling stars.",
-    mode: "light",
-    collection: "fantasy",
-    swatches: ["#f5faff", "#fcfeff", "#2563eb"],
     animated: true,
   },
   {
@@ -196,8 +177,6 @@ export const THEMES: readonly ThemeDefinition[] = [
     swatches: ["#fff5f9", "#fffbfd", "#db2777"],
     animated: true,
   },
-
-  // ─── Fantasy — five animated dark worlds ─────────────────────────────────
   {
     id: "arcane-midnight",
     name: "Arcane Midnight",
@@ -245,7 +224,7 @@ export const THEMES: readonly ThemeDefinition[] = [
   },
 ];
 
-export const DEFAULT_THEME: ThemeId = "aurora";
+export const DEFAULT_THEME: ThemeId = "royal-glass";
 export const THEME_STORAGE_KEY = "fikra-theme";
 
 const THEME_IDS = new Set<string>(THEMES.map((theme) => theme.id));

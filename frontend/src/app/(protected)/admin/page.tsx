@@ -19,10 +19,17 @@ import {
   AlertTriangle,
   RefreshCw,
   Search,
+  KeyRound,
+  UserCheck,
+  UserX,
+  Check,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api } from "@/lib/api/client";
 import { adminApi } from "@/lib/api/admin";
+import { ActionMenu } from "@/components/ui/ActionMenu";
+import { signalCompanion } from "@/lib/companion";
 import { DocumentsTab } from "@/features/admin/DocumentsTab";
 import { QuestionsTab } from "@/features/admin/QuestionsTab";
 import type {
@@ -359,6 +366,7 @@ function UsersTab() {
     e.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
+    signalCompanion("read", 1000);
   };
 
   const runAction = async (successMessage: string, id: string, action: () => Promise<void>) => {
@@ -368,11 +376,13 @@ function UsersTab() {
       await action();
       await load();
       setFeedback({ kind: "success", message: successMessage });
+      signalCompanion("success", 1500);
     } catch (err) {
       setFeedback({
         kind: "error",
         message: err instanceof Error ? err.message : "Action failed.",
       });
+      signalCompanion("alert", 1500);
     } finally {
       setActioning(null);
     }
@@ -397,11 +407,13 @@ function UsersTab() {
       setShowCreate(false);
       setPage(1);
       await load();
+      signalCompanion("success", 1500);
     } catch (err) {
       setFeedback({
         kind: "error",
         message: err instanceof Error ? err.message : "Could not create user.",
       });
+      signalCompanion("alert", 1500);
     } finally {
       setCreating(false);
     }
@@ -420,11 +432,13 @@ function UsersTab() {
       });
       setResetFor(null);
       setResetPassword("");
+      signalCompanion("success", 1500);
     } catch (err) {
       setFeedback({
         kind: "error",
         message: err instanceof Error ? err.message : "Could not reset password.",
       });
+      signalCompanion("alert", 1500);
     } finally {
       setResetting(false);
     }
@@ -622,59 +636,67 @@ function UsersTab() {
                         {member.is_active ? "Active" : "Inactive"}
                       </span>
 
-                      <select
-                        value={member.role}
-                        disabled={controlsDisabled}
-                        onChange={(e) => {
-                          const nextRole = e.target.value as AdminUserRole;
-                          runAction(`Role updated to ${nextRole}.`, member.id, () =>
-                            adminApi
-                              .updateUser(member.id, { role: nextRole })
-                              .then(() => undefined)
-                          );
-                        }}
-                        aria-label={`Role for ${member.full_name}`}
-                        className="rounded-lg bg-surface-800 border border-surface-700 px-2 py-1 text-[11px] text-surface-200 outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-40"
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        disabled={controlsDisabled}
-                        onClick={() =>
-                          runAction(
-                            member.is_active ? "User deactivated." : "User activated.",
-                            member.id,
-                            () =>
-                              adminApi
-                                .updateUser(member.id, { is_active: !member.is_active })
-                                .then(() => undefined)
-                          )
-                        }
-                        className={cn(
-                          "rounded px-2.5 py-1 text-[11px] transition-colors disabled:opacity-40",
-                          member.is_active
-                            ? "bg-red-400/10 text-red-200 hover:bg-red-400/20"
-                            : "bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20"
-                        )}
-                      >
-                        {member.is_active ? "Deactivate" : "Activate"}
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={busy || platformBlocked}
-                        onClick={() => {
-                          setResetFor(resetFor === member.id ? null : member.id);
-                          setResetPassword("");
-                          setFeedback(null);
-                        }}
-                        className="rounded px-2.5 py-1 text-[11px] text-surface-300 hover:bg-surface-800 disabled:opacity-40"
-                      >
-                        {resetFor === member.id ? "Cancel" : "Reset password"}
-                      </button>
+                      <ActionMenu
+                        label={`Actions for ${member.full_name}`}
+                        triggerClassName="rounded-lg p-1.5"
+                        items={[
+                          {
+                            key: "role",
+                            label:
+                              member.role === "admin"
+                                ? "Change role to member"
+                                : "Change role to admin",
+                            icon: <Shield className="h-3.5 w-3.5" />,
+                            onSelect: () => {
+                              const nextRole: AdminUserRole =
+                                member.role === "admin" ? "member" : "admin";
+                              void runAction(`Role updated to ${nextRole}.`, member.id, () =>
+                                adminApi
+                                  .updateUser(member.id, { role: nextRole })
+                                  .then(() => undefined)
+                              );
+                            },
+                            reaction: "success",
+                            disabled: controlsDisabled,
+                          },
+                          {
+                            key: "reset",
+                            label:
+                              resetFor === member.id
+                                ? "Cancel password reset"
+                                : "Reset password",
+                            icon: <KeyRound className="h-3.5 w-3.5" />,
+                            onSelect: () => {
+                              setResetFor(resetFor === member.id ? null : member.id);
+                              setResetPassword("");
+                              setFeedback(null);
+                            },
+                            reaction: "think",
+                            disabled: busy || platformBlocked,
+                          },
+                          {
+                            key: "active",
+                            label: member.is_active ? "Deactivate user" : "Activate user",
+                            icon: member.is_active ? (
+                              <UserX className="h-3.5 w-3.5" />
+                            ) : (
+                              <UserCheck className="h-3.5 w-3.5" />
+                            ),
+                            tone: member.is_active ? "danger" : "success",
+                            onSelect: () =>
+                              void runAction(
+                                member.is_active ? "User deactivated." : "User activated.",
+                                member.id,
+                                () =>
+                                  adminApi
+                                    .updateUser(member.id, { is_active: !member.is_active })
+                                    .then(() => undefined)
+                              ),
+                            disabled: controlsDisabled,
+                            separator: true,
+                          },
+                        ]}
+                      />
                     </div>
                   </div>
 
@@ -847,9 +869,11 @@ function AccessRequestsTab() {
 
   const decide = async (id: string, status: "approved" | "rejected") => {
     setActioning(id);
+    signalCompanion("think", 1100);
     try {
       await adminApi.decideAccessRequest(id, status);
       await load();
+      signalCompanion(status === "approved" ? "success" : "alert", 1500);
     } catch { /* ignore */ }
     finally { setActioning(null); }
   };
@@ -879,33 +903,42 @@ function AccessRequestsTab() {
         <>
           <div className="divide-y divide-surface-800/80">
             {data.items.map((item) => (
-              <div key={item.id} className="px-4 py-3">
+              <div key={item.id} className="depth-hover px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-surface-200">{item.user_name}</p>
                     <p className="text-xs text-surface-500">{item.user_email}</p>
                     {item.reason && <p className="mt-1 text-xs text-surface-400 italic">"{item.reason}"</p>}
                   </div>
-                  <StatusBadge status={item.status} />
-                </div>
-                {item.status === "pending" && (
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      disabled={actioning === item.id}
-                      onClick={() => decide(item.id, "approved")}
-                      className="rounded bg-emerald-400/10 px-2.5 py-1 text-[11px] text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-40"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      disabled={actioning === item.id}
-                      onClick={() => decide(item.id, "rejected")}
-                      className="rounded bg-red-400/10 px-2.5 py-1 text-[11px] text-red-200 hover:bg-red-400/20 disabled:opacity-40"
-                    >
-                      Reject
-                    </button>
+                  <div className="flex flex-shrink-0 items-center gap-1">
+                    <StatusBadge status={item.status} />
+                    <ActionMenu
+                      label={`Actions for ${item.user_name}`}
+                      triggerClassName="rounded-lg p-1.5"
+                      items={[
+                        {
+                          key: "approve",
+                          label: "Approve request",
+                          icon: <Check className="h-3.5 w-3.5" />,
+                          tone: "success",
+                          onSelect: () => void decide(item.id, "approved"),
+                          disabled: actioning === item.id || item.status !== "pending",
+                          reaction: "success",
+                        },
+                        {
+                          key: "reject",
+                          label: "Reject request",
+                          icon: <X className="h-3.5 w-3.5" />,
+                          tone: "danger",
+                          onSelect: () => void decide(item.id, "rejected"),
+                          disabled: actioning === item.id || item.status !== "pending",
+                          reaction: "alert",
+                          separator: true,
+                        },
+                      ]}
+                    />
                   </div>
-                )}
+                </div>
               </div>
             ))}
           </div>

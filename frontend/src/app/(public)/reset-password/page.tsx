@@ -95,8 +95,8 @@ function ResetPasswordForm({ token }: { token: string }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
       className="w-full max-w-[400px]"
     >
@@ -114,9 +114,9 @@ function ResetPasswordForm({ token }: { token: string }) {
 
         {done ? (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            initial={{ opacity: 0, filter: "blur(4px)" }}
+            animate={{ opacity: 1, filter: "blur(0px)" }}
+            transition={{ duration: 0.32, ease: "easeOut" }}
             className="mt-6"
           >
             <h1 className="text-3xl font-bold tracking-tight text-surface-100">

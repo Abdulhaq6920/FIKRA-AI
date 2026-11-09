@@ -4,7 +4,7 @@
  * Shared split-screen authentication scaffold.
  *
  * A themed equivalent of the premium login design reused by all four auth
- * pages (login / sign up slide, forgot password, reset password):
+ * pages (login / sign up fade, forgot password, reset password):
  *
  *   Left  — deep "stage" with the LIVE robot mascot: its eyes (and a hint
  *           of head tilt) follow the mouse anywhere on screen, it blinks on
@@ -41,6 +41,7 @@ import {
 
 import { authApi } from "@/lib/api/auth";
 import { cn } from "@/lib/utils/cn";
+import { AmbientMotion } from "@/components/ui/AmbientMotion";
 import type { PublicOrganization } from "@/types";
 
 // ─── Robot stage — mood channel between the forms and the mascot ──────────
@@ -215,15 +216,18 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <RobotStageContext.Provider value={stage}>
       <main
-        className="grid min-h-screen w-full grid-cols-1 overflow-hidden bg-surface-950 text-surface-100 lg:grid-cols-2"
+        className="relative grid min-h-screen w-full grid-cols-1 overflow-hidden bg-surface-950 text-surface-100 lg:grid-cols-2"
       >
+        {/* Pointer-reactive orbs + perspective floor, tinted per theme. */}
+        <AmbientMotion className="absolute inset-0 z-0" />
+
         {/* ── Left stage — themed animated mascot ───────────────────────── */}
         <div
           aria-hidden="true"
           className={cn(
-            "relative hidden items-center justify-center overflow-hidden lg:flex",
-            // Fantasy themes render this layer 78% transparent so their
-            // animated body::before/::after backdrops drift through it.
+            "relative z-10 hidden items-center justify-center overflow-hidden lg:flex",
+            // The translucent canvas lets the theme's ambient layers drift
+            // through the stage without touching the form panel.
             "bg-surface-950"
           )}
         >
@@ -323,7 +327,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         {/* ── Right panel — themed form surface ─────────────────────────── */}
         <section
           className={cn(
-            "relative flex min-h-screen items-center justify-center px-6 py-12 sm:px-10",
+            "relative z-10 flex min-h-screen items-center justify-center px-6 py-12 sm:px-10",
             "bg-surface-900/80 backdrop-blur-2xl",
             "border-l border-surface-800/40"
           )}
@@ -412,94 +416,172 @@ function LiveRobot({
     stiffness: 140,
     damping: 24,
   });
+  // Whole-body 3D tilt: the robot leans in the direction of the pointer.
+  const tiltX = useSpring(useTransform(pointerY, [-1, 1], [6, -6]), {
+    stiffness: 90,
+    damping: 22,
+  });
+  const tiltY = useSpring(useTransform(pointerX, [-1, 1], [-9, 9]), {
+    stiffness: 90,
+    damping: 22,
+  });
+  // Orbital rings spin continuously; the dashed one counter-rotates.
+  const reducedMotion = useReducedMotion();
+  const orbit = reducedMotion === true ? undefined : { rotate: 360 };
+  const orbitTransition =
+    reducedMotion === true
+      ? undefined
+      : { duration: 26, repeat: Infinity, ease: "linear" as const };
 
   return (
-    <svg
-      width="272"
-      height="300"
-      viewBox={`0 0 ${ROBOT_VIEW_SIZE.W} ${ROBOT_VIEW_SIZE.H}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      role="img"
-    >
-      {/* Antenna — sags when the robot is sad */}
-      <motion.g
-        animate={{ rotate: mood === "sad" ? 26 : 0 }}
-        transition={{ type: "spring", stiffness: 120, damping: 12 }}
-        style={{
-          transformBox: "fill-box",
-          transformOrigin: "60% 100%",
-        }}
-      >
-        <line x1="110" y1="30" x2="110" y2="16" />
-        <circle cx="110" cy="12" r="4.5" fill="currentColor" stroke="none" />
-      </motion.g>
-
-      {/* Head — tilts subtly toward the pointer (transform origin = neck) */}
-      <motion.g
-        style={{
-          rotate: headTilt,
-          transformBox: "fill-box",
-          transformOrigin: "50% 100%",
-        }}
-      >
-        <rect x="60" y="30" width="100" height="76" rx="24" />
-        {/* Visor */}
-        <rect x="74" y="46" width="72" height="34" rx="17" />
-
-        <RobotFace mood={mood} pupilX={pupilX} pupilY={pupilY} blinkDisabled={!trackMouse} />
-      </motion.g>
-
-      {/* Ear pods */}
-      <line x1="44" y1="62" x2="60" y2="62" />
-      <line x1="160" y1="62" x2="176" y2="62" />
-      <circle cx="40" cy="62" r="4.5" />
-      <circle cx="180" cy="62" r="4.5" />
-
-      {/* Neck */}
-      <line x1="102" y1="106" x2="102" y2="118" />
-      <line x1="118" y1="106" x2="118" y2="118" />
-
-      {/* Torso */}
-      <path d="M84 118 h52 a26 26 0 0 1 26 26 v40 a26 26 0 0 1 -26 26 h-52 a26 26 0 0 1 -26 -26 v-40 a26 26 0 0 1 26 -26 z" />
-
-      {/* Chest core */}
-      <circle cx="110" cy="164" r="13.5" />
-      <motion.circle
-        cx="110"
-        cy="164"
-        r="4.6"
-        fill="currentColor"
-        stroke="none"
-        animate={mood === "sad" ? { opacity: [1, 0.25, 1] } : undefined}
-        transition={
-          mood === "sad"
-            ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" }
+    <div className="relative flex items-center justify-center">
+      {/* Orbital energy rings — a 3D cue that keeps the stage moving. */}
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -m-10 rounded-full border border-brand-400/20"
+        animate={orbit}
+        transition={orbitTransition}
+        style={{ borderTopColor: "rgb(var(--brand-300) / 0.55)" }}
+      />
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -m-20 rounded-full border border-dashed border-brand-500/15"
+        animate={orbit ? { rotate: -360 } : undefined}
+        transition={orbitTransition}
+      />
+      <motion.span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 top-6 h-2.5 w-2.5 rounded-full bg-brand-300"
+        animate={
+          orbit
+            ? { opacity: [0.2, 0.9, 0.2], scale: [0.8, 1.25, 0.8], y: [0, -8, 0] }
             : undefined
         }
+        transition={orbit ? { duration: 4.2, repeat: Infinity, ease: "easeInOut" } : undefined}
+      />
+      <motion.span
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-14 bottom-14 h-1.5 w-1.5 rounded-full bg-brand-200"
+        animate={
+          orbit
+            ? { opacity: [0.15, 0.8, 0.15], scale: [0.7, 1.3, 0.7] }
+            : undefined
+        }
+        transition={orbit ? { duration: 3.4, repeat: Infinity, ease: "easeInOut", delay: 0.8 } : undefined}
       />
 
-      {/* Chest accents */}
-      <line x1="86" y1="130" x2="82" y2="134" />
-      <line x1="82" y1="130" x2="86" y2="134" />
-      <line x1="134" y1="130" x2="138" y2="134" />
-      <line x1="138" y1="130" x2="134" y2="134" />
+      <motion.div
+        style={{
+          rotateX: tiltX,
+          rotateY: tiltY,
+          transformPerspective: 900,
+          transformStyle: "preserve-3d",
+        }}
+      >
+        <svg
+          width="272"
+          height="300"
+          viewBox={`0 0 ${ROBOT_VIEW_SIZE.W} ${ROBOT_VIEW_SIZE.H}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.6}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          role="img"
+        >
+          <defs>
+            <linearGradient id="robot-visor" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="currentColor" stopOpacity="0.16" />
+              <stop offset="1" stopColor="currentColor" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
 
-      {/* Arms */}
-      <path d="M58 138 L36 154" />
-      <circle cx="32" cy="158" r="6" />
-      <path d="M162 138 L184 154" />
-      <circle cx="188" cy="158" r="6" />
+          {/* Antenna — sags when the robot is sad */}
+          <motion.g
+            animate={{ rotate: mood === "sad" ? 26 : 0 }}
+            transition={{ type: "spring", stiffness: 120, damping: 12 }}
+            style={{
+              transformBox: "fill-box",
+              transformOrigin: "60% 100%",
+            }}
+          >
+            <line x1="110" y1="30" x2="110" y2="16" />
+            <circle cx="110" cy="12" r="4.5" fill="currentColor" stroke="none" />
+          </motion.g>
 
-      {/* Legs */}
-      <path d="M93 210 v16" />
-      <path d="M127 210 v16" />
-      <path d="M85 232 h16" />
-      <path d="M119 232 h16" />
-    </svg>
+          {/* Head — tilts subtly toward the pointer (transform origin = neck) */}
+          <motion.g
+            style={{
+              rotate: headTilt,
+              transformBox: "fill-box",
+              transformOrigin: "50% 100%",
+            }}
+          >
+            <rect x="60" y="30" width="100" height="76" rx="24" />
+            {/* Visor with a soft inner light */}
+            <rect x="74" y="46" width="72" height="34" rx="17" />
+            <rect
+              x="76"
+              y="48"
+              width="68"
+              height="30"
+              rx="15"
+              fill="url(#robot-visor)"
+              stroke="none"
+            />
+
+            <RobotFace mood={mood} pupilX={pupilX} pupilY={pupilY} blinkDisabled={!trackMouse} />
+          </motion.g>
+
+          {/* Ear pods */}
+          <line x1="44" y1="62" x2="60" y2="62" />
+          <line x1="160" y1="62" x2="176" y2="62" />
+          <circle cx="40" cy="62" r="4.5" />
+          <circle cx="180" cy="62" r="4.5" />
+
+          {/* Neck */}
+          <line x1="102" y1="106" x2="102" y2="118" />
+          <line x1="118" y1="106" x2="118" y2="118" />
+
+          {/* Torso */}
+          <path d="M84 118 h52 a26 26 0 0 1 26 26 v40 a26 26 0 0 1 -26 26 h-52 a26 26 0 0 1 -26 -26 v-40 a26 26 0 0 1 26 -26 z" />
+
+          {/* Chest core */}
+          <circle cx="110" cy="164" r="13.5" />
+          <motion.circle
+            cx="110"
+            cy="164"
+            r="4.6"
+            fill="currentColor"
+            stroke="none"
+            animate={mood === "sad" ? { opacity: [1, 0.25, 1] } : undefined}
+            transition={
+              mood === "sad"
+                ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" }
+                : undefined
+            }
+          />
+
+          {/* Chest accents */}
+          <line x1="86" y1="130" x2="82" y2="134" />
+          <line x1="82" y1="130" x2="86" y2="134" />
+          <line x1="134" y1="130" x2="138" y2="134" />
+          <line x1="138" y1="130" x2="134" y2="134" />
+
+          {/* Arms */}
+          <path d="M58 138 L36 154" />
+          <circle cx="32" cy="158" r="6" />
+          <path d="M162 138 L184 154" />
+          <circle cx="188" cy="158" r="6" />
+
+          {/* Legs */}
+          <path d="M93 210 v16" />
+          <path d="M127 210 v16" />
+          <path d="M85 232 h16" />
+          <path d="M119 232 h16" />
+        </svg>
+      </motion.div>
+    </div>
   );
 }
 

@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   ChevronRight,
   Download,
+  Eye,
   FileText,
   HardDrive,
   Loader2,
@@ -26,6 +27,8 @@ import {
   type AdminDocumentList,
 } from "@/lib/api/analytics";
 import { documentsApi } from "@/lib/api/documents";
+import { ActionMenu } from "@/components/ui/ActionMenu";
+import { signalCompanion } from "@/lib/companion";
 import { cn } from "@/lib/utils/cn";
 import { formatBytes } from "@/lib/utils/format";
 import {
@@ -111,20 +114,24 @@ export function DocumentsTab() {
     event.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
+    signalCompanion("read", 1200);
   };
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploadError(null);
     setUploading(true);
+    signalCompanion("write", 1800);
     try {
       for (const file of Array.from(files)) {
         await documentsApi.upload(file);
       }
       setPage(1);
       await load();
+      signalCompanion("success", 1600);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed.");
+      signalCompanion("alert", 1600);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -135,13 +142,16 @@ export function DocumentsTab() {
     if (!confirm("Delete this document? This cannot be undone.")) return;
     setActionError(null);
     setBusyId(id);
+    signalCompanion("think", 1200);
     try {
       await documentsApi.delete(id);
       // If the last row on a page was removed, step back to a valid page.
       if (data && data.items.length === 1 && page > 1) setPage(page - 1);
       else await load();
+      signalCompanion("success", 1400);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Delete failed.");
+      signalCompanion("alert", 1400);
     } finally {
       setBusyId(null);
     }
@@ -150,11 +160,14 @@ export function DocumentsTab() {
   const handleReindex = async (id: string) => {
     setActionError(null);
     setBusyId(id);
+    signalCompanion("think", 1400);
     try {
       await documentsApi.reindex(id);
       await load();
+      signalCompanion("success", 1400);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Reindex failed.");
+      signalCompanion("alert", 1400);
     } finally {
       setBusyId(null);
     }
@@ -300,7 +313,7 @@ export function DocumentsTab() {
               {data.items.map((document) => (
                 <div
                   key={document.id}
-                  className="flex items-start gap-2 px-4 py-3 transition-colors hover:bg-surface-800/40"
+                  className="depth-hover flex items-start gap-2 px-4 py-3 hover:bg-surface-800/40"
                 >
                   <button
                     type="button"
@@ -340,42 +353,50 @@ export function DocumentsTab() {
                     </div>
                   </button>
                   <div className="flex flex-shrink-0 items-center gap-0.5">
-                    <a
-                      href={documentsApi.downloadUrl(document.id)}
-                      download
-                      className="rounded p-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200 focus:outline-none"
-                      aria-label={`Download ${document.title}`}
-                      title="Download"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </a>
-                    {(document.status === "failed" || document.status === "ready") && (
-                      <button
-                        type="button"
-                        onClick={() => handleReindex(document.id)}
-                        disabled={busyId === document.id}
-                        className="rounded p-1.5 text-surface-400 hover:bg-surface-800 hover:text-blue-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label={`Reindex ${document.title}`}
-                        title="Reindex"
-                      >
-                        {busyId === document.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(document.id)}
-                      disabled={busyId === document.id}
-                      className="rounded p-1.5 text-surface-400 hover:bg-surface-800 hover:text-red-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label={`Delete ${document.title}`}
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <ActionMenu
+                      label={`Actions for ${document.title}`}
+                      triggerClassName="rounded p-1.5"
+                      items={[
+                        {
+                          key: "details",
+                          label: "View details",
+                          icon: <Eye className="h-3.5 w-3.5" />,
+                          onSelect: () => void openDetail(document.id),
+                          reaction: "read",
+                        },
+                        {
+                          key: "download",
+                          label: "Download",
+                          icon: <Download className="h-3.5 w-3.5" />,
+                          href: documentsApi.downloadUrl(document.id),
+                          download: true,
+                        },
+                        {
+                          key: "reindex",
+                          label: busyId === document.id ? "Reindexing…" : "Reindex",
+                          icon:
+                            busyId === document.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            ),
+                          onSelect: () => void handleReindex(document.id),
+                          reaction: "think",
+                          disabled:
+                            busyId === document.id ||
+                            (document.status !== "failed" && document.status !== "ready"),
+                        },
+                        {
+                          key: "delete",
+                          label: "Delete",
+                          icon: <Trash2 className="h-3.5 w-3.5" />,
+                          onSelect: () => void handleDelete(document.id),
+                          tone: "danger",
+                          separator: true,
+                          disabled: busyId === document.id,
+                        },
+                      ]}
+                    />
                   </div>
                 </div>
               ))}

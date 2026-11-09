@@ -21,8 +21,8 @@ to "Admin → Documents". Do NOT upload or delete anything.
 
 ## Step 3
 Open http://localhost:3000/admin and click the "Documents" tab. Verify an
-"Upload document" button exists along with Download / Reindex / Delete
-controls on rows. Do NOT click any of them.
+"Upload document" button exists and that each row's three-dot actions menu
+contains Download, Reindex, and Delete. Do NOT click any of them.
 
 ## Step 4
 Open "Settings" in the left sidebar. Verify the "Account" card appears ABOVE
@@ -31,7 +31,9 @@ the "Appearance" card on the page.
 ## Step 5
 Click the "Change theme" button and verify a set of theme cards appears
 (buttons whose label starts with "Use " and ends with " theme") — there must
-be exactly 22 of them, including a "Fantasy" group of ten themes.
+be exactly 19 of them, including a "Fantasy" group of seven themes and an
+"Anime 3D" group of four. The Professional group leads with the gold-accented
+"Royal Glass" signature theme.
 
 ## Step 6
 Click "Use Ember Abyss theme" and verify the applied theme (page attribute

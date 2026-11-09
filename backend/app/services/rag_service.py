@@ -5,7 +5,7 @@ Orchestrates the full question-answering pipeline:
 1. Resolve conversation context
 2. Retrieve authorized document passages
 3. Construct bounded prompt
-4. Generate answer via Groq
+4. Generate answer via the configured LLM provider
 5. Validate and attach citations
 6. Persist result
 
@@ -34,7 +34,7 @@ from app.core.config import settings
 from app.core.exceptions import ConversationNotFoundError
 from app.core.logging import get_logger
 from app.db.models.conversation import Conversation, Message, MessageRole
-from app.providers.groq_client import GroqClient
+from app.providers.llm import LLMClient
 from app.services.retrieval_service import RetrievedPassage, retrieve
 
 logger = get_logger(__name__)
@@ -137,10 +137,10 @@ class RAGService:
     def __init__(
         self,
         db: AsyncSession,
-        groq: GroqClient,
+        llm: LLMClient,
     ) -> None:
         self._db = db
-        self._groq = groq
+        self._llm = llm
         # Populated after a streaming response is fully consumed so the API
         # layer can persist citations and usage metrics for analytics.
         self.last_stream_result: RAGResult | None = None
@@ -189,10 +189,10 @@ class RAGService:
         )
 
         # Generate answer
-        result = await self._groq.generate(
+        result = await self._llm.generate(
             messages=chat_messages,
             max_tokens=settings.rag_answer_max_tokens,
-            temperature=settings.groq_temperature,
+            temperature=settings.active_llm_temperature,
         )
 
         total_ms = int((time.perf_counter() - start_total) * 1000)
@@ -250,7 +250,7 @@ class RAGService:
         input_text = "\n".join(str(message.content) for message in chat_messages)
 
         answer_parts: list[str] = []
-        async for chunk in self._groq.generate_stream(
+        async for chunk in self._llm.generate_stream(
             messages=chat_messages,
             max_tokens=settings.rag_answer_max_tokens,
         ):
@@ -261,7 +261,7 @@ class RAGService:
         self.last_stream_result = RAGResult(
             answer=answer,
             citations=_extract_citations(answer, source_map),
-            model_used=settings.groq_primary_model,
+            model_used=settings.active_llm_model,
             input_tokens=_count_tokens(input_text),
             output_tokens=_count_tokens(answer),
             latency_ms=int((time.perf_counter() - start_total) * 1000),

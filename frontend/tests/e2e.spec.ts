@@ -217,3 +217,103 @@ test.describe("Accessibility", () => {
     await expect(page.locator('label[for="password"]')).toBeVisible();
   });
 });
+
+// Helper: apply a theme from Settings, opening the picker when collapsed.
+async function applyTheme(page: Page, label: string) {
+  await page.goto("/settings");
+  await page.waitForTimeout(1200);
+  const opener = page.getByRole("button", { name: /Change theme|Hide themes/ }).first();
+  if (await opener.isVisible().catch(() => false)) {
+    if (/Change theme/i.test((await opener.textContent()) || "")) await opener.click();
+  }
+  const option = page.locator(`button[aria-label="${label}"]`);
+  await expect(option).toBeVisible({ timeout: 8000 });
+  await option.scrollIntoViewIfNeeded();
+  await option.click();
+  await page.waitForTimeout(900);
+}
+
+test.describe("Themes & Companion", () => {
+  test("Solo Leveling themes apply and the companion reacts to menus", async ({ page }) => {
+    await loginViaUI(page);
+    await applyTheme(page, "Use Sung Jinwoo theme");
+
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(
+      "solo-jinwoo"
+    );
+
+    await page.goto("/documents");
+    await page.waitForTimeout(2000);
+
+    const companion = page.locator("[data-companion]");
+    await expect(companion).toHaveCount(1);
+    await expect(companion).toHaveAttribute("data-action", "read");
+
+    const kebab = page.locator('button[aria-label^="Actions for"]').first();
+    test.skip((await kebab.count()) === 0, "No documents to open a menu on");
+    await kebab.click();
+    await expect(companion).toHaveAttribute("data-action", "think");
+
+    await page.getByRole("menuitem", { name: "Copy title" }).click();
+    await expect(companion).toHaveAttribute("data-action", "success");
+    await expect(companion).toContainText("Mission complete");
+
+    // Switching to Igris swaps the artwork, and a non-anime theme removes it.
+    await applyTheme(page, "Use Igris theme");
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(
+      "solo-igris"
+    );
+    await applyTheme(page, "Use Aurora theme");
+    await expect(page.locator("[data-companion]")).toHaveCount(0);
+  });
+
+  test("removed palettes are gone and Solo themes are listed", async ({ page }) => {
+    await loginViaUI(page);
+    await applyTheme(page, "Use Sung Jinwoo theme");
+    await expect(page.locator('button[aria-label="Use Sung Jinwoo theme"]')).toHaveCount(1);
+    await expect(page.locator('button[aria-label="Use Igris theme"]')).toHaveCount(1);
+    for (const removed of ["Lavender", "Quartz", "Cobalt"]) {
+      await expect(page.locator(`button[aria-label="Use ${removed} theme"]`)).toHaveCount(0);
+    }
+  });
+});
+
+test.describe("Row action menus", () => {
+  test("document rows expose a kebab menu with row actions", async ({ page }) => {
+    await loginViaUI(page);
+    await page.goto("/documents");
+    await page.waitForTimeout(2200);
+
+    const kebab = page.locator('button[aria-label^="Actions for"]').first();
+    test.skip((await kebab.count()) === 0, "No documents available");
+
+    await kebab.click();
+    const menu = page.locator('[role="menu"]');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "View details" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Download" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Copy title" })).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  });
+
+  test("admin user rows expose management actions", async ({ page }) => {
+    await loginViaUI(page);
+    await page.goto("/admin?tab=Users");
+    await page.waitForTimeout(2200);
+
+    const kebab = page.locator('button[aria-label^="Actions for"]').first();
+    test.skip((await kebab.count()) === 0, "No users available");
+
+    await kebab.click();
+    const menu = page.locator('[role="menu"]');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /Change role/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Reset password" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /(De)?activate user/i })).toBeVisible();
+
+    await menu.getByRole("menuitem", { name: "Reset password" }).click();
+    await expect(page.locator('input[placeholder^="New password"]')).toBeVisible();
+  });
+});

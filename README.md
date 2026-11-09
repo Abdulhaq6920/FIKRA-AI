@@ -2,7 +2,7 @@
 
 **Production-grade, multi-tenant RAG chatbot**
 
-Organizations upload documents → users ask questions → grounded answers with validated citations powered by Groq LLMs.
+Organizations upload documents → users ask questions → grounded answers with validated citations powered by Groq or a local Ollama model.
 
 ---
 
@@ -18,10 +18,20 @@ Organizations upload documents → users ask questions → grounded answers with
 
 ```powershell
 Copy-Item backend\.env.example backend\.env
-# Edit backend\.env — set GROQ_API_KEY, SECRET_KEY, JWT_SECRET_KEY
+# Edit backend\.env — set LLM_PROVIDER, SECRET_KEY, and JWT_SECRET_KEY
 ```
 
-Get a free Groq API key at https://console.groq.com
+For Groq, set `LLM_PROVIDER=groq` and add a Groq API key. To use your local
+Ollama model, set:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=deepseek-r1:8b
+```
+
+Keep Ollama running while you use the app. If the backend runs inside Docker
+Desktop, set `OLLAMA_BASE_URL=http://host.docker.internal:11434` instead.
 
 Generate secure secrets:
 ```powershell
@@ -73,7 +83,7 @@ Login: `admin@fikra.ai` / `Admin1234!` (change immediately)
 ```
 Browser → Next.js → FastAPI → PostgreSQL+pgvector
                             → Redis (Celery queue)
-                            → Groq API (LLM)
+                            → Groq API or local Ollama (LLM)
                   Celery Worker → Storage → Embeddings → PostgreSQL
 ```
 
@@ -116,7 +126,10 @@ See [`docs/development/project-structure.md`](docs/development/project-structure
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GROQ_API_KEY` | ✅ | Groq hosted inference key |
+| `LLM_PROVIDER` | No | `groq` (default) or `ollama` |
+| `GROQ_API_KEY` | Groq only | Groq hosted inference key |
+| `OLLAMA_BASE_URL` | Ollama only | Ollama server URL, usually `http://localhost:11434` |
+| `OLLAMA_MODEL` | Ollama only | Local Ollama model tag, e.g. `deepseek-r1:8b` |
 | `DATABASE_URL` | ✅ | PostgreSQL async connection string |
 | `JWT_SECRET_KEY` | ✅ | JWT signing secret (64-byte hex) |
 | `SECRET_KEY` | ✅ | App secret (64-byte hex) |

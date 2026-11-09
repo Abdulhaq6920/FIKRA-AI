@@ -25,13 +25,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import CurrentUser, get_groq
+from app.api.dependencies import CurrentUser, get_llm_client
 from app.core.config import settings
 from app.core.exceptions import (
     AppError,
     ConversationNotFoundError,
     PermissionDeniedError,
 )
+from app.core.logging import get_logger
 from app.db.models.audit import Notification
 from app.db.models.conversation import (
     Conversation,
@@ -42,7 +43,7 @@ from app.db.models.conversation import (
 )
 from app.db.models.user import OrganizationMembership, OrgRole
 from app.db.session import get_db
-from app.providers.groq_client import GroqClient
+from app.providers.llm import LLMClient
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -55,7 +56,6 @@ from app.schemas.chat import (
     MessageListOut,
     MessageOut,
 )
-from app.core.logging import get_logger
 from app.services.rag_service import RAGService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -193,7 +193,7 @@ async def ask(
     body: ChatRequest,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    groq: GroqClient = Depends(get_groq),
+    llm: LLMClient = Depends(get_llm_client),
 ) -> ChatResponse:
     """
     Answer a question using the RAG pipeline.
@@ -202,7 +202,7 @@ async def ask(
     """
     user, org_id, role = ctx
 
-    rag = RAGService(db=db, groq=groq)
+    rag = RAGService(db=db, llm=llm)
     result = await rag.answer(
         question=body.question,
         conversation_id=body.conversation_id,
@@ -307,7 +307,7 @@ async def ask_stream(
     request: Request,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    groq: GroqClient = Depends(get_groq),
+    llm: LLMClient = Depends(get_llm_client),
 ) -> StreamingResponse:
     """Stream the RAG answer as Server-Sent Events."""
     user, org_id, role = ctx
@@ -317,7 +317,7 @@ async def ask_stream(
     cancel_event = asyncio.Event()
     _cancel_events[stream_key] = cancel_event
 
-    rag = RAGService(db=db, groq=groq)
+    rag = RAGService(db=db, llm=llm)
 
     async def event_stream() -> AsyncIterator[str]:
         answer_parts: list[str] = []
@@ -368,7 +368,7 @@ async def ask_stream(
                     user_id=user.id,
                     role=MessageRole.ASSISTANT,
                     content=answer,
-                    model_used=result.model_used or settings.groq_primary_model,
+                    model_used=result.model_used or settings.active_llm_model,
                     input_tokens=result.input_tokens,
                     output_tokens=result.output_tokens,
                     latency_ms=result.latency_ms,
@@ -386,7 +386,7 @@ async def ask_stream(
                         user_id=user.id,
                         conversation_id=body.conversation_id,
                         message_id=assistant_message.id,
-                        model=result.model_used or settings.groq_primary_model,
+                        model=result.model_used or settings.active_llm_model,
                         input_tokens=result.input_tokens,
                         output_tokens=result.output_tokens,
                         total_tokens=result.input_tokens + result.output_tokens,

@@ -13,7 +13,7 @@
  * were in a separate inner sidebar only visible on the chat page.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -40,6 +40,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { chatApi } from "@/lib/api/chat";
+import { AmbientMotion } from "@/components/ui/AmbientMotion";
+import { CompanionScene } from "@/features/theme/CompanionScene";
+import { COMPANION_EVENT, type CompanionAction } from "@/lib/companion";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
 import { api } from "@/lib/api/client";
@@ -93,12 +96,47 @@ export function AppShell({
   const [convTotal, setConvTotal] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  // Conversation awaiting delete confirmation — deletion is irreversible, so
+  // a stray click on the trash icon must never remove a thread outright.
+  const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
+  // Conversations with an answer still streaming in the chat page. Surfaced
+  // as a pulsing dot so background answers stay discoverable after switching.
+  const [streamingIds, setStreamingIds] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, logout } = useAuth();
   const { definition } = useTheme();
   const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
+
+  // The themed anime companion acts out the current section by default and
+  // reacts to `signalCompanion()` events from anywhere in the app.
+  const [companionAction, setCompanionAction] = useState<CompanionAction>(() =>
+    routeCompanionAction(pathname)
+  );
+  const companionTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    setCompanionAction(routeCompanionAction(pathname));
+  }, [pathname]);
+
+  useEffect(() => {
+    const onSignal = (event: Event) => {
+      const detail = (event as CustomEvent<{ action: CompanionAction; duration: number }>)
+        .detail;
+      if (!detail?.action) return;
+      setCompanionAction(detail.action);
+      window.clearTimeout(companionTimer.current);
+      companionTimer.current = window.setTimeout(() => {
+        setCompanionAction(routeCompanionAction(pathname));
+      }, detail.duration);
+    };
+    window.addEventListener(COMPANION_EVENT, onSignal);
+    return () => {
+      window.removeEventListener(COMPANION_EVENT, onSignal);
+      window.clearTimeout(companionTimer.current);
+    };
+  }, [pathname]);
 
   const isOnChat = pathname.startsWith("/chat");
   const selectedConversationId = isOnChat
@@ -137,7 +175,7 @@ export function AppShell({
     if (isOnChat) setConvPage(1);
   }, [isOnChat]);
 
-  const handleNewConversation = async () => {
+  const handleNewConversation = useCallback(async () => {
     if (onNewConversation) {
       onNewConversation();
     } else {
@@ -149,13 +187,73 @@ export function AppShell({
         router.push(`/chat?conversation=${conv.id}`);
       } catch {}
     }
-  };
+  }, [onNewConversation, router]);
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Ctrl/Cmd+K starts a new chat from the keyboard while the chat page is open.
+  useEffect(() => {
+    if (!isOnChat) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        void handleNewConversation();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOnChat, handleNewConversation]);
+
+  // The chat page broadcasts when a stream starts/stops so this sidebar can
+  // show which threads are still answering.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ conversationId?: string; active?: boolean }>).detail;
+      if (!detail?.conversationId) return;
+      setStreamingIds((prev) => {
+        const next = { ...prev };
+        if (detail.active) next[detail.conversationId!] = true;
+        else delete next[detail.conversationId!];
+        return next;
+      });
+    };
+    window.addEventListener("fikra:stream-state", handler);
+    return () => window.removeEventListener("fikra:stream-state", handler);
+  }, []);
+
+  // Escape dismisses the delete confirmation without deleting anything.
+  useEffect(() => {
+    if (!deleteTarget) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDeleteTarget(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [deleteTarget]);
+
+  const performDelete = useCallback(async (id: string) => {
+    const wasActive = id === (selectedConversationId ?? activeConversationId);
     await chatApi.deleteConversation(id).catch(() => {});
     setConversations((prev) => prev.filter((c) => c.id !== id));
     setConvTotal((prev) => Math.max(0, prev - 1));
+    setStreamingIds((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    // The chat page tears down any live stream and per-session UI state for
+    // this conversation so nothing from it can linger on screen.
+    window.dispatchEvent(new CustomEvent("fikra:conv-deleted", { detail: id }));
+    if (wasActive) {
+      // A deleted conversation must not stay open — land on a fresh chat.
+      // Dropping the query param resets the page to a new, empty session.
+      router.replace("/chat");
+    }
+  }, [selectedConversationId, activeConversationId, router]);
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const target = conversations.find((c) => c.id === id);
+    if (target) setDeleteTarget(target);
   };
 
   const handleRename = async (id: string) => {
@@ -265,6 +363,8 @@ export function AppShell({
           <div className="px-2 py-2 flex-shrink-0">
             <button
               onClick={handleNewConversation}
+              title="New conversation (Ctrl+K)"
+              aria-keyshortcuts="Control+K Meta+K"
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-600/20 hover:bg-brand-600/30 text-brand-300 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 border border-brand-500/20"
             >
               <Plus className="w-3.5 h-3.5 flex-shrink-0" />
@@ -284,6 +384,7 @@ export function AppShell({
                   key={conv.id}
                   conv={conv}
                   active={conv.id === (selectedConversationId ?? activeConversationId)}
+                  streaming={Boolean(streamingIds[conv.id])}
                   editingId={editingId}
                   editTitle={editTitle}
                   onSelect={() => {
@@ -372,10 +473,11 @@ export function AppShell({
               onClick={() => setMobileOpen(false)}
             />
             <motion.aside
-              initial={{ x: -260 }}
-              animate={{ x: 0 }}
-              exit={{ x: -260 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              style={{ transformOrigin: "left center" }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="fixed left-0 top-0 bottom-0 z-50 w-64 bg-surface-900 border-r border-surface-800 flex flex-col md:hidden overflow-hidden"
             >
               {sidebarContent(true)}
@@ -427,18 +529,103 @@ export function AppShell({
         </header>
 
         <main className="relative flex-1 overflow-hidden">
-          {children}
+          {/* Theme-tinted motion graphics sit behind every page. */}
+          <AmbientMotion className="z-0" />
+
+          {/* Routes fade in place — no sliding, no layout jump. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={pathname}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="relative z-10 h-full"
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+
           {/* Decorative only. Hidden on chat so it never competes with the composer. */}
           {definition.artwork && !isOnChat && (
-            <NinjaArtwork
-              variant={definition.artwork}
-              className="theme-watermark fixed bottom-3 right-2 z-20 hidden h-52 w-64 lg:block"
-            />
+            <CompanionScene variant={definition.artwork} action={companionAction} />
           )}
         </main>
       </div>
+
+      {/* ── Delete confirmation — deletion is permanent ──────────────────── */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+            onClick={() => setDeleteTarget(null)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-conversation-title"
+              aria-describedby="delete-conversation-body"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl border border-surface-700 bg-surface-900 p-5 shadow-2xl"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10">
+                <Trash2 className="h-5 w-5 text-red-400" aria-hidden="true" />
+              </div>
+              <h2
+                id="delete-conversation-title"
+                className="mt-4 text-base font-semibold text-surface-100"
+              >
+                Delete conversation?
+              </h2>
+              <p id="delete-conversation-body" className="mt-1.5 text-sm text-surface-400">
+                <span className="font-medium text-surface-200">
+                  “{deleteTarget.title}”
+                </span>{" "}
+                and all of its messages will be permanently removed. This cannot be
+                undone.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setDeleteTarget(null)}
+                  className="rounded-lg border border-surface-700 px-3.5 py-2 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = deleteTarget;
+                    setDeleteTarget(null);
+                    void performDelete(target.id);
+                  }}
+                  className="rounded-lg bg-red-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
+}
+
+/** Default acting state for a section, used whenever no event is firing. */
+function routeCompanionAction(pathname: string): CompanionAction {
+  if (pathname.startsWith("/documents")) return "read";
+  if (pathname.startsWith("/admin") || pathname.startsWith("/analytics")) return "write";
+  if (pathname.startsWith("/chat")) return "think";
+  return "idle";
 }
 
 interface NotificationItem {
@@ -564,11 +751,12 @@ function NotificationBell() {
 // ─── Conversation item component ─────────────────────────────────────────────
 
 function ConversationItem({
-  conv, active, editingId, editTitle,
+  conv, active, streaming, editingId, editTitle,
   onSelect, onStartEdit, onEditChange, onEditConfirm, onEditCancel, onDelete,
 }: {
   conv: Conversation;
   active: boolean;
+  streaming: boolean;
   editingId: string | null;
   editTitle: string;
   onSelect: () => void;
@@ -593,7 +781,18 @@ function ConversationItem({
           : "text-surface-400 hover:bg-surface-800 hover:text-surface-100"
       )}
     >
-      <MessageSquare className="w-3 h-3 flex-shrink-0 opacity-50" />
+      {streaming ? (
+        <span
+          className="relative flex h-2 w-2 flex-shrink-0"
+          aria-label="Response streaming"
+          title="Response streaming"
+        >
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-70" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-300" />
+        </span>
+      ) : (
+        <MessageSquare className="w-3 h-3 flex-shrink-0 opacity-50" />
+      )}
 
       {isEditing ? (
         <input

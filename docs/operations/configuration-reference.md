@@ -11,17 +11,34 @@ All configuration is loaded from environment variables (or `.env` file in develo
 | `DEBUG` | `false` | No | Enable debug mode and SQL logging |
 | `SECRET_KEY` | auto-generated | **Yes (prod)** | General application secret |
 
-## Groq LLM
+## LLM provider
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `GROQ_API_KEY` | — | **Yes** | Groq API key from console.groq.com |
+| `LLM_PROVIDER` | `groq` | No | `groq` or `ollama` |
+
+## Groq
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `GROQ_API_KEY` | — | When `LLM_PROVIDER=groq` | Groq API key from console.groq.com |
 | `GROQ_PRIMARY_MODEL` | `llama3-8b-8192` | No | Primary generation model |
 | `GROQ_FALLBACK_MODEL` | `gemma2-9b-it` | No | Fallback model (set empty to disable) |
 | `GROQ_MAX_TOKENS` | `2048` | No | Max output tokens per request |
 | `GROQ_TEMPERATURE` | `0.2` | No | Sampling temperature (0.0–2.0) |
 | `GROQ_TIMEOUT_SECONDS` | `60` | No | Request timeout |
 | `GROQ_MAX_CONCURRENT_REQUESTS` | `10` | No | Semaphore limit for concurrent Groq calls |
+
+## Ollama
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | No | Ollama server URL; use `http://host.docker.internal:11434` when the backend runs in Docker Desktop |
+| `OLLAMA_MODEL` | `deepseek-r1:8b` | No | Local Ollama model tag |
+| `OLLAMA_MAX_TOKENS` | `2048` | No | Maximum output tokens |
+| `OLLAMA_TEMPERATURE` | `0.2` | No | Sampling temperature (0.0–2.0) |
+| `OLLAMA_TIMEOUT_SECONDS` | `300` | No | Request timeout, in seconds |
+| `OLLAMA_MAX_CONCURRENT_REQUESTS` | `2` | No | Maximum concurrent Ollama requests |
 
 ## Database
 

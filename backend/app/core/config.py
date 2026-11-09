@@ -33,7 +33,10 @@ class Settings(BaseSettings):
     secret_key: str = Field(default_factory=lambda: secrets.token_hex(64))
 
     # ------------------------------------------------------------------
-    # Groq LLM
+    # LLM provider
+    llm_provider: Literal["groq", "ollama"] = Field(default="groq")
+
+    # Groq
     # ------------------------------------------------------------------
     groq_api_key: str = Field(default="")
     groq_primary_model: str = Field(default="llama-3.1-8b-instant")
@@ -47,6 +50,14 @@ class Settings(BaseSettings):
     # override them in .env when you switch providers or models.
     groq_input_cost_per_million_usd: float = Field(default=0.10, ge=0.0)
     groq_output_cost_per_million_usd: float = Field(default=0.50, ge=0.0)
+
+    # Ollama
+    ollama_base_url: AnyHttpUrl = Field(default="http://localhost:11434")
+    ollama_model: str = Field(default="deepseek-r1:8b")
+    ollama_max_tokens: int = Field(default=2048, ge=256, le=8192)
+    ollama_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    ollama_timeout_seconds: int = Field(default=300, ge=5)
+    ollama_max_concurrent_requests: int = Field(default=2, ge=1)
 
     # ------------------------------------------------------------------
     # Database
@@ -223,6 +234,20 @@ class Settings(BaseSettings):
         return bool(self.smtp_host and self.smtp_user)
 
     @property
+    def active_llm_model(self) -> str:
+        """Return the configured model name for the selected provider."""
+        if self.llm_provider == "ollama":
+            return self.ollama_model
+        return self.groq_primary_model
+
+    @property
+    def active_llm_temperature(self) -> float:
+        """Return the sampling temperature for the selected provider."""
+        if self.llm_provider == "ollama":
+            return self.ollama_temperature
+        return self.groq_temperature
+
+    @property
     def public_signup_orgs(self) -> frozenset[str]:
         """Normalized UUID strings of organizations open to self-registration."""
         return frozenset(
@@ -238,7 +263,10 @@ class Settings(BaseSettings):
                     "jwt_secret_key must be a real secret of at least 32 "
                     "characters in production"
                 )
-            if not self.groq_api_key or self.groq_api_key.startswith("gsk_CHANGE"):
+            if (
+                self.llm_provider == "groq"
+                and (not self.groq_api_key or self.groq_api_key.startswith("gsk_CHANGE"))
+            ):
                 raise ValueError("groq_api_key must be set in production")
         return self
 

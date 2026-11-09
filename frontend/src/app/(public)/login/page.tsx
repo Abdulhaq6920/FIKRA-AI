@@ -4,12 +4,12 @@
  * Authentication — premium themed split-screen with sign-in / sign-up modes.
  *
  * Left:  themed "stage" with the floating robot mascot (see AuthShell).
- * Right: one panel that the two forms slide between — clicking "Sign Up"
- *        slides the login form out to the left and serves the registration
- *        form in its place from the right, with the mascot staying put.
- *        The URL follows the mode ("/login?mode=signup") so deep links and
- *        the legacy /register route land on the right form, without any
- *        full-page navigation (history.replaceState keeps the animation).
+ * Right: one panel that the two forms fade between — the outgoing form
+ *        dissolves into a soft blur and the incoming one resolves from it,
+ *        with no sliding. The URL follows the mode ("/login?mode=signup") so
+ *        deep links and the legacy /register route land on the right form,
+ *        without any full-page navigation (history.replaceState keeps the
+ *        animation).
  *
  * Business logic is untouched: react-hook-form + Zod, AuthContext.login(),
  * and the organization_id resolved from /auth/signup-options (never
@@ -47,12 +47,9 @@ import { ApiRequestError } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
 
 type AuthMode = "login" | "signup";
-/** Slide direction: +1 → signup enters from the right, −1 → back to login. */
-type SlideDirection = 1 | -1;
 
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("login");
-  const [slideDirection, setSlideDirection] = useState<SlideDirection>(1);
   /** Success notice shown right after an in-page account creation. */
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   /** Mirror of `mode` so callbacks can read it without stale updates. */
@@ -62,14 +59,13 @@ export default function LoginPage() {
   useEffect(() => {
     if (mounted.current) return;
     mounted.current = true;
-    // Deep links: /login?mode=signup opens the sign-up slide directly.
+    // Deep links: /login?mode=signup opens the sign-up form directly.
     // (Direct window read avoids a Suspense boundary for useSearchParams.)
     const params = new URLSearchParams(window.location.search);
     const initialMode = params.get("mode") === "signup" ? "signup" : "login";
     if (initialMode === "signup") {
       modeRef.current = "signup";
       setMode("signup");
-      setSlideDirection(1);
     }
     // Legacy "?registered=1" entry point: the success banner is now replaced
     // by autofilling the verified email in the sign-in form.
@@ -78,9 +74,6 @@ export default function LoginPage() {
   const switchMode = useCallback((next: AuthMode) => {
     if (modeRef.current === next) return;
     modeRef.current = next;
-    // Both updates live outside the setState updater: React may invoke an
-    // updater twice (StrictMode), and side effects there would double-fire.
-    setSlideDirection(next === "signup" ? 1 : -1);
     window.history.replaceState(
       null,
       "",
@@ -100,9 +93,9 @@ export default function LoginPage() {
   return (
     <AuthShell>
       <motion.div
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-[400px]"
       >
         <div className="text-center">
@@ -112,10 +105,10 @@ export default function LoginPage() {
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={mode}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.22 }}
+              initial={{ opacity: 0, filter: "blur(5px)" }}
+              animate={{ opacity: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, filter: "blur(5px)" }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
             >
               <h1
                 id="auth-heading"
@@ -132,18 +125,17 @@ export default function LoginPage() {
           </AnimatePresence>
         </div>
 
-        {/* Both forms live here and slide horizontally */}
-        <div className="mt-8 overflow-hidden">
-          <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
+        {/* Both forms share one fade stage — opacity and a soft blur only. */}
+        <div className="mt-8">
+          <AnimatePresence mode="wait" initial={false}>
             {mode === "login" ? (
               <motion.div
                 key="login"
-                custom={slideDirection}
-                variants={slideVariants}
+                variants={fadeVariants}
                 initial="enter"
                 animate="center"
                 exit="exit"
-                transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
               >
                 <LoginForm
                   registeredEmail={registeredEmail}
@@ -154,12 +146,11 @@ export default function LoginPage() {
             ) : (
               <motion.div
                 key="signup"
-                custom={slideDirection}
-                variants={slideVariants}
+                variants={fadeVariants}
                 initial="enter"
                 animate="center"
                 exit="exit"
-                transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
               >
                 <SignupForm
                   onRegistered={handleRegistered}
@@ -174,11 +165,14 @@ export default function LoginPage() {
   );
 }
 
-/** Directional slide: outgoing form leaves left, incoming arrives from right. */
-const slideVariants = {
-  enter: (dir: SlideDirection) => ({ opacity: 0, x: 48 * dir }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: SlideDirection) => ({ opacity: 0, x: -48 * dir }),
+/**
+ * Fade-only panel swap. No horizontal movement: the outgoing form dissolves
+ * into a slight blur while the incoming one resolves from the same blur.
+ */
+const fadeVariants = {
+  enter: { opacity: 0, filter: "blur(6px)" },
+  center: { opacity: 1, filter: "blur(0px)" },
+  exit: { opacity: 0, filter: "blur(6px)" },
 };
 
 // ─── Sign-in form ──────────────────────────────────────────────────────────

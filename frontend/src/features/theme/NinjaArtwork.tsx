@@ -1,142 +1,269 @@
 /**
- * Original chibi-ninja illustrations for the two anime themes.
+ * Original anime-themed character illustrations.
  *
- * These are hand-built SVGs (no external or copyrighted assets) so the themes
- * stay fast, offline-friendly, and safe to ship.
+ * Ninja worlds are defined here; Solo Leveling worlds live in SoloArtwork.
+ * Everything is a hand-built SVG (no external or copyrighted assets) so the
+ * themes stay fast, offline-friendly, and safe to ship. Both ninja portraits
+ * are drawn as anime key visuals — cel planes, ink linework and oversized
+ * expressive eyes — rather than mascot art.
  */
+
+import type { CSSProperties } from "react";
+import { SoloArtwork } from "./SoloArtwork";
+import type { ThemeArtwork } from "./themes";
 
 export function NinjaArtwork({
   variant,
   className,
+  style,
 }: {
-  variant: "leaf" | "sharingan";
+  variant: ThemeArtwork;
   className?: string;
+  style?: CSSProperties;
 }) {
+  if (variant === "jinwoo" || variant === "igris") {
+    return <SoloArtwork variant={variant} className={className} style={style} />;
+  }
   return variant === "leaf" ? (
-    <LeafNinja className={className} />
+    <LeafNinja className={className} style={style} />
   ) : (
-    <SharinganNinja className={className} />
+    <SharinganNinja className={className} style={style} />
   );
 }
 
-function LeafNinja({ className }: { className?: string }) {
+function LeafNinja({ className, style }: { className?: string; style?: CSSProperties }) {
   return (
     <svg
-      viewBox="0 0 320 230"
+      viewBox="0 0 320 240"
       role="img"
-      aria-label="Original chibi ninja illustration in warm leaf-village colours"
+      aria-label="Original anime-style ninja portrait with blond hair and a leaf headband"
       className={className}
+      style={style}
     >
       <defs>
-        <linearGradient id="leaf-sun" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#fbbf24" />
-          <stop offset="1" stopColor="#f97316" />
-        </linearGradient>
-        <linearGradient id="leaf-jacket" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fb923c" />
-          <stop offset="1" stopColor="#ea580c" />
-        </linearGradient>
-        <linearGradient id="leaf-plate" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#dbeafe" />
-          <stop offset="0.5" stopColor="#94a3b8" />
-          <stop offset="1" stopColor="#64748b" />
-        </linearGradient>
-        <radialGradient id="leaf-skin" cx="0.35" cy="0.25" r="0.9">
-          <stop offset="0" stopColor="#ffe8c7" />
-          <stop offset="1" stopColor="#f6c794" />
+        <radialGradient id="leaf-sun" cx="0.5" cy="0.5" r="0.55">
+          <stop offset="0" stopColor="#fef9c3" />
+          <stop offset="0.45" stopColor="#fbbf24" />
+          <stop offset="1" stopColor="#c2410c" />
         </radialGradient>
-        <filter id="leaf-soft" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="7" stdDeviation="6" floodColor="#7c2d12" floodOpacity="0.28" />
+        <linearGradient id="leaf-jacket" x1="0.1" y1="0" x2="0.7" y2="1">
+          <stop offset="0" stopColor="#fb923c" />
+          <stop offset="0.5" stopColor="#ea580c" />
+          <stop offset="1" stopColor="#9a3412" />
+        </linearGradient>
+        <linearGradient id="leaf-hair" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stopColor="#fef08a" />
+          <stop offset="0.45" stopColor="#facc15" />
+          <stop offset="1" stopColor="#ca8a04" />
+        </linearGradient>
+        <linearGradient id="leaf-plate" x1="0" y1="0" x2="0.6" y2="1">
+          <stop offset="0" stopColor="#e2e8f0" />
+          <stop offset="0.5" stopColor="#94a3b8" />
+          <stop offset="1" stopColor="#475569" />
+        </linearGradient>
+        <radialGradient id="leaf-skin" cx="0.36" cy="0.24" r="0.95">
+          <stop offset="0" stopColor="#ffe8c7" />
+          <stop offset="0.55" stopColor="#f6c794" />
+          <stop offset="1" stopColor="#d99a63" />
+        </radialGradient>
+        <linearGradient id="leaf-skin-sh" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#eab887" />
+          <stop offset="1" stopColor="#c98d5c" />
+        </linearGradient>
+        <radialGradient id="leaf-iris" cx="0.42" cy="0.34" r="0.7">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="0.3" stopColor="#bae6fd" />
+          <stop offset="0.68" stopColor="#38bdf8" />
+          <stop offset="1" stopColor="#0369a1" />
+        </radialGradient>
+        <filter id="leaf-soft" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="8" stdDeviation="7" floodColor="#7c2d12" floodOpacity="0.32" />
+        </filter>
+        <filter id="leaf-glow" x="-90%" y="-90%" width="280%" height="280%">
+          <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#22d3ee" floodOpacity="0.9" />
         </filter>
       </defs>
 
-      <circle cx="251" cy="56" r="41" fill="url(#leaf-sun)" opacity="0.2" />
-      <circle cx="251" cy="56" r="29" fill="url(#leaf-sun)" opacity="0.38" />
+      {/* Hidden-village sun */}
+      <circle cx="252" cy="58" r="46" fill="url(#leaf-sun)" opacity="0.24" />
+      <circle cx="252" cy="58" r="31" fill="url(#leaf-sun)" opacity="0.4" />
 
+      {/* Rooftops */}
       <path
-        d="M18 190c30-42 55-36 79-20 21-31 47-33 68-6 20-23 47-25 66-3 17-16 38-19 71 29H18Z"
-        fill="#bbf7d0"
-        opacity="0.55"
-      />
-      <path
-        d="M8 201c37-28 66-20 91-8 26-18 53-17 76 2 27-15 55-14 82 4 20-9 38-8 55 2H8Z"
+        d="M6 210c40-26 76-19 108-2 30-16 62-15 90 2 28-12 57-11 82 3 14-4 28-3 42 3H6Z"
         fill="#86efac"
-        opacity="0.35"
+        opacity="0.32"
       />
 
       <g filter="url(#leaf-soft)">
-        <ellipse cx="159" cy="208" rx="75" ry="11" fill="#7c2d12" opacity="0.18" />
-
-        {/* Legs */}
-        <path d="M131 172h25v20c0 6-5 10-11 10h-14v-30Z" fill="#1e293b" />
-        <path d="M161 172h25v30h-14c-6 0-11-4-11-10v-20Z" fill="#334155" />
-        <path d="M123 199h27c3 0 5 3 4 6l-1 4h-34l1-5c1-3 1-5 3-5Z" fill="#0f172a" />
-        <path d="M159 199h27c3 0 5 3 4 6l-1 4h-34l1-5c1-3 1-5 3-5Z" fill="#0f172a" />
-
-        {/* Body */}
+        {/* Jacket shoulders */}
         <path
-          d="M117 119c5-13 18-20 40-20s36 7 41 20l8 55c-25 10-75 10-99 0l10-55Z"
+          d="M160 164c30 0 58 8 81 23 24 16 38 38 40 53H35c2-15 16-37 40-53 23-15 51-23 81-23Z"
           fill="url(#leaf-jacket)"
         />
-        <path d="M157 100h1c8 0 14 6 14 14v59h-29v-59c0-8 6-14 14-14Z" fill="#f8fafc" opacity="0.38" />
-        <path d="M122 156c16-6 28-6 41 0v18c-15 5-29 5-45 0l4-18Z" fill="#1e293b" />
-        <circle cx="159" cy="164" r="4" fill="#fbbf24" />
+        {/* Zip line + collar */}
+        <path d="M160 166v74" stroke="#f8fafc" strokeWidth="4" opacity="0.4" />
+        <path d="M126 168l34 24 34-24 10 10-44 34-44-34 10-10Z" fill="#1e293b" />
+        <path d="M152 176h16l-8 12-8-12Z" fill="#fbbf24" />
+        {/* Pauldron seams */}
+        <path d="M102 176c-16 9-27 24-31 42" fill="none" stroke="#9a3412" strokeWidth="4" opacity="0.7" />
+        <path d="M218 176c16 9 27 24 31 42" fill="none" stroke="#9a3412" strokeWidth="4" opacity="0.7" />
 
-        {/* Arms crossed */}
-        <path
-          d="M123 121c-14 9-22 23-23 38-1 7 3 13 10 14 7 1 12-4 15-10l9-19-11-23Z"
-          fill="#ea580c"
-        />
-        <path
-          d="M191 125c13 8 21 20 23 34 1 7-3 13-10 14-7 1-12-4-15-10l-9-18 11-20Z"
-          fill="#f97316"
-        />
-        <path d="M112 165c6 2 11 0 14-5l8-14 12 7-9 17c-5 9-15 12-23 7l-2-12Z" fill="#f6c794" />
-        <path d="M205 164c-6 2-11 0-14-5l-8-14-12 7 9 17c5 9 15 12 23 7l2-12Z" fill="#f6c794" />
+        {/* Neck */}
+        <path d="M143 134h34v30c0 7-8 12-17 12s-17-5-17-12v-30Z" fill="url(#leaf-skin-sh)" />
+        <path d="M143 134h34v8c-11 5-23 5-34 0v-8Z" fill="#b87a4a" opacity="0.5" />
 
-        {/* Head */}
-        <circle cx="159" cy="80" r="39" fill="url(#leaf-skin)" />
+        {/* Ears */}
+        <ellipse cx="104" cy="97" rx="7" ry="12" fill="#f6c794" />
+        <ellipse cx="216" cy="97" rx="7" ry="12" fill="#f6c794" />
+
+        {/* Back hair */}
         <path
-          d="M121 76c-3-25 14-44 38-44s42 18 39 45c-3-9-8-15-14-19-8 7-20 10-36 10-9 0-17 2-24 6l-3 2Z"
-          fill="#facc15"
+          d="M101 110C88 62 116 20 160 20c44 0 72 42 59 90-6-13-10-25-12-36-18 10-44 13-72 6-13-3-24-1-34 30Z"
+          fill="url(#leaf-hair)"
         />
-        <path d="M124 63l-4-18 14 9 3-17 12 12 8-17 6 16 13-9-1 19 13-2-9 15-55-8Z" fill="#fde047" />
-        <path d="M129 68c8-4 18-6 30-6s22 2 30 5" fill="none" stroke="#ca8a04" strokeWidth="3" strokeLinecap="round" opacity="0.55" />
+        {/* Spiky silhouette */}
+        <path
+          d="M110 70l-13-19 21 6-3-22 18 14 6-22 14 18 13-17 6 20 18-10-4 22 20-1-15 18-73 3Z"
+          fill="url(#leaf-hair)"
+        />
+
+        {/* Face */}
+        <path
+          d="M160 26c36 0 57 24 57 62 0 20-6 37-17 48-10 11-24 18-40 20-16-2-30-9-40-20-11-11-17-28-17-48 0-38 21-62 57-62Z"
+          fill="url(#leaf-skin)"
+          stroke="#9a5b35"
+          strokeOpacity="0.3"
+          strokeWidth="1.1"
+        />
+        <path
+          d="M199 62c10 20 9 44-3 62-8 12-20 21-34 25 18-4 32-14 40-28 9-17 10-38 3-57l-6-2Z"
+          fill="#d99a63"
+          opacity="0.38"
+        />
+
+        {/* Eyes */}
+        <g className="anime-eyes">
+          <path d="M116 96c9-11 28-12 38-1-7 12-28 14-38 1Z" fill="#f8fafc" />
+          <path d="M166 95c10-11 29-10 38 1-10 13-31 11-38-1Z" fill="#f8fafc" />
+          <ellipse cx="134" cy="97" rx="7" ry="8.6" fill="url(#leaf-iris)" />
+          <ellipse cx="186" cy="97" rx="7" ry="8.6" fill="url(#leaf-iris)" />
+          <ellipse cx="134" cy="98" rx="3.1" ry="4.6" fill="#082f49" />
+          <ellipse cx="186" cy="98" rx="3.1" ry="4.6" fill="#082f49" />
+          <circle cx="131.4" cy="93.2" r="2.4" fill="#ffffff" />
+          <circle cx="183.4" cy="93.2" r="2.4" fill="#ffffff" />
+          <circle cx="137.2" cy="101" r="1.3" fill="#e0f2fe" opacity="0.9" />
+          <circle cx="189.2" cy="101" r="1.3" fill="#e0f2fe" opacity="0.9" />
+          <path
+            d="M114 95c9-12 30-13 40-2"
+            fill="none"
+            stroke="#3f2a12"
+            strokeWidth="3.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M166 93c10-12 31-11 40 2"
+            fill="none"
+            stroke="#3f2a12"
+            strokeWidth="3.4"
+            strokeLinecap="round"
+          />
+        </g>
+
+        {/* Whisker marks + grin */}
+        <path
+          d="M124 112l10-2M124 118l10-2M196 112l-10-2M196 118l-10-2"
+          stroke="#b45309"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          opacity="0.55"
+        />
+        <path
+          d="M148 126c8 6 16 6 24 0"
+          fill="none"
+          stroke="#8a4a1f"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+        />
+        <path
+          d="M161 108l-4 7h7"
+          fill="none"
+          stroke="#c98d5c"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Front fringe above the headband */}
+        <path
+          d="M104 80C100 46 124 24 160 24c37 0 61 23 56 57l-9-12-2 14-9-18-6 18-10-20-8 18-10-19-8 17-9-16-6 15-8-14-4 17-9-15-5 12Z"
+          fill="url(#leaf-hair)"
+        />
+        <path
+          d="M123 42c14-11 34-15 52-8"
+          fill="none"
+          stroke="#fef9c3"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          opacity="0.75"
+        />
+        {/* Side locks */}
+        <path d="M106 74c-4 16-3 31 2 44l-9-7c-4-13-4-26 1-39l6 2Z" fill="url(#leaf-hair)" />
+        <path d="M214 74c4 16 3 31-2 44l9-7c4-13 4-26-1-39l-6 2Z" fill="url(#leaf-hair)" />
 
         {/* Headband */}
-        <path d="M120 66c23-8 56-8 79 0l1 13c-25 8-56 8-80 0l0-13Z" fill="#1e3a8a" />
-        <rect x="139" y="63" width="42" height="20" rx="4" fill="url(#leaf-plate)" stroke="#475569" strokeWidth="2" />
+        <path d="M103 78c32-10 82-10 114 0l1 15c-36 11-80 11-116 0l1-15Z" fill="#1e3a8a" />
+        <path d="M103 78c32-10 82-10 114 0l-2 7c-34-9-76-9-110 0l-2-7Z" fill="#2f4bb0" opacity="0.9" />
+        <rect
+          x="137"
+          y="74"
+          width="46"
+          height="22"
+          rx="4"
+          fill="url(#leaf-plate)"
+          stroke="#475569"
+          strokeWidth="2"
+        />
         <path
-          d="M166 68c-6-4-13 0-11 5 1 3 6 2 7 5 1 4-5 6-9 3M160 74l-2 9"
+          d="M166 79c-6-4-13 0-11 5 1 3 6 2 7 5 1 4-5 6-9 3M160 85l-2 9"
           fill="none"
           stroke="#334155"
           strokeWidth="2.4"
           strokeLinecap="round"
         />
+        {/* Headband tails */}
+        <path d="M214 82c10 6 16 16 17 28l-11-4c-1-8-4-15-9-20l3-4Z" fill="#1e3a8a" />
+        <path d="M216 92c6 8 9 17 9 27l-8-6c0-7-2-13-5-18l4-3Z" fill="#2f4bb0" opacity="0.9" />
 
-        {/* Face */}
-        <ellipse cx="145" cy="91" rx="5" ry="6.5" fill="#0f172a" />
-        <ellipse cx="174" cy="91" rx="5" ry="6.5" fill="#0f172a" />
-        <circle cx="146.5" cy="89" r="1.8" fill="#fff" />
-        <circle cx="175.5" cy="89" r="1.8" fill="#fff" />
-        <path d="M153 101c4 4 9 4 13 0" fill="none" stroke="#7c2d12" strokeWidth="2.6" strokeLinecap="round" />
-        <path d="M133 99l7-2M133 104l7-2M185 99l-7-2M185 104l-7-2" stroke="#b45309" strokeWidth="1.8" strokeLinecap="round" opacity="0.65" />
+        {/* Chunin vest collar over the jacket */}
+        <path d="M124 172c11 5 24 8 36 8s25-3 36-8l-5 16c-9 4-20 6-31 6s-22-2-31-6l-5-16Z" fill="#1e293b" opacity="0.9" />
 
-        {/* Chakra spark */}
-        <path d="M86 101l7-18 4 12 9-5-11 21-2-10-7 0Z" fill="#22d3ee" opacity="0.7" />
-        <circle cx="85" cy="118" r="3" fill="#22d3ee" opacity="0.5" />
+        {/* Chakra orb */}
+        <g className="anime-aura" filter="url(#leaf-glow)">
+          <circle cx="258" cy="146" r="7" fill="#67e8f9" opacity="0.9" />
+          <circle cx="258" cy="146" r="12" fill="none" stroke="#22d3ee" strokeWidth="1.4" opacity="0.6" />
+          <circle cx="270" cy="158" r="2.2" fill="#a5f3fc" opacity="0.8" />
+          <circle cx="248" cy="160" r="1.6" fill="#67e8f9" opacity="0.7" />
+        </g>
+      </g>
+
+      {/* Leaves in the wind */}
+      <g fill="#fde047" opacity="0.75">
+        <path d="M78 72c6-8 16-9 22-4-3 8-13 12-22 4Z" />
+        <path d="M292 118c5-6 13-7 18-3-3 7-11 9-18 3Z" opacity="0.6" />
       </g>
     </svg>
   );
 }
 
-function SharinganNinja({ className }: { className?: string }) {
+function SharinganNinja({ className, style }: { className?: string; style?: CSSProperties }) {
   return (
     <svg
-      viewBox="0 0 320 230"
+      viewBox="0 0 320 240"
       role="img"
-      aria-label="Original chibi ninja illustration with a crimson dōjutsu eye"
+      aria-label="Original anime-style ninja portrait with a crimson dōjutsu eye"
       className={className}
+      style={style}
     >
       <defs>
         <radialGradient id="share-moon" cx="0.4" cy="0.4" r="0.7">
@@ -144,83 +271,214 @@ function SharinganNinja({ className }: { className?: string }) {
           <stop offset="0.55" stopColor="#ef4444" />
           <stop offset="1" stopColor="#7f1d1d" />
         </radialGradient>
-        <linearGradient id="share-cloak" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#334155" />
-          <stop offset="1" stopColor="#0f172a" />
+        <linearGradient id="share-cloak" x1="0.1" y1="0" x2="0.7" y2="1">
+          <stop offset="0" stopColor="#3b4a66" />
+          <stop offset="0.5" stopColor="#1e293b" />
+          <stop offset="1" stopColor="#080d18" />
         </linearGradient>
-        <radialGradient id="share-skin" cx="0.35" cy="0.25" r="0.9">
+        <linearGradient id="share-hair" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stopColor="#334155" />
+          <stop offset="0.45" stopColor="#111827" />
+          <stop offset="1" stopColor="#020617" />
+        </linearGradient>
+        <radialGradient id="share-skin" cx="0.36" cy="0.24" r="0.95">
           <stop offset="0" stopColor="#ffe4d6" />
-          <stop offset="1" stopColor="#eab69c" />
+          <stop offset="0.55" stopColor="#eec0a8" />
+          <stop offset="1" stopColor="#cf9a80" />
         </radialGradient>
-        <radialGradient id="share-eye" cx="0.5" cy="0.5" r="0.55">
-          <stop offset="0" stopColor="#ff6b6b" />
-          <stop offset="0.45" stopColor="#dc2626" />
-          <stop offset="1" stopColor="#7f1d1d" />
+        <linearGradient id="share-skin-sh" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#dca78f" />
+          <stop offset="1" stopColor="#b07b63" />
+        </linearGradient>
+        <radialGradient id="share-eye" cx="0.45" cy="0.4" r="0.62">
+          <stop offset="0" stopColor="#ff8080" />
+          <stop offset="0.4" stopColor="#dc2626" />
+          <stop offset="1" stopColor="#6b0d0d" />
         </radialGradient>
-        <filter id="share-glow" x="-80%" y="-80%" width="260%" height="260%">
-          <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#ef4444" floodOpacity="0.85" />
+        <filter id="share-glow" x="-90%" y="-90%" width="280%" height="280%">
+          <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#ef4444" floodOpacity="0.9" />
         </filter>
-        <filter id="share-soft" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="7" stdDeviation="6" floodColor="#000" floodOpacity="0.55" />
+        <filter id="share-soft" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="8" stdDeviation="7" floodColor="#000000" floodOpacity="0.6" />
         </filter>
       </defs>
 
-      <circle cx="251" cy="55" r="34" fill="url(#share-moon)" opacity="0.72" filter="url(#share-glow)" />
-      <circle cx="262" cy="46" r="31" fill="#0b0505" opacity="0.92" />
-      <path d="M18 193c34-38 61-30 86-12 24-28 51-27 73-2 21-19 48-18 69 2 18-13 39-12 68 25H18Z" fill="#3f1d1d" opacity="0.55" />
-      <path d="M7 204c39-24 70-17 96-4 27-16 55-15 80 2 25-12 51-11 74 4 18-8 34-7 49 1H7Z" fill="#7f1d1d" opacity="0.24" />
+      {/* Blood moon */}
+      <circle cx="252" cy="54" r="38" fill="url(#share-moon)" opacity="0.8" filter="url(#share-glow)" />
+      <circle cx="266" cy="46" r="33" fill="#0b0505" opacity="0.9" />
+
+      {/* Dark treeline */}
+      <path
+        d="M6 210c40-24 76-17 108 0 30-15 62-14 90 2 28-11 57-10 82 3 14-4 28-3 42 3H6Z"
+        fill="#7f1d1d"
+        opacity="0.26"
+      />
 
       <g filter="url(#share-soft)">
-        <ellipse cx="159" cy="209" rx="76" ry="11" fill="#000" opacity="0.4" />
-
-        {/* Cloak / legs */}
-        <path d="M116 122c7-15 20-23 43-23s37 8 44 23l11 53c-30 12-79 12-109 0l11-53Z" fill="url(#share-cloak)" />
-        <path d="M156 100h5c9 0 16 7 16 16v64c-12 5-25 5-37 0v-64c0-9 7-16 16-16Z" fill="#1e293b" />
-        <path d="M126 175h25v18c0 6-5 10-11 10h-14v-28Z" fill="#0f172a" />
-        <path d="M161 175h26v28h-15c-6 0-11-4-11-10v-18Z" fill="#1e293b" />
-        <path d="M118 200h29c3 0 5 3 4 6l-1 4h-36l1-5c1-3 1-5 3-5Z" fill="#020617" />
-        <path d="M158 200h29c3 0 5 3 4 6l-1 4h-36l1-5c1-3 1-5 3-5Z" fill="#020617" />
-
-        {/* Crimson scarf */}
-        <path d="M119 119c19-9 61-9 81 0l-5 16c-19-7-53-7-72 0l-4-16Z" fill="#991b1b" />
-        <path d="M195 130c20 8 29 22 27 42-1 7-7 11-13 9-5-2-7-7-7-12l-9-28 2-11Z" fill="#b91c1c" />
-        <path d="M209 176l13 16-10 4-9-16 6-4Z" fill="#7f1d1d" />
-
-        {/* Arms */}
-        <path d="M124 126c-12 9-19 22-19 36 0 7 5 12 12 12 6 0 10-4 12-9l8-20-13-19Z" fill="#334155" />
-        <path d="M193 128c11 8 18 20 18 34 0 7-5 12-12 12-6 0-10-4-12-9l-7-19 13-18Z" fill="#475569" />
-        <path d="M113 172c6 2 11 0 14-5l7-13 11 7-8 16c-5 8-14 11-22 6l-2-11Z" fill="url(#share-skin)" />
-        <path d="M204 171c-6 2-11 0-14-5l-7-13-11 7 8 16c5 8 14 11 22 6l2-11Z" fill="url(#share-skin)" />
-
-        {/* Head */}
-        <circle cx="159" cy="80" r="39" fill="url(#share-skin)" />
+        {/* Cloak shoulders */}
         <path
-          d="M117 80c-6-29 16-49 42-49 28 0 47 20 43 51-4-10-10-17-18-20-10 8-26 11-43 10-9 0-17 3-22 8h-2Z"
-          fill="#0f172a"
+          d="M160 162c30 0 58 8 81 24 24 16 38 39 40 54H35c2-15 16-38 40-54 23-16 51-24 81-24Z"
+          fill="url(#share-cloak)"
         />
-        <path d="M122 55l-9-14 16 3-1-17 14 10 7-16 9 15 12-12 3 17 15-6-7 20-59 3Z" fill="#111827" />
+        {/* High collar */}
+        <path d="M124 167c12 8 24 12 36 12s24-4 36-12l7 17c-13 8-28 12-43 12s-30-4-43-12l7-17Z" fill="#0f172a" />
+        <path d="M138 175c7 5 15 8 22 8s15-3 22-8" fill="none" stroke="#64748b" strokeWidth="1.6" opacity="0.5" />
+
+        {/* Neck */}
+        <path d="M143 134h34v30c0 7-8 12-17 12s-17-5-17-12v-30Z" fill="url(#share-skin-sh)" />
+        <path d="M143 134h34v8c-11 5-23 5-34 0v-8Z" fill="#a26a52" opacity="0.55" />
+
+        {/* Ears */}
+        <ellipse cx="104" cy="97" rx="7" ry="12" fill="#e8b9a0" />
+        <ellipse cx="216" cy="97" rx="7" ry="12" fill="#e8b9a0" />
+
+        {/* Back hair */}
+        <path
+          d="M99 112C86 60 116 18 160 18c46 0 76 42 62 94-6-16-12-29-20-38-16 12-38 16-64 10-14-3-26 2-39 28Z"
+          fill="url(#share-hair)"
+        />
+        <path
+          d="M104 74l-12-22 24 4 1-22 18 16 9-21 14 19 15-17 5 21 18-7-8 22-84 7Z"
+          fill="url(#share-hair)"
+        />
+        {/* Crown spikes */}
+        <path
+          d="M122 56l-12-22 20 8-1-20 17 15 7-20 13 18 13-16 5 19 17-9-6 21 17-3-12 18-78-9Z"
+          fill="url(#share-hair)"
+        />
+
+        {/* Face */}
+        <path
+          d="M160 26c36 0 57 24 57 62 0 20-6 37-17 48-10 11-24 18-40 20-16-2-30-9-40-20-11-11-17-28-17-48 0-38 21-62 57-62Z"
+          fill="url(#share-skin)"
+          stroke="#8a5740"
+          strokeOpacity="0.32"
+          strokeWidth="1.1"
+        />
+        <path
+          d="M199 62c10 20 9 44-3 62-8 12-20 21-34 25 18-4 32-14 40-28 9-17 10-38 3-57l-6-2Z"
+          fill="#c9927a"
+          opacity="0.4"
+        />
+
+        {/* Left eye — calm charcoal */}
+        <g className="anime-eyes">
+          <path d="M116 96c9-10 27-11 37-1-7 11-27 13-37 1Z" fill="#f8fafc" />
+          <ellipse cx="134" cy="97" rx="6.4" ry="8" fill="#1f2937" />
+          <ellipse cx="134" cy="97.5" rx="2.9" ry="4.2" fill="#05070d" />
+          <circle cx="131.6" cy="93.4" r="2.1" fill="#ffffff" />
+          <path
+            d="M114 95c9-11 29-12 39-2"
+            fill="none"
+            stroke="#0a0a14"
+            strokeWidth="3.4"
+            strokeLinecap="round"
+          />
+        </g>
+
+        {/* Right eye — dōjutsu */}
+        <g className="anime-eyes" filter="url(#share-glow)">
+          <path d="M166 95c10-10 28-10 38 0-9 13-29 12-38 0Z" fill="#fee2e2" />
+          <circle cx="186" cy="97" r="8.4" fill="url(#share-eye)" />
+          <circle cx="186" cy="97.5" r="2.6" fill="#1a0505" />
+          <g fill="#1a0505">
+            <circle cx="186" cy="90.4" r="1.7" />
+            <circle cx="191.5" cy="99.5" r="1.7" />
+            <circle cx="180.5" cy="99.5" r="1.7" />
+          </g>
+          <g fill="#1a0505" opacity="0.85">
+            <path d="M186 92.4c2 1 2 3 0 4-2-1-2-3 0-4Z" />
+            <path d="M189.4 99.4c-.6 2-2.6 2.4-3.4.6 1.4-1.4 2.8-1.6 3.4-.6Z" />
+            <path d="M182.6 99.4c.6 2 2.6 2.4 3.4.6-1.4-1.4-2.8-1.6-3.4-.6Z" />
+          </g>
+          <circle cx="183.6" cy="93.4" r="2.1" fill="#ffffff" />
+          <path
+            d="M166 93c10-11 29-11 39 0"
+            fill="none"
+            stroke="#0a0a14"
+            strokeWidth="3.6"
+            strokeLinecap="round"
+          />
+        </g>
+
+        {/* Brows, nose, mouth */}
+        <path
+          d="M112 79c11-6 28-6 38 0"
+          fill="none"
+          stroke="#0f172a"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        <path
+          d="M170 79c10-6 27-6 38 0"
+          fill="none"
+          stroke="#0f172a"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        <path
+          d="M161 108l-4 7h7"
+          fill="none"
+          stroke="#b07b63"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M152 128c5 2 11 2 16 0"
+          fill="none"
+          stroke="#7c3f4c"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+
+        {/* Bangs falling over the headband */}
+        <path
+          d="M103 100C98 56 124 24 160 24c37 0 63 30 58 72l-9-18-2 22-11-24-6 24-11-26-8 24-11-24-8 22-9-20-6 19-9-18-5 22-9-20-5 17Z"
+          fill="url(#share-hair)"
+        />
+        <path
+          d="M126 46c13-11 33-16 51-9"
+          fill="none"
+          stroke="#64748b"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          opacity="0.6"
+        />
 
         {/* Headband */}
-        <path d="M120 67c23-8 56-8 79 0l1 12c-25 8-56 8-80 0l0-12Z" fill="#020617" />
-        <rect x="139" y="64" width="42" height="20" rx="4" fill="#334155" stroke="#64748b" strokeWidth="2" />
-        <path d="M166 69c-6-4-13 0-11 5 1 3 6 2 7 5 1 4-5 6-9 3" fill="none" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" opacity="0.8" />
+        <path d="M104 74c32-9 80-9 112 0l1 14c-35 10-79 10-114 0l1-14Z" fill="#020617" />
+        <rect
+          x="138"
+          y="71"
+          width="44"
+          height="20"
+          rx="4"
+          fill="#334155"
+          stroke="#64748b"
+          strokeWidth="2"
+        />
+        <path
+          d="M165 76c-6-4-13 0-11 5 1 3 6 2 7 5 1 4-5 6-9 3"
+          fill="none"
+          stroke="#94a3b8"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          opacity="0.85"
+        />
 
-        {/* Face + sharingan eye */}
-        <ellipse cx="145" cy="92" rx="5" ry="6.5" fill="#0f172a" />
-        <g filter="url(#share-glow)">
-          <circle cx="175" cy="91" r="9.5" fill="url(#share-eye)" />
-          <circle cx="175" cy="91" r="3.2" fill="#0f172a" />
-          <circle cx="175" cy="85.5" r="1.6" fill="#0f172a" />
-          <circle cx="180" cy="93.5" r="1.6" fill="#0f172a" />
-          <circle cx="170" cy="93.5" r="1.6" fill="#0f172a" />
-        </g>
-        <path d="M151 103c4 3 9 3 13 0" fill="none" stroke="#7f1d1d" strokeWidth="2.6" strokeLinecap="round" />
-        <path d="M137 78l13-3M183 77l-12-2" stroke="#0f172a" strokeWidth="2.6" strokeLinecap="round" />
+        {/* Crimson scarf */}
+        <path d="M124 156c24-6 48-6 72 0l5 12c-26-6-56-6-82 0l5-12Z" fill="#991b1b" />
+        <path
+          className="anime-cloak"
+          d="M196 162c18 6 28 18 28 34 0 6-5 10-11 9-5-1-8-5-9-10l-10-26 2-7Z"
+          fill="#b91c1c"
+        />
+        <path d="M209 200l12 14-9 4-8-15 5-3Z" fill="#7f1d1d" />
 
         {/* Lightning accents */}
-        <path d="M83 90l12-28 1 16 11-7-16 31-1-13-7 1Z" fill="#f87171" opacity="0.8" />
-        <path d="M238 116l7-19 2 11 8-4-11 20-1-9-5 1Z" fill="#fca5a5" opacity="0.6" />
-        <circle cx="84" cy="116" r="2.5" fill="#ef4444" opacity="0.6" />
+        <path d="M80 88l12-28 1 16 11-7-16 31-1-13-7 1Z" fill="#f87171" opacity="0.8" />
+        <path d="M244 118l7-19 2 11 8-4-11 20-1-9-5 1Z" fill="#fca5a5" opacity="0.6" />
       </g>
     </svg>
   );

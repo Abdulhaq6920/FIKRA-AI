@@ -82,7 +82,7 @@ export function ThemePicker() {
             <div className="space-y-6 pt-1">
               <ThemeGroup
                 title="Professional"
-                hint="10 polished palettes for everyday work"
+                hint="Eight refined palettes, including the Royal Glass signature"
                 themes={PROFESSIONAL_THEMES}
                 activeTheme={theme}
                 onSelect={setTheme}
@@ -90,7 +90,7 @@ export function ThemePicker() {
 
               <ThemeGroup
                 title="Fantasy"
-                hint="Ten animated storybook worlds — five light, five dark"
+                hint="Seven animated storybook worlds — drifting light, embers and stars"
                 themes={FANTASY_THEMES}
                 activeTheme={theme}
                 onSelect={setTheme}
@@ -98,7 +98,7 @@ export function ThemePicker() {
 
               <ThemeGroup
                 title="Anime 3D"
-                hint="Two original ninja worlds with hand-built 3D characters"
+                hint="Four original anime worlds with hand-built 3D characters"
                 themes={ANIME_THEMES}
                 activeTheme={theme}
                 onSelect={setTheme}
@@ -155,8 +155,8 @@ function ThemeGroup({
               onClick={() => onSelect(item.id)}
               aria-pressed={active}
               aria-label={`Use ${item.name} theme`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.025 }}
               whileHover={{ y: anime ? -4 : -2 }}
               whileTap={{ scale: 0.985 }}

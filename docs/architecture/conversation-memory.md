@@ -21,7 +21,7 @@ sequenceDiagram
     participant API as FastAPI
     participant DB as PostgreSQL
     participant RAG as RAGService
-    participant Groq as Groq API
+    participant LLM as Configured LLM (Groq or Ollama)
 
     U->>API: POST /chat/ask {question, conversation_id}
     API->>DB: Load conversation (owner + org check)
@@ -30,8 +30,8 @@ sequenceDiagram
     API->>RAG: retrieve(question, org_id) → passages
     RAG->>RAG: Build context string [Source 1..N]
     RAG->>RAG: Assemble messages: [summary?] + [recent msgs] + [context + question]
-    RAG->>Groq: chat.completions.create(messages)
-    Groq-->>RAG: answer text
+    RAG->>LLM: Generate answer
+    LLM-->>RAG: answer text
     RAG->>DB: INSERT user message
     RAG->>DB: INSERT assistant message (with citations)
     RAG->>DB: UPDATE conversation.message_count

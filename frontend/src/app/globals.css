@@ -33,6 +33,18 @@
   --surface-850: 241 245 249;
   --surface-900: 255 255 255;
   --surface-950: 247 249 252;
+
+  /* Glassmorphism tokens — themes may override any of these. */
+  --glass-surface: rgb(var(--surface-900) / 0.72);
+  --glass-surface-strong: rgb(var(--surface-900) / 0.86);
+  --glass-border: rgb(var(--surface-700) / 0.7);
+  --glass-highlight: rgb(255 255 255 / 0.55);
+  --glass-shadow: 0 8px 32px 0 rgb(0 0 0 / 0.18);
+  --glass-blur: 22px;
+  --orb-a: var(--brand-500);
+  --orb-b: var(--brand-400);
+  --orb-c: var(--brand-600);
+  --fx-ribbon-opacity: 0.3;
 }
 
 [data-theme="parchment"] {
@@ -143,87 +155,6 @@
   --surface-950: 255 248 245;
 }
 
-[data-theme="lavender"] {
-  color-scheme: light;
-  --brand-50: 245 243 255;
-  --brand-100: 237 233 254;
-  --brand-200: 221 214 254;
-  --brand-300: 109 40 217;
-  --brand-400: 124 58 237;
-  --brand-500: 139 92 246;
-  --brand-600: 124 58 237;
-  --brand-700: 109 40 217;
-  --brand-800: 91 33 182;
-  --brand-900: 76 29 149;
-  --brand-950: 46 16 101;
-  --surface-50: 255 255 255;
-  --surface-100: 26 18 50;
-  --surface-200: 43 31 74;
-  --surface-300: 61 47 97;
-  --surface-400: 84 69 125;
-  --surface-500: 116 101 158;
-  --surface-600: 162 149 200;
-  --surface-700: 208 199 234;
-  --surface-800: 228 222 245;
-  --surface-850: 252 250 255;
-  --surface-900: 255 255 255;
-  --surface-950: 250 248 255;
-}
-
-[data-theme="quartz"] {
-  color-scheme: light;
-  --brand-50: 248 250 252;
-  --brand-100: 241 245 249;
-  --brand-200: 226 232 240;
-  --brand-300: 51 65 85;
-  --brand-400: 71 85 105;
-  --brand-500: 100 116 139;
-  --brand-600: 71 85 105;
-  --brand-700: 51 65 85;
-  --brand-800: 30 41 59;
-  --brand-900: 30 41 59;
-  --brand-950: 15 23 42;
-  --surface-50: 255 255 255;
-  --surface-100: 15 23 42;
-  --surface-200: 30 41 59;
-  --surface-300: 51 65 85;
-  --surface-400: 71 85 105;
-  --surface-500: 100 116 139;
-  --surface-600: 148 163 184;
-  --surface-700: 203 213 225;
-  --surface-800: 226 232 240;
-  --surface-850: 249 251 253;
-  --surface-900: 255 255 255;
-  --surface-950: 248 250 252;
-}
-
-[data-theme="cobalt"] {
-  color-scheme: light;
-  --brand-50: 239 246 255;
-  --brand-100: 219 234 254;
-  --brand-200: 191 219 254;
-  --brand-300: 29 78 216;
-  --brand-400: 37 99 235;
-  --brand-500: 59 130 246;
-  --brand-600: 29 78 216;
-  --brand-700: 30 64 175;
-  --brand-800: 30 58 138;
-  --brand-900: 30 58 138;
-  --brand-950: 23 37 84;
-  --surface-50: 255 255 255;
-  --surface-100: 14 35 66;
-  --surface-200: 27 55 98;
-  --surface-300: 42 76 128;
-  --surface-400: 62 102 160;
-  --surface-500: 92 133 190;
-  --surface-600: 143 175 220;
-  --surface-700: 191 210 240;
-  --surface-800: 219 230 247;
-  --surface-850: 249 252 255;
-  --surface-900: 255 255 255;
-  --surface-950: 247 250 255;
-}
-
 [data-theme="midnight"] {
   color-scheme: dark;
   --brand-50: 238 242 255;
@@ -276,6 +207,62 @@
   --surface-850: 22 30 46;
   --surface-900: 17 24 39;
   --surface-950: 9 13 20;
+}
+
+/* ─── Royal Glass — charcoal & navy under amber, bronze and indigo light ──
+   The signature palette: frosted surfaces, warm gold accent, deep ink
+   canvas. It also hands AmbientMotion three distinct orb colours so the
+   background reads as layered light instead of a single brand wash. */
+[data-theme="royal-glass"] {
+  color-scheme: dark;
+  --brand-50: 253 249 240;
+  --brand-100: 251 244 224;
+  --brand-200: 246 233 196;
+  --brand-300: 240 220 160;
+  --brand-400: 229 199 107;
+  --brand-500: 212 175 55;
+  --brand-600: 184 150 44;
+  --brand-700: 151 121 31;
+  --brand-800: 110 89 23;
+  --brand-900: 74 59 15;
+  --brand-950: 36 29 7;
+  --surface-50: 255 255 255;
+  --surface-100: 244 244 246;
+  --surface-200: 228 228 232;
+  --surface-300: 212 212 216;
+  --surface-400: 161 161 170;
+  --surface-500: 138 134 146;
+  --surface-600: 110 106 120;
+  --surface-700: 74 72 84;
+  --surface-800: 45 43 52;
+  --surface-850: 32 30 38;
+  --surface-900: 20 19 26;
+  --surface-950: 13 13 16;
+
+  --glass-surface: rgb(255 255 255 / 0.06);
+  --glass-surface-strong: rgb(18 17 24 / 0.78);
+  --glass-border: rgb(255 255 255 / 0.12);
+  --glass-highlight: rgb(255 255 255 / 0.18);
+  --glass-shadow: 0 8px 32px 0 rgb(0 0 0 / 0.37);
+  --glass-blur: 30px;
+
+  --orb-a: 212 175 55;
+  --orb-b: 79 70 229;
+  --orb-c: 184 141 87;
+
+  --fx-canvas:
+    radial-gradient(58% 52% at 10% 4%, rgb(212 175 55 / 0.26), transparent 64%),
+    radial-gradient(54% 48% at 92% 18%, rgb(79 70 229 / 0.28), transparent 66%),
+    radial-gradient(62% 56% at 68% 104%, rgb(184 141 87 / 0.2), transparent 68%),
+    linear-gradient(180deg, rgb(13 13 16), rgb(18 17 24));
+  --fx-anim: fancyGlowBreath 26s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2px 2px at 28% 78%, rgb(240 220 160 / 0.6), transparent 65%),
+    radial-gradient(1.5px 1.5px at 72% 54%, rgb(129 140 248 / 0.55), transparent 65%),
+    radial-gradient(1px 1px at 48% 88%, rgb(251 244 224 / 0.65), transparent 65%);
+  --fx-particles-anim: fancyRise 22s linear infinite, fancyTwinkle 5.5s ease-in-out infinite;
+  --fx-p-opacity: 0.66;
+  --fx-ribbon-opacity: 0.55;
 }
 
 [data-theme="naruto-leaf"] {
@@ -332,6 +319,62 @@
   --surface-950: 11 5 5;
 }
 
+/* ─── Solo Leveling — shadow monarch & crimson knight ──────────────────── */
+
+[data-theme="solo-jinwoo"] {
+  color-scheme: dark;
+  --brand-50: 238 242 255;
+  --brand-100: 224 231 255;
+  --brand-200: 199 210 254;
+  --brand-300: 165 180 252;
+  --brand-400: 129 140 248;
+  --brand-500: 99 102 241;
+  --brand-600: 79 70 229;
+  --brand-700: 67 56 202;
+  --brand-800: 55 48 163;
+  --brand-900: 49 46 129;
+  --brand-950: 30 27 75;
+  --surface-50: 255 255 255;
+  --surface-100: 237 242 255;
+  --surface-200: 214 221 243;
+  --surface-300: 184 193 226;
+  --surface-400: 146 157 200;
+  --surface-500: 105 117 163;
+  --surface-600: 74 84 126;
+  --surface-700: 47 55 92;
+  --surface-800: 29 35 66;
+  --surface-850: 18 23 48;
+  --surface-900: 11 16 36;
+  --surface-950: 5 6 15;
+}
+
+[data-theme="solo-igris"] {
+  color-scheme: dark;
+  --brand-50: 255 241 241;
+  --brand-100: 255 226 226;
+  --brand-200: 254 202 202;
+  --brand-300: 252 165 165;
+  --brand-400: 248 113 113;
+  --brand-500: 239 68 68;
+  --brand-600: 220 38 38;
+  --brand-700: 185 28 28;
+  --brand-800: 153 27 27;
+  --brand-900: 127 29 29;
+  --brand-950: 60 5 5;
+  --surface-50: 255 255 255;
+  --surface-100: 251 239 239;
+  --surface-200: 236 217 217;
+  --surface-300: 217 184 184;
+  --surface-400: 185 137 137;
+  --surface-500: 138 90 90;
+  --surface-600: 90 51 51;
+  --surface-700: 51 29 29;
+  --surface-800: 34 19 19;
+  --surface-850: 23 13 13;
+  --surface-900: 16 9 9;
+  --surface-950: 8 5 5;
+}
+
 /* ─── Fantasy palettes ───────────────────────────────────────────────────
    Each one also drives an ambient animated backdrop through --fx / --fxp
    variables consumed by the body::before / body::after overlays below. */
@@ -361,87 +404,6 @@
   --surface-850: 252 246 237;
   --surface-900: 255 251 244;
   --surface-950: 253 246 236;
-}
-
-[data-theme="fae-meadowlight"] {
-  color-scheme: light;
-  --brand-50: 236 253 245;
-  --brand-100: 209 250 229;
-  --brand-200: 153 246 228;
-  --brand-300: 13 148 136;
-  --brand-400: 16 185 129;
-  --brand-500: 20 184 166;
-  --brand-600: 13 148 136;
-  --brand-700: 15 118 110;
-  --brand-800: 17 94 89;
-  --brand-900: 19 78 74;
-  --brand-950: 4 47 46;
-  --surface-50: 255 255 254;
-  --surface-100: 22 42 35;
-  --surface-200: 36 63 52;
-  --surface-300: 53 86 72;
-  --surface-400: 78 118 100;
-  --surface-500: 113 152 133;
-  --surface-600: 163 198 182;
-  --surface-700: 208 227 216;
-  --surface-800: 231 243 236;
-  --surface-850: 250 253 250;
-  --surface-900: 254 255 253;
-  --surface-950: 248 253 250;
-}
-
-[data-theme="crystal-realm"] {
-  color-scheme: light;
-  --brand-50: 245 243 255;
-  --brand-100: 224 231 255;
-  --brand-200: 199 210 254;
-  --brand-300: 139 92 246;
-  --brand-400: 129 140 248;
-  --brand-500: 124 58 237;
-  --brand-600: 99 102 241;
-  --brand-700: 79 70 229;
-  --brand-800: 67 56 202;
-  --brand-900: 55 48 163;
-  --brand-950: 30 27 75;
-  --surface-50: 255 255 255;
-  --surface-100: 30 32 56;
-  --surface-200: 49 52 82;
-  --surface-300: 70 74 110;
-  --surface-400: 99 106 152;
-  --surface-500: 139 146 195;
-  --surface-600: 186 191 227;
-  --surface-700: 220 223 244;
-  --surface-800: 237 239 250;
-  --surface-850: 250 250 255;
-  --surface-900: 252 252 255;
-  --surface-950: 248 248 254;
-}
-
-[data-theme="celestial-voyage"] {
-  color-scheme: light;
-  --brand-50: 240 249 255;
-  --brand-100: 219 234 254;
-  --brand-200: 191 219 254;
-  --brand-300: 37 99 235;
-  --brand-400: 59 130 246;
-  --brand-500: 96 165 250;
-  --brand-600: 37 99 235;
-  --brand-700: 29 78 216;
-  --brand-800: 30 64 175;
-  --brand-900: 30 58 138;
-  --brand-950: 23 37 84;
-  --surface-50: 255 255 255;
-  --surface-100: 17 32 52;
-  --surface-200: 29 52 82;
-  --surface-300: 43 74 114;
-  --surface-400: 65 102 150;
-  --surface-500: 96 138 186;
-  --surface-600: 145 180 216;
-  --surface-700: 196 216 240;
-  --surface-800: 222 234 248;
-  --surface-850: 247 252 255;
-  --surface-900: 252 254 255;
-  --surface-950: 245 250 255;
 }
 
 [data-theme="blossom-breeze"] {
@@ -606,26 +568,25 @@
   --surface-950: 8 18 15;
 }
 
-/* ─── Fantasy animated backdrops ──────────────────────────────────────────
-   Two fixed, non-interactive ambient layers hang behind the page:
+/* ─── Ambient motion backdrops (every theme) ──────────────────────────────
+   Two fixed, non-interactive layers hang behind the page:
 
    • body::before — a soft gradient "glow canvas" that slowly drifts.
    • body::after  — a repeating particle field (embers, snow, petals,
-     fireflies, stars…) whose direction and palette each theme sets.
+     fireflies, stars or brand-tinted motes) that drifts and twinkles.
 
-   Themes opt in per palette via three hooks:
+   Themes can customise the layers through five hooks:
    --fx-canvas      gradient image(s) for body::before
    --fx-anim        its animation (shorthand)
    --fx-particles   particle image(s) for body::after (exactly 3 layers)
    --fx-particles-anim  its animation shorthand list
    --fx-p-opacity   peak opacity of the particle field
 
-   Non-fantasy themes define none of these, and the layers default to
-   `opacity: 0` / `animation: none`, so they cost nothing there.
-
-   Particle tile sizes are fixed at 160px, 260px and 400px and every
-   particles keyframe moves each layer by an integer multiple of its own
-   tile, so the loop is seamless. */
+   When a palette defines none of them, the brand-variable fallbacks below
+   keep subtle motion alive everywhere — professional and anime themes
+   included. Particle tile sizes are fixed at 160px, 260px and 400px and
+   every keyframe moves each layer by an integer multiple of its own tile,
+   so the loop is seamless. */
 
 body::before,
 body::after {
@@ -634,20 +595,35 @@ body::after {
   inset: -12%;
   z-index: -1;
   pointer-events: none;
-  animation: none;
 }
 
 body::before {
-  background-image: var(--fx-canvas, none);
+  background-image: var(
+    --fx-canvas,
+    radial-gradient(110% 85% at 14% 6%, rgb(var(--brand-500) / 0.16), transparent 60%),
+      radial-gradient(95% 80% at 88% 94%, rgb(var(--brand-600) / 0.13), transparent 58%),
+      radial-gradient(75% 60% at 50% 50%, rgb(var(--brand-400) / 0.06), transparent 66%)
+  );
   background-size: cover;
-  animation: var(--fx-anim, none);
+  animation: var(--fx-anim, fancyGlowDrift 36s ease-in-out infinite);
+  will-change: transform;
 }
 
 body::after {
-  opacity: 0;
-  background-image: var(--fx-particles, none);
+  opacity: var(--fx-p-opacity, 0.4);
+  background-image: var(
+    --fx-particles,
+    radial-gradient(1.5px 1.5px at 22% 28%, rgb(var(--brand-300) / 0.55), transparent 65%),
+      radial-gradient(1px 1px at 68% 55%, rgb(var(--brand-400) / 0.45), transparent 65%),
+      radial-gradient(1px 1px at 44% 82%, rgb(var(--brand-200) / 0.5), transparent 65%)
+  );
   background-size: 160px 160px, 260px 260px, 400px 400px;
-  animation: var(--fx-particles-anim, none);
+  animation: var(
+    --fx-particles-anim,
+    fancyDust 44s linear infinite alternate,
+    fancyTwinkle 6.5s ease-in-out infinite
+  );
+  will-change: background-position, opacity;
 }
 
 @keyframes fancyGlowDrift {
@@ -680,37 +656,83 @@ body::after {
   50%      { opacity: calc(var(--fx-p-opacity, 0.5) * 0.25); }
 }
 
-/* The page canvas normally sits opaque above the fx layers; fantasy themes
-   unveil them by going translucent (cards/panels untouched). */
-:is(
-  [data-theme="enchanted-dawn"], [data-theme="fae-meadowlight"],
-  [data-theme="crystal-realm"], [data-theme="celestial-voyage"],
-  [data-theme="blossom-breeze"], [data-theme="arcane-midnight"],
-  [data-theme="ember-abyss"], [data-theme="frozen-citadel"],
-  [data-theme="void-nebula"], [data-theme="emerald-enigma"]
-) {
-  /* Let the canvas background drop through so the fixed fx layers show. */
-  background-color: transparent;
-}
-
-:is(
-  [data-theme="enchanted-dawn"], [data-theme="fae-meadowlight"],
-  [data-theme="crystal-realm"], [data-theme="celestial-voyage"],
-  [data-theme="blossom-breeze"], [data-theme="arcane-midnight"],
-  [data-theme="ember-abyss"], [data-theme="frozen-citadel"],
-  [data-theme="void-nebula"], [data-theme="emerald-enigma"]
-) body::after {
-  opacity: var(--fx-p-opacity, 0.5);
-}
-
-:is(
-  [data-theme="enchanted-dawn"], [data-theme="fae-meadowlight"],
-  [data-theme="crystal-realm"], [data-theme="celestial-voyage"],
-  [data-theme="blossom-breeze"], [data-theme="arcane-midnight"],
-  [data-theme="ember-abyss"], [data-theme="frozen-citadel"],
-  [data-theme="void-nebula"], [data-theme="emerald-enigma"]
-) [class*="bg-surface-950"] {
+/* Every page canvas sits slightly translucent so the fixed motion layers
+   read through it. Cards and panels stay fully opaque. The :not() guard
+   leaves intentional opacity utilities (bg-surface-950/50) untouched. */
+[data-theme] [class*="bg-surface-950"]:not([class*="bg-surface-950/"]),
+[data-theme][class*="bg-surface-950"]:not([class*="bg-surface-950/"]) {
   background-color: rgb(var(--surface-950) / 0.78);
+}
+
+/* ── Depth hover — a subtle 3D lift used by interactive rows and cards ──── */
+.depth-hover {
+  transform-style: preserve-3d;
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s ease,
+    border-color 0.35s ease,
+    background-color 0.35s ease;
+}
+
+.depth-hover:hover {
+  transform: perspective(1000px) translateY(-2px) rotateX(1.1deg) rotateY(-1.1deg)
+    translateZ(6px);
+  box-shadow:
+    0 22px 46px -26px rgb(var(--surface-950) / 0.85),
+    0 0 0 1px rgb(var(--brand-500) / 0.16),
+    0 0 34px -12px rgb(var(--brand-500) / 0.28);
+}
+
+/* ── 3D perspective floor rendered by AmbientMotion ────────────────────── */
+.fx-grid-3d {
+  position: absolute;
+  left: 50%;
+  bottom: -34%;
+  width: 180%;
+  height: 74%;
+  transform: translateX(-50%) perspective(460px) rotateX(67deg);
+  transform-origin: 50% 100%;
+  background-image:
+    linear-gradient(rgb(var(--brand-500) / 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--brand-500) / 0.16) 1px, transparent 1px);
+  background-size: 46px 46px, 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 100%, black 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse at 50% 100%, black 0%, transparent 72%);
+  animation: fxGridScroll 14s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes fxGridScroll {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 0 46px, 46px 0;
+  }
+}
+
+/* ── Theme switch veil — a soft fade that hides the palette repaint ────── */
+.theme-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 42%, rgb(var(--brand-400) / 0.18), transparent 58%),
+    rgb(var(--surface-950) / 0.52);
+  animation: themeVeil 640ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes themeVeil {
+  0% {
+    opacity: 0;
+  }
+  22% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* ── Enchanted Dawn — golden sunrise, motes of light rising ────────────── */
@@ -726,51 +748,6 @@ body::after {
     radial-gradient(1px 1px at 52% 88%, rgb(253 230 138 / 0.6), transparent 65%);
   --fx-particles-anim: fancyRise 24s linear infinite, fancyTwinkle 6s ease-in-out infinite;
   --fx-p-opacity: 0.55;
-}
-
-/* ── Fae Meadowlight — moonlit glade, fireflies drifting ───────────────── */
-[data-theme="fae-meadowlight"] {
-  --fx-canvas:
-    radial-gradient(110% 85% at 18% 10%, rgb(45 212 191 / 0.18), transparent 58%),
-    radial-gradient(120% 95% at 88% 95%, rgb(16 185 129 / 0.14), transparent 55%),
-    linear-gradient(180deg, rgb(254 255 253), rgb(248 253 250));
-  --fx-anim: fancyGlowDrift 34s ease-in-out infinite;
-  --fx-particles:
-    radial-gradient(2px 2px at 25% 75%, rgb(13 148 136 / 0.5), transparent 65%),
-    radial-gradient(1.5px 1.5px at 75% 60%, rgb(20 184 166 / 0.4), transparent 65%),
-    radial-gradient(1px 1px at 55% 85%, rgb(153 246 228 / 0.65), transparent 65%);
-  --fx-particles-anim: fancyDust 22s linear infinite alternate, fancyTwinkle 5s ease-in-out infinite;
-  --fx-p-opacity: 0.6;
-}
-
-/* ── Crystal Realm — amethyst halls, icy shimmer ───────────────────────── */
-[data-theme="crystal-realm"] {
-  --fx-canvas:
-    radial-gradient(115% 85% at 80% 12%, rgb(167 139 250 / 0.2), transparent 58%),
-    radial-gradient(110% 90% at 10% 95%, rgb(129 140 248 / 0.16), transparent 55%),
-    linear-gradient(180deg, rgb(252 252 255), rgb(248 248 254));
-  --fx-anim: fancyGlowBreath 30s ease-in-out infinite;
-  --fx-particles:
-    radial-gradient(2px 2px at 35% 70%, rgb(139 92 246 / 0.45), transparent 65%),
-    radial-gradient(1.5px 1.5px at 65% 40%, rgb(124 58 237 / 0.4), transparent 65%),
-    radial-gradient(1px 1px at 50% 90%, rgb(199 210 254 / 0.7), transparent 65%);
-  --fx-particles-anim: fancyDust 26s linear infinite alternate, fancyTwinkle 7s ease-in-out infinite;
-  --fx-p-opacity: 0.55;
-}
-
-/* ── Celestial Voyage — sky-ship deck, twinkling far stars ─────────────── */
-[data-theme="celestial-voyage"] {
-  --fx-canvas:
-    radial-gradient(120% 90% at 50% 0%, rgb(96 165 250 / 0.2), transparent 60%),
-    radial-gradient(110% 85% at 85% 90%, rgb(37 99 235 / 0.12), transparent 55%),
-    linear-gradient(180deg, rgb(252 254 255), rgb(245 250 255));
-  --fx-anim: fancyGlowDrift 38s ease-in-out infinite;
-  --fx-particles:
-    radial-gradient(1.5px 1.5px at 30% 60%, rgb(37 99 235 / 0.45), transparent 65%),
-    radial-gradient(1px 1px at 70% 70%, rgb(59 130 246 / 0.4), transparent 65%),
-    radial-gradient(1px 1px at 48% 85%, rgb(147 197 253 / 0.65), transparent 65%);
-  --fx-particles-anim: fancyTwinkle 4.5s ease-in-out infinite;
-  --fx-p-opacity: 0.6;
 }
 
 /* ── Blossom Breeze — sakura courtyard, petals falling ─────────────────── */
@@ -864,6 +841,276 @@ body::after {
   --fx-p-opacity: 0.55;
 }
 
+/* ── Sung Jinwoo — shadow gate, violet mana motes rising ───────────────── */
+[data-theme="solo-jinwoo"] {
+  --fx-canvas:
+    radial-gradient(120% 90% at 78% 8%, rgb(129 140 248 / 0.24), transparent 60%),
+    radial-gradient(110% 95% at 14% 100%, rgb(49 46 129 / 0.34), transparent 56%),
+    linear-gradient(180deg, rgb(5 6 15), rgb(11 16 36));
+  --fx-anim: fancyGlowDrift 32s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2.5px 2.5px at 30% 82%, rgb(165 180 252 / 0.6), transparent 65%),
+    radial-gradient(1.5px 1.5px at 70% 52%, rgb(99 102 241 / 0.55), transparent 65%),
+    radial-gradient(1px 1px at 52% 88%, rgb(199 210 254 / 0.6), transparent 65%);
+  --fx-particles-anim: fancyRise 19s linear infinite, fancyTwinkle 5.5s ease-in-out infinite;
+  --fx-p-opacity: 0.62;
+}
+
+/* ── Igris — crimson command, embers rising through ash ────────────────── */
+[data-theme="solo-igris"] {
+  --fx-canvas:
+    radial-gradient(120% 85% at 72% 10%, rgb(239 68 68 / 0.2), transparent 58%),
+    radial-gradient(110% 90% at 12% 100%, rgb(127 29 29 / 0.32), transparent 56%),
+    linear-gradient(180deg, rgb(8 5 5), rgb(16 9 9));
+  --fx-anim: fancyGlowBreath 26s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2.5px 2.5px at 28% 84%, rgb(248 113 113 / 0.65), transparent 65%),
+    radial-gradient(1.5px 1.5px at 72% 58%, rgb(252 165 165 / 0.5), transparent 65%),
+    radial-gradient(1px 1px at 50% 92%, rgb(254 202 202 / 0.55), transparent 65%);
+  --fx-particles-anim: fancyRise 16s linear infinite, fancyTwinkle 4.5s ease-in-out infinite;
+  --fx-p-opacity: 0.66;
+}
+
+/* ── Anime companion — manga panel, screentone and impact effects ──────── */
+
+.anime-panel {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
+}
+
+.anime-halftone {
+  opacity: 0.5;
+  background-image: radial-gradient(rgb(var(--brand-300) / 0.55) 1px, transparent 1px);
+  background-size: 7px 7px;
+  -webkit-mask-image: radial-gradient(ellipse at 74% 16%, black 0%, transparent 76%);
+  mask-image: radial-gradient(ellipse at 74% 16%, black 0%, transparent 76%);
+}
+
+.anime-panel-lines {
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(
+    115deg,
+    rgb(var(--brand-200) / 0.18) 0 1px,
+    transparent 1px 9px
+  );
+  -webkit-mask-image: radial-gradient(ellipse at 24% 68%, black 0%, transparent 78%);
+  mask-image: radial-gradient(ellipse at 24% 68%, black 0%, transparent 78%);
+}
+
+/* Slow-crawling focus lines behind the character, like a manga key panel. */
+.anime-focus {
+  opacity: 0.65;
+  background-image: repeating-conic-gradient(
+    from 0deg at 50% 46%,
+    rgb(var(--brand-100) / 0.12) 0deg 1.4deg,
+    transparent 1.4deg 15deg
+  );
+  -webkit-mask-image: radial-gradient(circle at 50% 46%, black 2%, rgb(0 0 0 / 0.7) 42%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 46%, black 2%, rgb(0 0 0 / 0.7) 42%, transparent 72%);
+  animation: animeFocusDrift 28s linear infinite;
+}
+
+@keyframes animeFocusDrift {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Expression beats: the drawn eyes answer the action too, not just the body. */
+[data-action="success"] .anime-eyes {
+  animation: animeEyeSpark 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes animeEyeSpark {
+  0% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  25% {
+    filter: brightness(2.1);
+    transform: scale(1.16);
+  }
+  55% {
+    filter: brightness(1.4);
+    transform: scale(1.04);
+  }
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+}
+
+[data-action="alert"] .anime-eyes {
+  animation: animeEyeShock 560ms ease-in-out;
+}
+
+@keyframes animeEyeShock {
+  0%, 100% {
+    transform: scale(1);
+  }
+  18% {
+    transform: scale(0.86);
+  }
+  42% {
+    transform: scale(1.12);
+  }
+  70% {
+    transform: scale(1.02);
+  }
+}
+
+[data-action="think"] .anime-eyes {
+  animation: animeEyeSquint 1.9s ease-in-out infinite;
+}
+
+@keyframes animeEyeSquint {
+  0%, 100% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scaleY(0.82);
+    filter: brightness(1.25);
+  }
+}
+
+.anime-sheen {
+  background: linear-gradient(
+    102deg,
+    transparent 18%,
+    rgb(var(--brand-100) / 0.42) 46%,
+    rgb(255 255 255 / 0.28) 52%,
+    transparent 78%
+  );
+  mix-blend-mode: screen;
+}
+
+.anime-burst {
+  background-image: repeating-conic-gradient(
+    from 0deg at 50% 55%,
+    rgb(var(--brand-100) / 0.5) 0deg 1.6deg,
+    transparent 1.6deg 10deg
+  );
+  -webkit-mask-image: radial-gradient(circle at 50% 55%, transparent 16%, black 58%, transparent 84%);
+  mask-image: radial-gradient(circle at 50% 55%, transparent 16%, black 58%, transparent 84%);
+  animation: animeBurstSpin 900ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes animeBurstSpin {
+  from {
+    opacity: 0.95;
+    transform: rotate(0deg) scale(0.88);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(20deg) scale(1.16);
+  }
+}
+
+.anime-alert-flash {
+  background:
+    radial-gradient(circle at 50% 52%, rgb(248 68 68 / 0.4), transparent 66%),
+    repeating-linear-gradient(90deg, rgb(248 68 68 / 0.16) 0 2px, transparent 2px 14px);
+  animation: animeAlertFlash 620ms ease-out forwards;
+}
+
+@keyframes animeAlertFlash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.anime-sfx {
+  font-size: 15px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--brand-100));
+  transform: skewX(-10deg);
+  text-shadow:
+    0 2px 0 rgb(var(--surface-950)),
+    0 0 18px rgb(var(--brand-400) / 0.6);
+  -webkit-text-stroke: 1px rgb(var(--surface-950) / 0.45);
+}
+
+/* Living details inside the character art itself. */
+.anime-cloak {
+  transform-box: fill-box;
+  transform-origin: 50% 8%;
+  animation: animeCloakSway 7s ease-in-out infinite;
+}
+
+@keyframes animeCloakSway {
+  0%, 100% {
+    transform: rotate(0deg) translateX(0);
+  }
+  50% {
+    transform: rotate(0.7deg) translateX(1.6px);
+  }
+}
+
+.anime-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: animeEyePulse 3.4s ease-in-out infinite;
+}
+
+@keyframes animeEyePulse {
+  0%, 100% {
+    opacity: 0.82;
+    filter: brightness(1);
+  }
+  45% {
+    opacity: 1;
+    filter: brightness(1.5);
+  }
+  60% {
+    opacity: 0.95;
+    filter: brightness(1.12);
+  }
+}
+
+.anime-blade {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: animeBladeGlint 5.5s ease-in-out infinite;
+}
+
+@keyframes animeBladeGlint {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  47% {
+    filter: brightness(1.18);
+  }
+  52% {
+    filter: brightness(1.62);
+  }
+}
+
+.anime-aura {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: animeAuraPulse 6s ease-in-out infinite;
+}
+
+@keyframes animeAuraPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.07);
+  }
+}
+
 @layer base {
   * {
     box-sizing: border-box;
@@ -954,6 +1201,145 @@ body::after {
     backdrop-filter: blur(18px);
   }
 
+  /* ── Royal glass surfaces ─────────────────────────────────────────────
+     Shared frosted recipe for chat cards, chips and the composer. Colours
+     arrive from the `--glass-*` tokens so light palettes keep readable
+     ink-on-white while Royal Glass gets its gold-tinged translucent look. */
+  .glass-surface {
+    background:
+      linear-gradient(180deg, var(--glass-highlight) 0%, transparent 44%),
+      var(--glass-surface);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      var(--glass-shadow),
+      inset 0 1px 0 var(--glass-highlight);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  }
+
+  .glass-chip {
+    background:
+      linear-gradient(180deg, var(--glass-highlight) 0%, transparent 60%),
+      var(--glass-surface);
+    border: 1px solid var(--glass-border);
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
+  }
+
+  .bubble-ai {
+    background:
+      linear-gradient(180deg, var(--glass-highlight) 0%, transparent 46%),
+      var(--glass-surface);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      var(--glass-shadow),
+      inset 0 1px 0 var(--glass-highlight);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  }
+
+  .bubble-user {
+    background:
+      linear-gradient(135deg, rgb(var(--brand-500) / 0.2), rgb(79 70 229 / 0.14) 54%, rgb(var(--brand-600) / 0.1)),
+      var(--glass-surface);
+    border: 1px solid rgb(var(--brand-300) / 0.42);
+    box-shadow:
+      0 8px 32px 0 rgb(0 0 0 / 0.37),
+      0 0 26px rgb(var(--brand-500) / 0.12),
+      inset 0 1px 0 rgb(255 255 255 / 0.14);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    backdrop-filter: blur(22px) saturate(150%);
+  }
+
+  .glass-composer {
+    background:
+      linear-gradient(180deg, var(--glass-highlight) 0%, transparent 50%),
+      var(--glass-surface-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      var(--glass-shadow),
+      inset 0 1px 0 var(--glass-highlight);
+    -webkit-backdrop-filter: blur(32px) saturate(160%);
+    backdrop-filter: blur(32px) saturate(160%);
+    transition:
+      border-color 0.28s ease,
+      box-shadow 0.28s ease;
+  }
+
+  .glass-composer:focus-within {
+    border-color: rgb(var(--brand-400) / 0.55);
+    box-shadow:
+      0 0 0 1px rgb(var(--brand-400) / 0.28),
+      0 0 46px rgb(var(--brand-500) / 0.22),
+      0 18px 42px -20px rgb(0 0 0 / 0.7),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Large soft ambient orbs behind the chat feed. Amber, bronze and royal
+     indigo stay deliberately blurred so text never fights the colour. */
+  .chat-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(96px);
+    will-change: transform;
+  }
+
+  .chat-orb-amber {
+    background: radial-gradient(circle, rgb(var(--brand-500) / 0.42), transparent 70%);
+    animation: royalOrbA 26s ease-in-out infinite;
+  }
+
+  .chat-orb-indigo {
+    background: radial-gradient(circle, rgb(79 70 229 / 0.4), transparent 70%);
+    animation: royalOrbB 32s ease-in-out infinite;
+  }
+
+  .chat-orb-bronze {
+    background: radial-gradient(circle, rgb(184 141 87 / 0.32), transparent 70%);
+    animation: royalOrbA 38s ease-in-out infinite reverse;
+  }
+
+  /* Slow rotating light ribbon — the extra "super animated" layer. */
+  .fx-ribbon {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 150vmax;
+    height: 150vmax;
+    transform: translate(-50%, -50%);
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      rgb(var(--brand-400) / 0.1) 42deg,
+      transparent 96deg,
+      rgb(var(--brand-600) / 0.1) 156deg,
+      transparent 214deg,
+      rgb(var(--brand-300) / 0.075) 304deg,
+      transparent 360deg
+    );
+    opacity: var(--fx-ribbon-opacity, 0.3);
+    -webkit-mask-image: radial-gradient(circle, transparent 16%, black 46%, transparent 78%);
+    mask-image: radial-gradient(circle, transparent 16%, black 46%, transparent 78%);
+    animation: fxRibbonSpin 64s linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes royalOrbA {
+    0%, 100% { transform: translate3d(-3%, -2%, 0) scale(1); }
+    50%      { transform: translate3d(5%, 4%, 0) scale(1.12); }
+  }
+
+  @keyframes royalOrbB {
+    0%, 100% { transform: translate3d(4%, 3%, 0) scale(1.06); }
+    50%      { transform: translate3d(-5%, -4%, 0) scale(0.94); }
+  }
+
+  @keyframes fxRibbonSpin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+
   .theme-watermark {
     opacity: 0.16;
     filter: drop-shadow(0 18px 30px rgb(var(--brand-500) / 0.28));
@@ -963,7 +1349,9 @@ body::after {
   }
 
   [data-theme="naruto-leaf"] .theme-watermark,
-  [data-theme="naruto-sharingan"] .theme-watermark {
+  [data-theme="naruto-sharingan"] .theme-watermark,
+  [data-theme="solo-jinwoo"] .theme-watermark,
+  [data-theme="solo-igris"] .theme-watermark {
     opacity: 0.25;
   }
 
