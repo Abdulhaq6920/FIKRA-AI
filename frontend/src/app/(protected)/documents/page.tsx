@@ -1,23 +1,22 @@
 "use client";
 
 /**
- * Document management page.
- * Available to all authenticated users; upload/delete restricted to org admins.
+ * Document library page — read-only view of the organization's documents.
+ * Admins have a Documents entry point inside the Admin area; this page
+ * intentionally shows no management controls (upload/delete/reindex).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import {
-  Upload,
   FileText,
-  Trash2,
-  RefreshCw,
   CheckCircle,
   XCircle,
   Clock,
   Loader2,
-  AlertTriangle,
   Download,
+  Shield,
 } from "lucide-react";
 import { documentsApi } from "@/lib/api/documents";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -31,17 +30,13 @@ const STATUS_CONFIG: Record<DocumentStatus, { label: string; color: string; icon
   processing: { label: "Processing", color: "text-blue-400",    icon: <Loader2 className="w-3.5 h-3.5 animate-spin" /> },
   ready:      { label: "Ready",      color: "text-green-400",   icon: <CheckCircle className="w-3.5 h-3.5" /> },
   failed:     { label: "Failed",     color: "text-red-400",     icon: <XCircle className="w-3.5 h-3.5" /> },
-  reindexing: { label: "Reindexing", color: "text-purple-400",  icon: <RefreshCw className="w-3.5 h-3.5 animate-spin" /> },
+  reindexing: { label: "Reindexing", color: "text-purple-400",  icon: <Loader2 className="w-3.5 h-3.5 animate-spin" /> },
 };
 
 export default function DocumentsPage() {
   const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user?.is_platform_admin || user?.organization_role === "org_admin";
 
@@ -83,101 +78,29 @@ export default function DocumentsPage() {
     return () => window.clearInterval(interval);
   }, [documents, loadDocuments]);
 
-  const handleUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploadError(null);
-
-    for (const file of Array.from(files)) {
-      setUploading(true);
-      try {
-        const doc = await documentsApi.upload(file);
-        setDocuments((prev) => [doc, ...prev]);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Upload failed.";
-        setUploadError(msg);
-      } finally {
-        setUploading(false);
-      }
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this document? This cannot be undone.")) return;
-    await documentsApi.delete(id).catch(() => {});
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-  };
-
-  const handleReindex = async (id: string) => {
-    await documentsApi.reindex(id).catch(() => {});
-    // Optimistically show reindexing status
-    setDocuments((prev) => prev.map((d) => d.id === id ? { ...d, status: "reindexing" } : d));
-  };
-
   return (
     <div className="h-full overflow-y-auto bg-surface-950 p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-semibold text-surface-100">Documents</h1>
-            <p className="text-sm text-surface-400 mt-0.5">
-              {documents.length} document{documents.length !== 1 ? "s" : ""} in your organization
-            </p>
-          </div>
-          {isAdmin && (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-400"
-            >
-              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              Upload document
-            </button>
-          )}
+        <div className="mb-6">
+          <h1 className="text-xl font-semibold text-surface-100">Documents</h1>
+          <p className="text-sm text-surface-400 mt-0.5">
+            {documents.length} document{documents.length !== 1 ? "s" : ""} in your organization
+          </p>
         </div>
 
-        {/* Upload zone */}
+        {/* Admins manage documents in the Admin area */}
         {isAdmin && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".pdf,.docx,.odt,.pptx,.odp,.xlsx,.xls,.ods,.csv,.tsv,.md,.markdown,.html,.htm,.txt,.rtf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff"
-              className="hidden"
-              aria-label="Upload files"
-              onChange={(e) => handleUpload(e.target.files)}
-            />
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files); }}
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                "border-2 border-dashed rounded-xl p-8 mb-6 text-center cursor-pointer transition-colors",
-                dragOver
-                  ? "border-brand-500 bg-brand-600/10"
-                  : "border-surface-700 hover:border-surface-600 bg-surface-900/40"
-              )}
-              role="button"
-              aria-label="Drop files here or click to upload"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
-            >
-              <Upload className="w-8 h-8 text-surface-500 mx-auto mb-2" />
-              <p className="text-sm text-surface-400">
-                Drop files here or <span className="text-brand-400">browse</span>
-              </p>
-              <p className="text-xs text-surface-600 mt-1">PDF, Office files, spreadsheets, HTML, text, and images with OCR · Max 50MB</p>
-            </div>
-
-            {uploadError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-2 text-sm text-red-400">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                {uploadError}
-              </div>
-            )}
-          </>
+          <Link
+            href="/admin?tab=Documents"
+            className="mb-6 flex items-center gap-2 p-3 rounded-lg bg-brand-600/10 border border-brand-500/25 text-sm text-brand-300 hover:bg-brand-600/20 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <Shield className="w-4 h-4 flex-shrink-0" />
+            <span>
+              Document uploads and management moved to{" "}
+              <span className="font-medium underline underline-offset-2">Admin → Documents</span>.
+            </span>
+          </Link>
         )}
 
         {/* Document list */}
@@ -190,10 +113,14 @@ export default function DocumentsPage() {
         ) : documents.length === 0 ? (
           <div className="text-center py-16">
             <FileText className="w-10 h-10 text-surface-600 mx-auto mb-3" />
-            <p className="text-surface-400 text-sm">No documents uploaded yet.</p>
-            {isAdmin && (
+            <p className="text-surface-400 text-sm">No documents available yet.</p>
+            {isAdmin ? (
               <p className="text-surface-600 text-xs mt-1">
-                Upload your first document to get started.
+                Upload your first document from Admin → Documents.
+              </p>
+            ) : (
+              <p className="text-surface-600 text-xs mt-1">
+                An administrator can upload documents for the organization.
               </p>
             )}
           </div>
@@ -201,13 +128,7 @@ export default function DocumentsPage() {
           <div className="space-y-2">
             <AnimatePresence>
               {documents.map((doc) => (
-                <DocumentRow
-                  key={doc.id}
-                  doc={doc}
-                  isAdmin={!!isAdmin}
-                  onDelete={() => handleDelete(doc.id)}
-                  onReindex={() => handleReindex(doc.id)}
-                />
+                <DocumentRow key={doc.id} doc={doc} />
               ))}
             </AnimatePresence>
           </div>
@@ -217,17 +138,7 @@ export default function DocumentsPage() {
   );
 }
 
-function DocumentRow({
-  doc,
-  isAdmin,
-  onDelete,
-  onReindex,
-}: {
-  doc: Document;
-  isAdmin: boolean;
-  onDelete: () => void;
-  onReindex: () => void;
-}) {
+function DocumentRow({ doc }: { doc: Document }) {
   const status = STATUS_CONFIG[doc.status] ?? STATUS_CONFIG.pending;
 
   return (
@@ -264,26 +175,6 @@ function DocumentRow({
         >
           <Download className="w-3.5 h-3.5" />
         </a>
-        {isAdmin && (
-          <>
-            {(doc.status === "failed" || doc.status === "ready") && (
-              <button
-                onClick={onReindex}
-                className="p-1.5 rounded-lg text-surface-400 hover:text-blue-400 hover:bg-surface-800 focus:outline-none"
-                aria-label="Reindex"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button
-              onClick={onDelete}
-              className="p-1.5 rounded-lg text-surface-400 hover:text-red-400 hover:bg-surface-800 focus:outline-none"
-              aria-label="Delete"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </>
-        )}
       </div>
     </motion.div>
   );

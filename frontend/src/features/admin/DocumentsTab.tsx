@@ -1,24 +1,31 @@
 "use client";
 
 /**
- * Admin document explorer.
+ * Admin document manager.
  * Lists tenant documents with uploader/citation metrics and opens metadata,
- * processing jobs, and chunk previews for a single document.
+ * processing jobs, and chunk previews for a single document. Upload, delete,
+ * and reindex actions were moved here from the read-only document library.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ChevronRight,
+  Download,
   FileText,
   HardDrive,
+  Loader2,
+  RefreshCw,
   Search,
+  Trash2,
+  Upload,
 } from "lucide-react";
 import {
   adminAnalyticsApi,
   type AdminDocumentDetail,
   type AdminDocumentList,
 } from "@/lib/api/analytics";
+import { documentsApi } from "@/lib/api/documents";
 import { cn } from "@/lib/utils/cn";
 import { formatBytes } from "@/lib/utils/format";
 import {
@@ -32,6 +39,9 @@ import {
   Section,
   Skeleton,
 } from "./InsightUi";
+
+const UPLOAD_ACCEPT =
+  ".pdf,.docx,.odt,.pptx,.odp,.xlsx,.xls,.ods,.csv,.tsv,.md,.markdown,.html,.htm,.txt,.rtf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff";
 
 const STATUSES = [
   { value: "", label: "All" },
@@ -66,6 +76,14 @@ export function DocumentsTab() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const detailRequest = useRef(0);
 
+  // Management actions (uploads, deletes, reindex) live here since the
+  // library page is now read-only.
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -93,6 +111,53 @@ export function DocumentsTab() {
     event.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
+  };
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        await documentsApi.upload(file);
+      }
+      setPage(1);
+      await load();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this document? This cannot be undone.")) return;
+    setActionError(null);
+    setBusyId(id);
+    try {
+      await documentsApi.delete(id);
+      // If the last row on a page was removed, step back to a valid page.
+      if (data && data.items.length === 1 && page > 1) setPage(page - 1);
+      else await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReindex = async (id: string) => {
+    setActionError(null);
+    setBusyId(id);
+    try {
+      await documentsApi.reindex(id);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Reindex failed.");
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const openDetail = async (id: string) => {
@@ -132,6 +197,35 @@ export function DocumentsTab() {
         action={<span className="text-xs text-surface-500">{data ? `${formatNumber(data.total)} total` : ""}</span>}
       >
         <div className="space-y-3 px-4 py-3 border-b border-surface-800">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={UPLOAD_ACCEPT}
+              className="hidden"
+              aria-label="Upload files"
+              onChange={(event) => handleUpload(event.target.files)}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-400"
+            >
+              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              Upload document
+            </button>
+            <span className="text-[10px] text-surface-500">
+              PDF, Office files, spreadsheets, HTML, text, images · Max 50MB each
+            </span>
+            {uploadError && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 py-1.5 text-[11px] text-red-200">
+                <AlertTriangle className="h-3 w-3 shrink-0" /> {uploadError}
+              </span>
+            )}
+          </div>
+
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-500" />
@@ -185,6 +279,12 @@ export function DocumentsTab() {
             ))}
           </div>
 
+          {actionError && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              <AlertTriangle className="h-3.5 w-3.5" /> {actionError}
+            </div>
+          )}
+
           {error && (
             <div className="flex items-center gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">
               <AlertTriangle className="h-3.5 w-3.5" /> {error}
@@ -198,43 +298,86 @@ export function DocumentsTab() {
           <>
             <div className="divide-y divide-surface-800/80">
               {data.items.map((document) => (
-                <button
+                <div
                   key={document.id}
-                  type="button"
-                  onClick={() => openDetail(document.id)}
-                  className="block w-full px-4 py-3 text-left transition-colors hover:bg-surface-800/40"
+                  className="flex items-start gap-2 px-4 py-3 transition-colors hover:bg-surface-800/40"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-medium text-surface-200">{document.title}</p>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                            STATUS_STYLES[document.status] ?? "bg-surface-700 text-surface-300"
-                          )}
-                        >
-                          {prettyStatus(document.status)}
-                        </span>
+                  <button
+                    type="button"
+                    onClick={() => openDetail(document.id)}
+                    className="min-w-0 flex-1 text-left"
+                    title="Open document details"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium text-surface-200">{document.title}</p>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                              STATUS_STYLES[document.status] ?? "bg-surface-700 text-surface-300"
+                            )}
+                          >
+                            {prettyStatus(document.status)}
+                          </span>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-surface-500">{document.original_filename}</p>
+                        <p className="mt-1 text-xs text-surface-400">
+                          {document.uploaded_by_name ?? "Unknown uploader"}
+                          {document.uploaded_by_email ? ` · ${document.uploaded_by_email}` : ""}
+                        </p>
                       </div>
-                      <p className="mt-1 truncate text-xs text-surface-500">{document.original_filename}</p>
-                      <p className="mt-1 text-xs text-surface-400">
-                        {document.uploaded_by_name ?? "Unknown uploader"}
-                        {document.uploaded_by_email ? ` · ${document.uploaded_by_email}` : ""}
-                      </p>
+                      <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-surface-600" />
                     </div>
-                    <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-surface-600" />
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-surface-500">
+                      <span className="inline-flex items-center gap-1">
+                        <HardDrive className="h-3 w-3" /> {formatBytes(document.file_size_bytes)}
+                      </span>
+                      <span>{formatNumber(document.chunk_count)} chunks</span>
+                      <span>{formatNumber(document.page_count)} pages</span>
+                      <span>{formatNumber(document.citation_count)} citations</span>
+                      <span>{formatDateTime(document.created_at)}</span>
+                    </div>
+                  </button>
+                  <div className="flex flex-shrink-0 items-center gap-0.5">
+                    <a
+                      href={documentsApi.downloadUrl(document.id)}
+                      download
+                      className="rounded p-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-200 focus:outline-none"
+                      aria-label={`Download ${document.title}`}
+                      title="Download"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </a>
+                    {(document.status === "failed" || document.status === "ready") && (
+                      <button
+                        type="button"
+                        onClick={() => handleReindex(document.id)}
+                        disabled={busyId === document.id}
+                        className="rounded p-1.5 text-surface-400 hover:bg-surface-800 hover:text-blue-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Reindex ${document.title}`}
+                        title="Reindex"
+                      >
+                        {busyId === document.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(document.id)}
+                      disabled={busyId === document.id}
+                      className="rounded p-1.5 text-surface-400 hover:bg-surface-800 hover:text-red-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`Delete ${document.title}`}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-surface-500">
-                    <span className="inline-flex items-center gap-1">
-                      <HardDrive className="h-3 w-3" /> {formatBytes(document.file_size_bytes)}
-                    </span>
-                    <span>{formatNumber(document.chunk_count)} chunks</span>
-                    <span>{formatNumber(document.page_count)} pages</span>
-                    <span>{formatNumber(document.citation_count)} citations</span>
-                    <span>{formatDateTime(document.created_at)}</span>
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
             <Pagination
@@ -246,7 +389,13 @@ export function DocumentsTab() {
             />
           </>
         ) : (
-          <EmptyRow text={search || status ? "No documents match these filters." : "No documents yet."} />
+          <EmptyRow
+            text={
+              search || status
+                ? "No documents match these filters."
+                : "No documents yet. Use “Upload document” to add the first one."
+            }
+          />
         )}
       </Section>
 

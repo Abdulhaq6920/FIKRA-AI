@@ -10,7 +10,6 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
@@ -20,8 +19,6 @@ import {
   AlertTriangle,
   RefreshCw,
   Search,
-  ArrowUpRight,
-  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api } from "@/lib/api/client";
@@ -244,29 +241,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         </p>
       )}
 
-      {/* Analytics lives on its own page now; this card is the only cross-link. */}
-      <Link
-        href="/analytics?view=organization"
-        className="group flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-500/25 bg-brand-600/10 px-4 py-4 transition-colors hover:border-brand-400/40 hover:bg-brand-600/15 focus:outline-none focus:ring-2 focus:ring-brand-500"
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-500/15">
-            <BarChart3 className="h-5 w-5 text-brand-300" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-surface-100">Organization analytics</p>
-            <p className="text-xs text-surface-400">
-              Questions, tokens, cost, top sources, and the member leaderboard.
-            </p>
-          </div>
-        </div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-300">
-          Open Analytics
-          <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-        </span>
-      </Link>
-
-      {/* Operational shortcuts — no stat tiles here; live totals live in Analytics. */}
+      {/* Management shortcuts — no stat tiles here; live totals live in Analytics. */}
       <Section title="Management" icon={<Search className="w-4 h-4" />}>
         <div className="grid grid-cols-1 divide-y divide-surface-800/80 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-3">
           {quickLinks.map(({ tab, label, description, icon: Icon, color, bg }) => (

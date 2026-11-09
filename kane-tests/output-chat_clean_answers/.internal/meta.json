@@ -1,0 +1,19 @@
+{
+  "commit_id": "d3b45361-9bc6-4a4c-b9c4-2719346a9999",
+  "test_id": "60ed5263-16c0-4545-9c80-627871c4a393",
+  "testcase_id": "01M6X1XGW457WEBQFJV1F0G306",
+  "project_id": "01M65HZQBZYXSYECZ83QX1B33T",
+  "folder_id": "01M65J0Q0HT1KRPVDR4Q3GDEC2",
+  "org_id": "3405165",
+  "session_name": "chat_clean_answers",
+  "executions": [
+    {
+      "execution_id": "75f02c73-3cee-4335-9d8f-74d02c42fe3a",
+      "run_kind": "author",
+      "status": "failed",
+      "valid": true,
+      "uploaded": true,
+      "at": "2026-11-08T08:08:46.088Z"
+    }
+  ]
+}

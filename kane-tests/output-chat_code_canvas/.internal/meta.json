@@ -1,0 +1,19 @@
+{
+  "commit_id": "ff1d7b50-824b-4d29-b5d0-93e19402df5e",
+  "test_id": "b7ff9f07-73df-4db5-b484-01006f03fe5d",
+  "testcase_id": "01M6X1ZGQ7NTA98FS7Z940PWAJ",
+  "project_id": "01M65HZQBZYXSYECZ83QX1B33T",
+  "folder_id": "01M65J0Q0HT1KRPVDR4Q3GDEC2",
+  "org_id": "3405165",
+  "session_name": "chat_code_canvas",
+  "executions": [
+    {
+      "execution_id": "75f02c73-3cee-4335-9d8f-74d02c42fe3a",
+      "run_kind": "author",
+      "status": "failed",
+      "valid": true,
+      "uploaded": true,
+      "at": "2026-11-08T08:08:46.090Z"
+    }
+  ]
+}

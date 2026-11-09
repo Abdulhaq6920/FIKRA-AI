@@ -7,8 +7,7 @@
  * - App logo + name
  * - New conversation button (when on chat)
  * - Conversation list (when on chat)
- * - Nav links: Chat, Documents, Settings, Admin
- * - Sign out
+ * - Nav links: Chat, Document library (members only), Settings, Admin
  *
  * This replaces the previous two-sidebar design where conversations
  * were in a separate inner sidebar only visible on the chat page.
@@ -54,11 +53,19 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   adminOnly?: boolean;
+  /** Rendered only for non-admin users (e.g. the document library page). */
+  memberOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/chat",      label: "Chat",      icon: <MessageSquare className="w-4 h-4" /> },
-  { href: "/documents", label: "Documents", icon: <FileText className="w-4 h-4" /> },
+  {
+    href: "/documents",
+    label: "Documents",
+    icon: <FileText className="w-4 h-4" />,
+    // Admins manage documents inside the Admin area instead.
+    memberOnly: true,
+  },
   { href: "/analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
   { href: "/settings",  label: "Settings",  icon: <Settings className="w-4 h-4" /> },
   { href: "/admin",     label: "Admin",     icon: <Shield className="w-4 h-4" />, adminOnly: true },
@@ -96,9 +103,14 @@ export function AppShell({
     ? searchParams.get("conversation")
     : null;
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.adminOnly || user?.is_platform_admin || user?.organization_role === "org_admin"
-  );
+  const isAdmin =
+    user?.is_platform_admin || user?.organization_role === "org_admin";
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.adminOnly) return isAdmin;
+    if (item.memberOnly) return !isAdmin;
+    return true;
+  });
 
   // Load conversations when on chat page
   const loadConversations = useCallback(async () => {
@@ -144,15 +156,28 @@ export function AppShell({
 
   const sidebarContent = (isMobile = false) => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="flex items-center h-14 px-4 border-b border-surface-800 gap-3 flex-shrink-0">
-        <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-brand-600/30 border border-brand-500/40 flex items-center justify-center">
-          {definition.artwork ? (
-            <NinjaArtwork variant={definition.artwork} className="h-6 w-7" />
-          ) : (
-            <Sparkles className="w-4 h-4 text-brand-400" />
-          )}
-        </div>
+      {/* Logo — clicking it expands the mini sidebar; the collapse control lives beside the name */}
+      <div
+        className={cn(
+          "flex items-center h-14 border-b border-surface-800 gap-3 flex-shrink-0",
+          collapsed && !isMobile ? "justify-center px-2" : "px-4"
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          title="Open sidebar"
+          aria-label="Open sidebar"
+          className="flex-shrink-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 hover:bg-brand-600/20 p-1 transition-colors"
+        >
+          <span className="block w-7 h-7 rounded-lg bg-brand-600/30 border border-brand-500/40 flex items-center justify-center">
+            {definition.artwork ? (
+              <NinjaArtwork variant={definition.artwork} className="h-6 w-7" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-brand-400" />
+            )}
+          </span>
+        </button>
         <AnimatePresence>
           {(!collapsed || isMobile) && (
             <motion.span
@@ -165,6 +190,19 @@ export function AppShell({
             </motion.span>
           )}
         </AnimatePresence>
+        {/* Collapse toggle sits beside the app name with a comfortable gap; the
+            mini sidebar keeps only the visible logo. */}
+        {!isMobile && !collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+            className="ml-auto rounded-lg p-1.5 text-surface-400 hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors flex-shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
         {isMobile && (
           <button
             onClick={() => setMobileOpen(false)}
@@ -176,36 +214,36 @@ export function AppShell({
         )}
       </div>
 
-      {/* Nav items */}
-      <nav className="px-2 pt-3 space-y-0.5 flex-shrink-0" aria-label="Main navigation">
-        {visibleItems.map((item) => {
-          const active = pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => isMobile && setMobileOpen(false)}
-              title={collapsed && !isMobile ? item.label : undefined}
-              className={cn(
-                "flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500",
-                active
-                  ? "bg-brand-600/20 text-brand-300"
-                  : "text-surface-400 hover:bg-surface-800 hover:text-surface-100"
-              )}
-              aria-current={active ? "page" : undefined}
-            >
-              <span className="flex-shrink-0">{item.icon}</span>
-              <AnimatePresence>
-                {(!collapsed || isMobile) && (
+      {/* Nav items — fully hidden in the collapsed mini sidebar */}
+      {(!collapsed || isMobile) && (
+        <nav className="px-2 pt-3 space-y-0.5 flex-shrink-0" aria-label="Main navigation">
+          {visibleItems.map((item) => {
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => isMobile && setMobileOpen(false)}
+                title={item.label}
+                className={cn(
+                  "flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500",
+                  active
+                    ? "bg-brand-600/20 text-brand-300"
+                    : "text-surface-400 hover:bg-surface-800 hover:text-surface-100"
+                )}
+                aria-current={active ? "page" : undefined}
+              >
+                <span className="flex-shrink-0">{item.icon}</span>
+                <AnimatePresence>
                   <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     {item.label}
                   </motion.span>
-                )}
-              </AnimatePresence>
-            </Link>
-          );
-        })}
-      </nav>
+                </AnimatePresence>
+              </Link>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Conversations section — shown on chat page */}
       {isOnChat && (!collapsed || isMobile) && (
@@ -252,40 +290,18 @@ export function AppShell({
         </div>
       )}
 
-      {/* Collapsed chat icon — show when sidebar is collapsed but on chat */}
-      {isOnChat && collapsed && !isMobile && (
-        <div className="flex-1 flex flex-col items-center pt-3 border-t border-surface-800/60">
+      {/* Bottom: sign out — hidden with the rest of the mini sidebar */}
+      {(!collapsed || isMobile) && (
+        <div className="p-2 border-t border-surface-800 space-y-1 flex-shrink-0 mt-auto">
           <button
-            onClick={handleNewConversation}
-            title="New conversation"
-            className="p-2 rounded-lg text-brand-400 hover:bg-brand-600/20 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            onClick={() => logout()}
+            className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-surface-400 hover:bg-surface-800 hover:text-surface-100 w-full focus:outline-none focus:ring-2 focus:ring-brand-500"
           >
-            <Plus className="w-4 h-4" />
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            <span>Sign out</span>
           </button>
         </div>
       )}
-
-      {/* Bottom: sign out + collapse toggle */}
-      <div className="p-2 border-t border-surface-800 space-y-1 flex-shrink-0">
-        <button
-          onClick={() => logout()}
-          title={collapsed && !isMobile ? "Sign out" : undefined}
-          className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-surface-400 hover:bg-surface-800 hover:text-surface-100 w-full focus:outline-none focus:ring-2 focus:ring-brand-500"
-        >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
-          {(!collapsed || isMobile) && <span>Sign out</span>}
-        </button>
-        {!isMobile && (
-          <button
-            onClick={() => setCollapsed((c) => !c)}
-            className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-surface-500 hover:bg-surface-800 hover:text-surface-300 w-full focus:outline-none focus:ring-2 focus:ring-brand-500"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <ChevronLeft className={cn("w-4 h-4 transition-transform flex-shrink-0", collapsed && "rotate-180")} />
-            {!collapsed && <span className="text-xs">Collapse</span>}
-          </button>
-        )}
-      </div>
     </div>
   );
 
