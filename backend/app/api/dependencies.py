@@ -125,6 +125,7 @@ async def get_current_user_and_org(
 # Role-checked dependencies
 # ---------------------------------------------------------------------------
 
+
 async def require_user(
     ctx: tuple[User, uuid.UUID, str] = Depends(get_current_user_and_org),
 ) -> tuple[User, uuid.UUID, str]:

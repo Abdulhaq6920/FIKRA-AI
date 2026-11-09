@@ -100,8 +100,7 @@ def _map_groq_error(exc: Exception) -> AppError:
         if exc.status_code == 400:
             # Bad request — likely invalid model or bad input
             return ProviderUnavailableError(
-                "The AI provider rejected the request. "
-                "Please try again later."
+                "The AI provider rejected the request. " "Please try again later."
             )
         return ProviderUnavailableError(f"Provider error: {exc.status_code}")
     logger.exception("groq_unexpected_error", exc_info=exc)
@@ -126,8 +125,7 @@ class GroqClient:
     def __init__(self) -> None:
         if not settings.groq_api_key:
             raise RuntimeError(
-                "GROQ_API_KEY is not configured. "
-                "Set it in .env before starting the application."
+                "GROQ_API_KEY is not configured. " "Set it in .env before starting the application."
             )
         # LangChain owns provider invocation and message interoperability;
         # this wrapper retains the application's error and usage contracts.
@@ -181,9 +179,7 @@ class GroqClient:
                     model=candidate,
                     max_tokens=max_tokens or settings.groq_max_tokens,
                     temperature=(
-                        temperature
-                        if temperature is not None
-                        else settings.groq_temperature
+                        temperature if temperature is not None else settings.groq_temperature
                     ),
                 )
                 start = time.perf_counter()
@@ -267,9 +263,7 @@ class GroqClient:
                     model=candidate,
                     max_tokens=max_tokens or settings.groq_max_tokens,
                     temperature=(
-                        temperature
-                        if temperature is not None
-                        else settings.groq_temperature
+                        temperature if temperature is not None else settings.groq_temperature
                     ),
                 )
                 yielded = False

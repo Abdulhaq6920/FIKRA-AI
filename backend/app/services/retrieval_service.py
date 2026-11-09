@@ -67,6 +67,7 @@ async def retrieve(
     # Lazy import so app starts without sentence-transformers installed
     from app.providers.embeddings import embed_query  # noqa: PLC0415
     from app.providers.reranker import rerank  # noqa: PLC0415
+
     k = top_k or settings.retrieval_top_k
     reranker_n = settings.reranker_top_n
 
@@ -101,7 +102,7 @@ async def retrieve(
 
     # Step 5: Optional reranking
     if settings.reranker_enabled and fused:
-        passages_for_rerank = fused[:min(k, 20)]  # Don't rerank more than 20
+        passages_for_rerank = fused[: min(k, 20)]  # Don't rerank more than 20
         texts = [r.content for r in passages_for_rerank]
         ranked_indices = await asyncio.to_thread(rerank, query, texts, top_n=reranker_n)
         reranked = []
@@ -116,9 +117,7 @@ async def retrieve(
     # 1.0), so the threshold is applied to the vector similarity instead;
     # keyword-only hits have no similarity and are kept.
     filtered = [
-        p
-        for p in fused[:k]
-        if p.similarity is None or p.similarity >= settings.min_relevance_score
+        p for p in fused[:k] if p.similarity is None or p.similarity >= settings.min_relevance_score
     ]
     return filtered
 
@@ -224,9 +223,9 @@ async def _keyword_search(
             Document.organization_id == organization_id,
             Document.status == DocumentStatus.READY,
             Document.is_active == True,  # noqa: E712
-            text(
-                "document_chunks.content_tsv @@ plainto_tsquery('english', :q)"
-            ).bindparams(q=query),
+            text("document_chunks.content_tsv @@ plainto_tsquery('english', :q)").bindparams(
+                q=query
+            ),
             access_condition or true(),
         )
         .order_by(text("score DESC"))

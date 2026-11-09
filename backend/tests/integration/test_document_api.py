@@ -29,7 +29,9 @@ ORG_B = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")
 @pytest.fixture
 async def two_orgs(db_session: AsyncSession):
     for org_id, slug in [(ORG_A, "org-a-docs"), (ORG_B, "org-b-docs")]:
-        org = Organization(id=org_id, name=f"Org {slug}", slug=slug, status=OrganizationStatus.ACTIVE)
+        org = Organization(
+            id=org_id, name=f"Org {slug}", slug=slug, status=OrganizationStatus.ACTIVE
+        )
         db_session.add(org)
     await db_session.flush()
 
@@ -46,7 +48,9 @@ async def admin_user_org_a(db_session: AsyncSession, two_orgs) -> User:
     )
     db_session.add(user)
     await db_session.flush()
-    m = OrganizationMembership(user_id=user.id, organization_id=ORG_A, role=OrgRole.ORG_ADMIN, is_active=True)
+    m = OrganizationMembership(
+        user_id=user.id, organization_id=ORG_A, role=OrgRole.ORG_ADMIN, is_active=True
+    )
     db_session.add(m)
     await db_session.flush()
     return user
@@ -63,16 +67,19 @@ async def admin_user_org_b(db_session: AsyncSession, two_orgs) -> User:
     )
     db_session.add(user)
     await db_session.flush()
-    m = OrganizationMembership(user_id=user.id, organization_id=ORG_B, role=OrgRole.ORG_ADMIN, is_active=True)
+    m = OrganizationMembership(
+        user_id=user.id, organization_id=ORG_B, role=OrgRole.ORG_ADMIN, is_active=True
+    )
     db_session.add(m)
     await db_session.flush()
     return user
 
 
 async def _login(client: AsyncClient, email: str, org_id: uuid.UUID) -> None:
-    res = await client.post("/api/v1/auth/login", json={
-        "email": email, "password": "Admin1234!", "organization_id": str(org_id)
-    })
+    res = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "Admin1234!", "organization_id": str(org_id)},
+    )
     assert res.status_code == 200, f"Login failed: {res.text}"
 
 
@@ -109,9 +116,9 @@ class TestDocumentTenantIsolation:
 
         # Attempt to access Org B's document by ID
         res = await client.get(f"/api/v1/documents/{org_b_doc.id}")
-        assert res.status_code == 404, (
-            f"SECURITY VIOLATION: Org A accessed Org B document. Status: {res.status_code}"
-        )
+        assert (
+            res.status_code == 404
+        ), f"SECURITY VIOLATION: Org A accessed Org B document. Status: {res.status_code}"
 
     async def test_org_a_cannot_delete_org_b_document(
         self,
@@ -139,9 +146,9 @@ class TestDocumentTenantIsolation:
         await _login(client, "admin-a@example.com", ORG_A)
 
         res = await client.delete(f"/api/v1/documents/{org_b_doc.id}")
-        assert res.status_code == 404, (
-            f"SECURITY VIOLATION: Org A deleted Org B document. Status: {res.status_code}"
-        )
+        assert (
+            res.status_code == 404
+        ), f"SECURITY VIOLATION: Org A deleted Org B document. Status: {res.status_code}"
 
     async def test_document_list_only_shows_own_org(
         self,
@@ -156,17 +163,27 @@ class TestDocumentTenantIsolation:
         """
         # Create one document for each org
         doc_a = Document(
-            organization_id=ORG_A, uploaded_by=admin_user_org_a.id,
-            title="Org A Doc", original_filename="a.pdf",
-            storage_path=f"{ORG_A}/a/a.pdf", mime_type="application/pdf",
-            file_extension="pdf", file_size_bytes=100, checksum_sha256="aaa",
+            organization_id=ORG_A,
+            uploaded_by=admin_user_org_a.id,
+            title="Org A Doc",
+            original_filename="a.pdf",
+            storage_path=f"{ORG_A}/a/a.pdf",
+            mime_type="application/pdf",
+            file_extension="pdf",
+            file_size_bytes=100,
+            checksum_sha256="aaa",
             status=DocumentStatus.READY,
         )
         doc_b = Document(
-            organization_id=ORG_B, uploaded_by=admin_user_org_b.id,
-            title="Org B Doc", original_filename="b.pdf",
-            storage_path=f"{ORG_B}/b/b.pdf", mime_type="application/pdf",
-            file_extension="pdf", file_size_bytes=100, checksum_sha256="bbb",
+            organization_id=ORG_B,
+            uploaded_by=admin_user_org_b.id,
+            title="Org B Doc",
+            original_filename="b.pdf",
+            storage_path=f"{ORG_B}/b/b.pdf",
+            mime_type="application/pdf",
+            file_extension="pdf",
+            file_size_bytes=100,
+            checksum_sha256="bbb",
             status=DocumentStatus.READY,
         )
         db_session.add(doc_a)
@@ -181,6 +198,6 @@ class TestDocumentTenantIsolation:
         titles = [d["title"] for d in items]
 
         assert "Org A Doc" in titles, "Org A should see its own document"
-        assert "Org B Doc" not in titles, (
-            "SECURITY VIOLATION: Org A can see Org B's document in list"
-        )
+        assert (
+            "Org B Doc" not in titles
+        ), "SECURITY VIOLATION: Org A can see Org B's document in list"

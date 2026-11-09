@@ -108,9 +108,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = (
             "max-age=63072000; includeSubDomains; preload"
         )
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; frame-ancestors 'none';"
-        )
+        response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
         # Remove headers that leak server information
         if "server" in response.headers:
             del response.headers["server"]

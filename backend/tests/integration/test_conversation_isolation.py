@@ -25,19 +25,25 @@ ORG_B = uuid.UUID("cccccccc-0000-0000-0000-000000000002")
 @pytest.fixture
 async def users_in_two_orgs(db_session: AsyncSession):
     for org_id, slug in [(ORG_A, "conv-org-a"), (ORG_B, "conv-org-b")]:
-        db_session.add(Organization(id=org_id, name=slug, slug=slug, status=OrganizationStatus.ACTIVE))
+        db_session.add(
+            Organization(id=org_id, name=slug, slug=slug, status=OrganizationStatus.ACTIVE)
+        )
     await db_session.flush()
 
     users = {}
     for org_id, email in [(ORG_A, "user-a@example.com"), (ORG_B, "user-b@example.com")]:
         u = User(
-            email=email, email_normalized=email,
+            email=email,
+            email_normalized=email,
             hashed_password=hash_password("UserPass1!"),
-            full_name="Test", status=UserStatus.ACTIVE,
+            full_name="Test",
+            status=UserStatus.ACTIVE,
         )
         db_session.add(u)
         await db_session.flush()
-        m = OrganizationMembership(user_id=u.id, organization_id=org_id, role=OrgRole.MEMBER, is_active=True)
+        m = OrganizationMembership(
+            user_id=u.id, organization_id=org_id, role=OrgRole.MEMBER, is_active=True
+        )
         db_session.add(m)
         await db_session.flush()
         users[str(org_id)] = u
@@ -68,11 +74,14 @@ class TestConversationIsolation:
         await db_session.flush()
 
         # Log in as user_a in org_a
-        login_res = await client.post("/api/v1/auth/login", json={
-            "email": "user-a@example.com",
-            "password": "UserPass1!",
-            "organization_id": str(ORG_A),
-        })
+        login_res = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "user-a@example.com",
+                "password": "UserPass1!",
+                "organization_id": str(ORG_A),
+            },
+        )
         assert login_res.status_code == 200
 
         # Attempt to read Org B's conversation messages
@@ -97,11 +106,14 @@ class TestConversationIsolation:
         db_session.add(conv_b)
         await db_session.flush()
 
-        await client.post("/api/v1/auth/login", json={
-            "email": "user-a@example.com",
-            "password": "UserPass1!",
-            "organization_id": str(ORG_A),
-        })
+        await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "user-a@example.com",
+                "password": "UserPass1!",
+                "organization_id": str(ORG_A),
+            },
+        )
 
         res = await client.delete(f"/api/v1/chat/conversations/{conv_b.id}")
         assert res.status_code == 404, (
@@ -124,19 +136,20 @@ class TestConversationIsolation:
         db_session.add(conv_b)
         await db_session.flush()
 
-        await client.post("/api/v1/auth/login", json={
-            "email": "user-a@example.com",
-            "password": "UserPass1!",
-            "organization_id": str(ORG_A),
-        })
+        await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "user-a@example.com",
+                "password": "UserPass1!",
+                "organization_id": str(ORG_A),
+            },
+        )
 
         res = await client.get("/api/v1/chat/conversations")
         assert res.status_code == 200
         payload = res.json()
-        titles = [
-            c["title"] for c in (payload["items"] if isinstance(payload, dict) else payload)
-        ]
+        titles = [c["title"] for c in (payload["items"] if isinstance(payload, dict) else payload)]
         assert "User A Conv" in titles
-        assert "User B Conv" not in titles, (
-            "SECURITY VIOLATION: User A can see User B's conversation in list"
-        )
+        assert (
+            "User B Conv" not in titles
+        ), "SECURITY VIOLATION: User A can see User B's conversation in list"

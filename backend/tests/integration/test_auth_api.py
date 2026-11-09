@@ -69,35 +69,45 @@ async def test_user(db_session: AsyncSession, test_org: Organization) -> User:
 
 # ─── Tests ────────────────────────────────────────────────────────────────
 
+
 class TestLogin:
     async def test_login_success(self, client: AsyncClient, test_user: User):
-        res = await client.post("/api/v1/auth/login", json={
-            "email": "testuser@example.com",
-            "password": "TestPass1!",
-            "organization_id": str(ORG_ID),
-        })
+        res = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "testuser@example.com",
+                "password": "TestPass1!",
+                "organization_id": str(ORG_ID),
+            },
+        )
         assert res.status_code == 200
         data = res.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"
 
     async def test_login_wrong_password(self, client: AsyncClient, test_user: User):
-        res = await client.post("/api/v1/auth/login", json={
-            "email": "testuser@example.com",
-            "password": "WrongPassword1!",
-            "organization_id": str(ORG_ID),
-        })
+        res = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "testuser@example.com",
+                "password": "WrongPassword1!",
+                "organization_id": str(ORG_ID),
+            },
+        )
         assert res.status_code == 401
         # Must use generic message — no "wrong password" hint
         assert "credential" in res.json()["error"]["message"].lower()
 
     async def test_login_unknown_email(self, client: AsyncClient, test_org: Organization):
         """Unknown email must return the same error as wrong password."""
-        res = await client.post("/api/v1/auth/login", json={
-            "email": "nobody@example.com",
-            "password": "TestPass1!",
-            "organization_id": str(ORG_ID),
-        })
+        res = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "nobody@example.com",
+                "password": "TestPass1!",
+                "organization_id": str(ORG_ID),
+            },
+        )
         assert res.status_code == 401
         # Same error code — no account enumeration
         assert res.json()["error"]["code"] == "AUTHENTICATION_FAILED"
@@ -105,19 +115,25 @@ class TestLogin:
     async def test_login_wrong_org(self, client: AsyncClient, test_user: User):
         """User exists but is not a member of this org."""
         other_org = uuid.uuid4()
-        res = await client.post("/api/v1/auth/login", json={
-            "email": "testuser@example.com",
-            "password": "TestPass1!",
-            "organization_id": str(other_org),
-        })
+        res = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "testuser@example.com",
+                "password": "TestPass1!",
+                "organization_id": str(other_org),
+            },
+        )
         assert res.status_code == 401
 
     async def test_login_sets_httponly_cookie(self, client: AsyncClient, test_user: User):
-        res = await client.post("/api/v1/auth/login", json={
-            "email": "testuser@example.com",
-            "password": "TestPass1!",
-            "organization_id": str(ORG_ID),
-        })
+        res = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "testuser@example.com",
+                "password": "TestPass1!",
+                "organization_id": str(ORG_ID),
+            },
+        )
         assert res.status_code == 200
         # access_token cookie should be set
         cookies = res.cookies
@@ -131,11 +147,14 @@ class TestProtectedEndpoints:
 
     async def test_authenticated_me(self, client: AsyncClient, test_user: User):
         # Login first
-        login_res = await client.post("/api/v1/auth/login", json={
-            "email": "testuser@example.com",
-            "password": "TestPass1!",
-            "organization_id": str(ORG_ID),
-        })
+        login_res = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "testuser@example.com",
+                "password": "TestPass1!",
+                "organization_id": str(ORG_ID),
+            },
+        )
         assert login_res.status_code == 200
 
         # /me should work now (cookie sent automatically)

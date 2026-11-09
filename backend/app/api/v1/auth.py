@@ -218,6 +218,7 @@ async def initiate_password_reset(
         # TODO: send email with reset link containing the token
         # For development: log the token (never do this in production!)
         from app.core.logging import get_logger
+
         logger = get_logger(__name__)
         if settings.debug:
             logger.warning("dev_password_reset_token", token=token)
@@ -240,6 +241,4 @@ async def complete_password_reset(
 async def get_me(ctx: CurrentUser) -> UserPublic:
     """Return the authenticated user's profile."""
     user, org_id, role = ctx
-    return UserPublic.model_validate(user).model_copy(
-        update={"organization_role": role}
-    )
+    return UserPublic.model_validate(user).model_copy(update={"organization_role": role})

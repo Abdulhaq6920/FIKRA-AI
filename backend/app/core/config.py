@@ -97,6 +97,7 @@ class Settings(BaseSettings):
             v = v.strip()
             if v.startswith("["):
                 import json
+
                 origins = json.loads(v)
             else:
                 origins = [o.strip() for o in v.split(",") if o.strip()]
@@ -138,9 +139,29 @@ class Settings(BaseSettings):
     # Keep this allow-list explicit: uploads are untrusted input.
     allowed_extensions: list[str] = Field(
         default=[
-            "pdf", "docx", "odt", "pptx", "odp", "xlsx", "xls", "ods", "csv", "tsv",
-            "md", "markdown", "html", "htm", "txt", "rtf",
-            "png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff",
+            "pdf",
+            "docx",
+            "odt",
+            "pptx",
+            "odp",
+            "xlsx",
+            "xls",
+            "ods",
+            "csv",
+            "tsv",
+            "md",
+            "markdown",
+            "html",
+            "htm",
+            "txt",
+            "rtf",
+            "png",
+            "jpg",
+            "jpeg",
+            "webp",
+            "bmp",
+            "tif",
+            "tiff",
         ]
     )
     upload_dir: str = Field(default="./uploads")
@@ -152,6 +173,7 @@ class Settings(BaseSettings):
             v = v.strip()
             if v.startswith("["):
                 import json
+
                 return [e.strip().lower() for e in json.loads(v)]
             return [e.strip().lower() for e in v.split(",") if e.strip()]
         return v
@@ -203,9 +225,7 @@ class Settings(BaseSettings):
     # Every other organization ID must be provisioned by an admin
     # (admin_users.py), otherwise anyone who learns an org UUID could
     # mint themselves a membership. Comma-separated env var.
-    public_signup_org_ids: str = Field(
-        default="00000000-0000-0000-0000-000000000001"
-    )
+    public_signup_org_ids: str = Field(default="00000000-0000-0000-0000-000000000001")
 
     # ------------------------------------------------------------------
     # Logging
@@ -263,9 +283,8 @@ class Settings(BaseSettings):
                     "jwt_secret_key must be a real secret of at least 32 "
                     "characters in production"
                 )
-            if (
-                self.llm_provider == "groq"
-                and (not self.groq_api_key or self.groq_api_key.startswith("gsk_CHANGE"))
+            if self.llm_provider == "groq" and (
+                not self.groq_api_key or self.groq_api_key.startswith("gsk_CHANGE")
             ):
                 raise ValueError("groq_api_key must be set in production")
         return self

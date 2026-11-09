@@ -78,11 +78,7 @@ def _citation_elements() -> Any:
         (func.jsonb_typeof(Message.citations) == "array", Message.citations),
         else_=text("'[]'::jsonb"),
     )
-    return (
-        func.jsonb_array_elements(safe_array)
-        .table_valued("value")
-        .alias("citation")
-    )
+    return func.jsonb_array_elements(safe_array).table_valued("value").alias("citation")
 
 
 # ─── Summary / activity ───────────────────────────────────────────────────
@@ -123,9 +119,7 @@ async def build_summary(
 
     total_questions = _int(
         await db.scalar(
-            select(func.count(Message.id)).where(
-                *msg_filters, Message.role == MessageRole.USER
-            )
+            select(func.count(Message.id)).where(*msg_filters, Message.role == MessageRole.USER)
         )
     )
     total_conversations = _int(
@@ -222,9 +216,7 @@ async def daily_activity(
 ) -> list[DailyPoint]:
     """Questions asked and tokens consumed per day, zero-filled."""
     end = datetime.now(timezone.utc)
-    start = (end - timedelta(days=days - 1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    start = (end - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
     filters = [
         Message.organization_id == organization_id,
@@ -285,9 +277,7 @@ async def top_sources(
     """Documents most often cited in assistant answers."""
     citation = _citation_elements()
     document_id = citation.c.value.op("->>")("document_id").label("document_id")
-    document_title = citation.c.value.op("->>")("document_title").label(
-        "document_title"
-    )
+    document_title = citation.c.value.op("->>")("document_title").label("document_title")
     filters = [
         Message.organization_id == organization_id,
         Message.role == MessageRole.ASSISTANT,
@@ -360,9 +350,7 @@ def _question_select(
         filters.append(Message.user_id == user_id)
     if search:
         term = f"%{search.strip()}%"
-        filters.append(
-            or_(Message.content.ilike(term), Conversation.title.ilike(term))
-        )
+        filters.append(or_(Message.content.ilike(term), Conversation.title.ilike(term)))
 
     return (
         select(
@@ -412,9 +400,7 @@ async def count_questions(
         filters.append(Message.user_id == user_id)
     if search:
         term = f"%{search.strip()}%"
-        filters.append(
-            or_(Message.content.ilike(term), Conversation.title.ilike(term))
-        )
+        filters.append(or_(Message.content.ilike(term), Conversation.title.ilike(term)))
     stmt = (
         select(func.count(Message.id))
         .join(Conversation, Conversation.id == Message.conversation_id)
@@ -467,9 +453,7 @@ async def list_questions(
         offset=(page - 1) * page_size,
         limit=page_size,
     )
-    total = await count_questions(
-        db, organization_id, user_id=user_id, search=search
-    )
+    total = await count_questions(db, organization_id, user_id=user_id, search=search)
     return [_question_item(row) for row in rows], total
 
 
@@ -555,17 +539,11 @@ def _build_source(
         chunk_id=chunk_id,
         retrieval_method=citation.get("retrieval_method"),
         similarity=(
-            float(citation["similarity"])
-            if citation.get("similarity") is not None
-            else None
+            float(citation["similarity"]) if citation.get("similarity") is not None else None
         ),
-        document_original_filename=(
-            document.original_filename if document is not None else None
-        ),
+        document_original_filename=(document.original_filename if document is not None else None),
         document_mime_type=document.mime_type if document is not None else None,
-        document_status=(
-            document.status.value if document is not None else None
-        ),
+        document_status=(document.status.value if document is not None else None),
         chunk_content=chunk.content if chunk is not None else None,
         chunk_token_count=chunk.token_count if chunk is not None else None,
     )
@@ -617,12 +595,8 @@ async def recent_questions(
     user_id: uuid.UUID,
     limit: int = 8,
 ) -> list[RecentQuestion]:
-    rows = await _question_rows(
-        db, organization_id, user_id=user_id, limit=limit
-    )
-    citation_lists = [
-        list(row[3].citations or []) if row[3] is not None else [] for row in rows
-    ]
+    rows = await _question_rows(db, organization_id, user_id=user_id, limit=limit)
+    citation_lists = [list(row[3].citations or []) if row[3] is not None else [] for row in rows]
     documents, chunks = await _source_maps(db, organization_id, citation_lists)
     answer_ids = [row[3].id for row in rows if row[3] is not None]
     feedback = await _feedback_map(db, answer_ids)
@@ -641,21 +615,15 @@ async def recent_questions(
                 answered_at=reply.created_at if reply is not None else None,
                 model_used=reply.model_used if reply is not None else None,
                 input_tokens=_int(reply.input_tokens) if reply is not None else 0,
-                output_tokens=(
-                    _int(reply.output_tokens) if reply is not None else 0
-                ),
+                output_tokens=(_int(reply.output_tokens) if reply is not None else 0),
                 cost_usd=(
-                    _cost_usd(
-                        _int(reply.input_tokens), _int(reply.output_tokens)
-                    )
+                    _cost_usd(_int(reply.input_tokens), _int(reply.output_tokens))
                     if reply is not None
                     else 0.0
                 ),
                 latency_ms=reply.latency_ms if reply is not None else None,
                 sources=_build_sources(citations, documents, chunks),
-                feedback=(
-                    feedback.get(reply.id, []) if reply is not None else []
-                ),
+                feedback=(feedback.get(reply.id, []) if reply is not None else []),
             )
         )
     return recent
@@ -697,17 +665,11 @@ async def question_detail(
     citations = list(reply.citations or []) if reply is not None else []
     documents, chunks = await _source_maps(db, organization_id, [citations])
     sources = _build_sources(citations, documents, chunks)
-    feedback = (
-        (await _feedback_map(db, [reply.id])).get(reply.id, [])
-        if reply is not None
-        else []
-    )
+    feedback = (await _feedback_map(db, [reply.id])).get(reply.id, []) if reply is not None else []
 
     usage: UsageRecord | None = None
     if reply is not None:
-        usage = await db.scalar(
-            select(UsageRecord).where(UsageRecord.message_id == reply.id)
-        )
+        usage = await db.scalar(select(UsageRecord).where(UsageRecord.message_id == reply.id))
         if usage is None:
             usage = await db.scalar(
                 select(UsageRecord)
@@ -735,11 +697,7 @@ async def question_detail(
             status="complete" if sources else "empty",
             detail=(
                 f"{len(sources)} source(s)"
-                + (
-                    f" · {retrieval_latency} ms"
-                    if retrieval_latency is not None
-                    else ""
-                )
+                + (f" · {retrieval_latency} ms" if retrieval_latency is not None else "")
             ),
         ),
         FlowStep(
@@ -824,8 +782,7 @@ def _user_stats_select(organization_id: uuid.UUID) -> Any:
         select(
             func.coalesce(
                 func.sum(
-                    func.coalesce(Message.input_tokens, 0)
-                    + func.coalesce(Message.output_tokens, 0)
+                    func.coalesce(Message.input_tokens, 0) + func.coalesce(Message.output_tokens, 0)
                 ),
                 0,
             )
@@ -955,9 +912,7 @@ async def user_analytics_rows(
     )
     if search:
         term = f"%{search.strip().lower()}%"
-        stmt = stmt.where(
-            or_(User.full_name.ilike(term), User.email_normalized.ilike(term))
-        )
+        stmt = stmt.where(or_(User.full_name.ilike(term), User.email_normalized.ilike(term)))
         count_stmt = count_stmt.where(
             or_(User.full_name.ilike(term), User.email_normalized.ilike(term))
         )
@@ -966,9 +921,7 @@ async def user_analytics_rows(
     last_active = stmt.selected_columns.last_active
     rows = (
         await db.execute(
-            stmt.order_by(
-                desc(last_active).nulls_last(), User.full_name.asc()
-            )
+            stmt.order_by(desc(last_active).nulls_last(), User.full_name.asc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -1057,13 +1010,9 @@ async def list_documents(
         filters.append(Document.status == status)
     if search:
         term = f"%{search.strip()}%"
-        filters.append(
-            or_(Document.title.ilike(term), Document.original_filename.ilike(term))
-        )
+        filters.append(or_(Document.title.ilike(term), Document.original_filename.ilike(term)))
 
-    total = _int(
-        await db.scalar(select(func.count(Document.id)).where(*filters))
-    )
+    total = _int(await db.scalar(select(func.count(Document.id)).where(*filters)))
     rows = (
         await db.execute(
             select(
@@ -1108,26 +1057,34 @@ async def document_detail(
     base = _document_row(row)
 
     jobs = (
-        await db.execute(
-            select(DocumentProcessingJob)
-            .where(
-                DocumentProcessingJob.document_id == document.id,
-                DocumentProcessingJob.organization_id == organization_id,
+        (
+            await db.execute(
+                select(DocumentProcessingJob)
+                .where(
+                    DocumentProcessingJob.document_id == document.id,
+                    DocumentProcessingJob.organization_id == organization_id,
+                )
+                .order_by(DocumentProcessingJob.created_at.desc())
             )
-            .order_by(DocumentProcessingJob.created_at.desc())
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     chunks = (
-        await db.execute(
-            select(DocumentChunk)
-            .where(
-                DocumentChunk.document_id == document.id,
-                DocumentChunk.organization_id == organization_id,
+        (
+            await db.execute(
+                select(DocumentChunk)
+                .where(
+                    DocumentChunk.document_id == document.id,
+                    DocumentChunk.organization_id == organization_id,
+                )
+                .order_by(DocumentChunk.chunk_index.asc())
+                .limit(10)
             )
-            .order_by(DocumentChunk.chunk_index.asc())
-            .limit(10)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return AdminDocumentDetailOut(
         **base.model_dump(),

@@ -31,12 +31,16 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(512), default="New Conversation", nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
@@ -47,7 +51,9 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     )
     owner: Mapped["User"] = relationship("User", back_populates="conversations")  # noqa: F821
     messages: Mapped[list["Message"]] = relationship(
-        "Message", back_populates="conversation", cascade="all, delete-orphan",
+        "Message",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
         order_by="Message.created_at",
     )
     summaries: Mapped[list["ConversationSummary"]] = relationship(
@@ -62,16 +68,22 @@ class Message(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "messages"
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     role: Mapped[MessageRole] = mapped_column(
         Enum(MessageRole, name="message_role", values_callable=_vc), nullable=False
@@ -96,12 +108,16 @@ class ConversationSummary(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "conversation_summaries"
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     summary_text: Mapped[str] = mapped_column(Text, nullable=False)
     covers_up_to_message_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -124,22 +140,30 @@ class Feedback(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "feedback"
 
     message_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     feedback_type: Mapped[FeedbackType] = mapped_column(
         Enum(FeedbackType, name="feedback_type", values_callable=_vc), nullable=False
     )
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    review_status: Mapped[str] = mapped_column(String(32), default="open", nullable=False, index=True)
+    review_status: Mapped[str] = mapped_column(
+        String(32), default="open", nullable=False, index=True
+    )
     admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

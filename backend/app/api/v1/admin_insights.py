@@ -58,9 +58,7 @@ async def organization_analytics(
     summary = await build_summary(db, org_id, include_admin=True)
     daily = await daily_activity(db, org_id, days=days)
     sources = await top_sources(db, org_id)
-    users = await user_analytics_rows(
-        db, org_id, search=search, page=page, page_size=page_size
-    )
+    users = await user_analytics_rows(db, org_id, search=search, page=page, page_size=page_size)
     return OrgAnalyticsOut(
         summary=summary,
         daily=daily,
@@ -69,9 +67,7 @@ async def organization_analytics(
     )
 
 
-@router.get(
-    "/analytics/users/{user_id}", response_model=UserAnalyticsDetailOut
-)
+@router.get("/analytics/users/{user_id}", response_model=UserAnalyticsDetailOut)
 async def organization_user_analytics(
     user_id: uuid.UUID,
     ctx: OrgAdminUser,
@@ -121,9 +117,7 @@ async def admin_questions(
         page=page,
         page_size=page_size,
     )
-    return QuestionListResponse(
-        items=items, total=total, page=page, page_size=page_size
-    )
+    return QuestionListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/questions/{message_id}", response_model=QuestionDetailOut)
@@ -158,14 +152,10 @@ async def admin_documents(
     items, total = await list_documents(
         db, org_id, search=search, status=status, page=page, page_size=page_size
     )
-    return AdminDocumentListResponse(
-        items=items, total=total, page=page, page_size=page_size
-    )
+    return AdminDocumentListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
-@router.get(
-    "/documents/{document_id}", response_model=AdminDocumentDetailOut
-)
+@router.get("/documents/{document_id}", response_model=AdminDocumentDetailOut)
 async def admin_document_detail(
     document_id: uuid.UUID,
     ctx: OrgAdminUser,

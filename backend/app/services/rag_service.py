@@ -89,7 +89,7 @@ class Citation:
     document_title: str
     page_number: int | None
     section_heading: str | None
-    excerpt: str       # Short representative quote
+    excerpt: str  # Short representative quote
     # Retrieval provenance (optional so historical rows still parse).
     chunk_id: str | None = None
     retrieval_method: str | None = None
@@ -279,8 +279,8 @@ class RAGService:
             select(Conversation).where(
                 Conversation.id == conversation_id,
                 Conversation.organization_id == organization_id,  # tenant check
-                Conversation.user_id == user_id,                  # ownership check
-                Conversation.is_active == True,                   # noqa: E712
+                Conversation.user_id == user_id,  # ownership check
+                Conversation.is_active == True,  # noqa: E712
             )
         )
         if conv is None:
@@ -309,6 +309,7 @@ class RAGService:
 # ---------------------------------------------------------------------------
 # Context and prompt construction
 # ---------------------------------------------------------------------------
+
 
 def _clip_text(text: str, max_chars: int) -> str:
     """Trim text to a character budget without cutting mid-word."""
@@ -354,13 +355,9 @@ def _build_context(
     if not passages:
         return "No relevant document excerpts were found.", {}
 
-    passage_limit = (
-        settings.rag_context_max_passages if max_passages is None else max_passages
-    )
+    passage_limit = settings.rag_context_max_passages if max_passages is None else max_passages
     char_limit = (
-        settings.rag_context_chars_per_passage
-        if chars_per_passage is None
-        else chars_per_passage
+        settings.rag_context_chars_per_passage if chars_per_passage is None else chars_per_passage
     )
 
     lines = ["--- DOCUMENT CONTEXT ---"]
@@ -400,9 +397,7 @@ def _build_history(
     clipped. History never starts with an assistant message because the prompt
     already supplies the current human question.
     """
-    message_limit = (
-        settings.rag_history_max_messages if max_messages is None else max_messages
-    )
+    message_limit = settings.rag_history_max_messages if max_messages is None else max_messages
     token_limit = settings.rag_history_max_tokens if max_tokens is None else max_tokens
     candidates = recent_messages[-message_limit:] if message_limit else []
 
@@ -423,9 +418,7 @@ def _build_history(
             if not content:
                 break
         history.append(
-            AIMessage(content=content)
-            if is_assistant
-            else HumanMessage(content=content)
+            AIMessage(content=content) if is_assistant else HumanMessage(content=content)
         )
         used_tokens += tokens
 
@@ -484,6 +477,7 @@ def _extract_citations(
     The model cannot invent document IDs or titles through this approach.
     """
     import re
+
     cited_numbers = {int(m) for m in re.findall(r"\[Source\s+(\d+)\]", answer)}
 
     citations = []

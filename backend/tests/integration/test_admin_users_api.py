@@ -231,9 +231,7 @@ class TestListUsers:
         assert res.status_code == 200
         assert [item["email"] for item in res.json()["items"]] == [inactive.email]
 
-    async def test_non_admin_is_forbidden(
-        self, client: AsyncClient, member_user: User
-    ):
+    async def test_non_admin_is_forbidden(self, client: AsyncClient, member_user: User):
         await _login(client, member_user.email)
         res = await client.get("/api/v1/admin/users")
         assert res.status_code == 403
@@ -288,9 +286,7 @@ class TestCreateUser:
         assert audit.organization_id == ORG_ID
         assert "password" not in str(audit.details).lower()
 
-    async def test_create_admin_role(
-        self, client: AsyncClient, admin_user: User
-    ):
+    async def test_create_admin_role(self, client: AsyncClient, admin_user: User):
         await _login(client, admin_user.email)
         res = await client.post(
             "/api/v1/admin/users",
@@ -320,9 +316,7 @@ class TestCreateUser:
         assert res.status_code == 409
         assert res.json()["error"]["code"] == "EMAIL_ALREADY_EXISTS"
 
-    async def test_invalid_payload_returns_422(
-        self, client: AsyncClient, admin_user: User
-    ):
+    async def test_invalid_payload_returns_422(self, client: AsyncClient, admin_user: User):
         await _login(client, admin_user.email)
         res = await client.post(
             "/api/v1/admin/users",
@@ -355,16 +349,12 @@ class TestUpdateUser:
         assert data["full_name"] == "Renamed Member"
         assert data["role"] == "admin"
 
-        res = await client.patch(
-            f"/api/v1/admin/users/{member_user.id}", json={"is_active": False}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{member_user.id}", json={"is_active": False})
         assert res.status_code == 200, res.text
         assert res.json()["is_active"] is False
         assert res.json()["account_status"] == "disabled"
 
-        res = await client.patch(
-            f"/api/v1/admin/users/{member_user.id}", json={"is_active": True}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{member_user.id}", json={"is_active": True})
         assert res.status_code == 200
         assert res.json()["is_active"] is True
         assert res.json()["account_status"] == "active"
@@ -376,28 +366,18 @@ class TestUpdateUser:
         self, client: AsyncClient, admin_user: User, member_user: User
     ):
         await _login(client, admin_user.email)
-        res = await client.patch(
-            f"/api/v1/admin/users/{member_user.id}", json={}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{member_user.id}", json={})
         assert res.status_code == 422
 
-    async def test_cannot_change_own_role(
-        self, client: AsyncClient, admin_user: User
-    ):
+    async def test_cannot_change_own_role(self, client: AsyncClient, admin_user: User):
         await _login(client, admin_user.email)
-        res = await client.patch(
-            f"/api/v1/admin/users/{admin_user.id}", json={"role": "member"}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{admin_user.id}", json={"role": "member"})
         assert res.status_code == 403
         assert res.json()["error"]["code"] == "PERMISSION_DENIED"
 
-    async def test_cannot_deactivate_self(
-        self, client: AsyncClient, admin_user: User
-    ):
+    async def test_cannot_deactivate_self(self, client: AsyncClient, admin_user: User):
         await _login(client, admin_user.email)
-        res = await client.patch(
-            f"/api/v1/admin/users/{admin_user.id}", json={"is_active": False}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{admin_user.id}", json={"is_active": False})
         assert res.status_code == 403
 
     async def test_cannot_demote_last_active_admin(
@@ -405,9 +385,7 @@ class TestUpdateUser:
     ):
         """A non-org-admin actor must not remove the final active org admin."""
         await _login(client, platform_admin_user.email)
-        res = await client.patch(
-            f"/api/v1/admin/users/{admin_user.id}", json={"role": "member"}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{admin_user.id}", json={"role": "member"})
         assert res.status_code == 409
         assert res.json()["error"]["code"] == "CONFLICT"
 
@@ -438,22 +416,16 @@ class TestUpdateUser:
         assert res.status_code == 404
         assert res.json()["error"]["code"] == "USER_NOT_FOUND"
 
-    async def test_unknown_user_returns_404(
-        self, client: AsyncClient, admin_user: User
-    ):
+    async def test_unknown_user_returns_404(self, client: AsyncClient, admin_user: User):
         await _login(client, admin_user.email)
-        res = await client.patch(
-            f"/api/v1/admin/users/{uuid.uuid4()}", json={"full_name": "Ghost"}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{uuid.uuid4()}", json={"full_name": "Ghost"})
         assert res.status_code == 404
 
     async def test_member_cannot_manage_users(
         self, client: AsyncClient, member_user: User, admin_user: User
     ):
         await _login(client, member_user.email)
-        res = await client.patch(
-            f"/api/v1/admin/users/{admin_user.id}", json={"full_name": "Nope"}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{admin_user.id}", json={"full_name": "Nope"})
         assert res.status_code == 403
 
 
@@ -557,9 +529,7 @@ class TestDeactivation:
         assert session is not None and session.is_revoked is False
 
         await _login(client, admin_user.email)
-        res = await client.patch(
-            f"/api/v1/admin/users/{member_user.id}", json={"is_active": False}
-        )
+        res = await client.patch(f"/api/v1/admin/users/{member_user.id}", json={"is_active": False})
         assert res.status_code == 200
         await db_session.refresh(session)
         assert session.is_revoked is True

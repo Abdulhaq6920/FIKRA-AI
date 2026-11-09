@@ -30,7 +30,11 @@ async def list_notifications(
         Notification.recipient_user_id == user.id,
     )
     total = await db.scalar(select(func.count()).select_from(base.subquery()))
-    rows = await db.execute(base.order_by(Notification.created_at.desc()).offset((page - 1) * page_size).limit(page_size))
+    rows = await db.execute(
+        base.order_by(Notification.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
     unread = await db.scalar(
         select(func.count(Notification.id)).where(
             Notification.organization_id == org_id,
@@ -54,11 +58,13 @@ async def mark_read(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     user, org_id, _role = ctx
-    item = await db.scalar(select(Notification).where(
-        Notification.id == notification_id,
-        Notification.organization_id == org_id,
-        Notification.recipient_user_id == user.id,
-    ))
+    item = await db.scalar(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.organization_id == org_id,
+            Notification.recipient_user_id == user.id,
+        )
+    )
     if item is None:
         raise PermissionDeniedError("Notification not found.")
     item.is_read = True

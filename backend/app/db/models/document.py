@@ -39,12 +39,16 @@ class Document(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "documents"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -55,11 +59,14 @@ class Document(UUIDMixin, TimestampMixin, Base):
     checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus, name="document_status", values_callable=_vc),
-        default=DocumentStatus.PENDING, nullable=False, index=True,
+        default=DocumentStatus.PENDING,
+        nullable=False,
+        index=True,
     )
     access_level: Mapped[DocumentAccessLevel] = mapped_column(
         Enum(DocumentAccessLevel, name="document_access_level", values_callable=_vc),
-        default=DocumentAccessLevel.ORGANIZATION, nullable=False,
+        default=DocumentAccessLevel.ORGANIZATION,
+        nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -88,12 +95,16 @@ class DocumentChunk(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "document_chunks"
 
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -126,17 +137,23 @@ class DocumentProcessingJob(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "document_processing_jobs"
 
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     status: Mapped[JobStatus] = mapped_column(
         Enum(JobStatus, name="job_status", values_callable=_vc),
-        default=JobStatus.PENDING, nullable=False, index=True,
+        default=JobStatus.PENDING,
+        nullable=False,
+        index=True,
     )
     attempt_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)

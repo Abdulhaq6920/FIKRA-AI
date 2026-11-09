@@ -37,7 +37,9 @@ async def reset() -> None:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     await engine.dispose()
-    print("\nDatabase reset complete. Run 'alembic stamp head' to mark migrations as current.")
+    print(
+        "\nDatabase reset complete. Run 'alembic stamp head' to mark migrations as current."
+    )
 
 
 if __name__ == "__main__":

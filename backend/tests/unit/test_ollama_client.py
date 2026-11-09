@@ -118,10 +118,7 @@ async def test_generate_stream_yields_ollama_message_content() -> None:
     )
     client = OllamaClient()
     chunks = [
-        chunk
-        async for chunk in client.generate_stream(
-            [ChatMessage(role="user", content="hello")]
-        )
+        chunk async for chunk in client.generate_stream([ChatMessage(role="user", content="hello")])
     ]
 
     assert chunks == ["Hello ", "there"]

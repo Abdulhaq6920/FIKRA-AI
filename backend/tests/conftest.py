@@ -64,12 +64,14 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 # HTTP client
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """
     HTTPX async client wired to the FastAPI app.
     The database dependency is overridden to use the test session.
     """
+
     async def override_get_db():
         yield db_session
 

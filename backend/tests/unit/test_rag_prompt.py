@@ -32,9 +32,7 @@ class TestBuildContext:
     def test_caps_passages_and_keeps_source_numbers_contiguous(self) -> None:
         passages = [_make_passage(i) for i in range(1, 11)]
 
-        context, source_map = _build_context(
-            passages, max_passages=3, chars_per_passage=200
-        )
+        context, source_map = _build_context(passages, max_passages=3, chars_per_passage=200)
 
         assert list(source_map) == [1, 2, 3]
         assert source_map[1] is passages[0]
@@ -44,9 +42,7 @@ class TestBuildContext:
     def test_clips_long_passages(self) -> None:
         passage = _make_passage(1, content="word " * 400)
 
-        context, source_map = _build_context(
-            [passage], max_passages=1, chars_per_passage=50
-        )
+        context, source_map = _build_context([passage], max_passages=1, chars_per_passage=50)
 
         assert source_map[1] is passage
         assert len(context) < 300

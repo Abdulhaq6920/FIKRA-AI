@@ -117,9 +117,7 @@ async def admin_user(db_session: AsyncSession) -> User:
     return user
 
 
-async def _stream_answer(
-    client: AsyncClient, conversation_id: str, question: str
-) -> dict:
+async def _stream_answer(client: AsyncClient, conversation_id: str, question: str) -> dict:
     """Run the streaming endpoint and return the parsed ``meta`` payload."""
     res = await client.post(
         "/api/v1/chat/ask/stream",
@@ -151,9 +149,7 @@ async def test_stream_persists_citations_and_usage(
     fastapi_app.dependency_overrides[get_llm_client] = lambda: object()
 
     try:
-        created = await client.post(
-            "/api/v1/chat/conversations", json={"title": "Streaming test"}
-        )
+        created = await client.post("/api/v1/chat/conversations", json={"title": "Streaming test"})
         assert created.status_code == 201, created.text
         conversation_id = created.json()["id"]
 
@@ -196,9 +192,7 @@ async def test_stream_persists_citations_and_usage(
         assert usage.total_tokens == 160
         assert usage.request_latency_ms == 800
 
-        conversation = await db_session.get(
-            Conversation, uuid.UUID(conversation_id)
-        )
+        conversation = await db_session.get(Conversation, uuid.UUID(conversation_id))
         assert conversation is not None
         assert conversation.message_count == 2
 
@@ -216,9 +210,7 @@ async def test_stream_persists_citations_and_usage(
         assert recent[0]["sources"][0]["document_title"] == "Leave Policy"
 
         # Admin drill-down shows the flow and enriched source provenance.
-        detail = await client.get(
-            f"/api/v1/admin/questions/{meta['user_message_id']}"
-        )
+        detail = await client.get(f"/api/v1/admin/questions/{meta['user_message_id']}")
         assert detail.status_code == 200, detail.text
         body = detail.json()
         assert body["answer"] == "Leave requests need two weeks of notice."

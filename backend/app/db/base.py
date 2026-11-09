@@ -22,6 +22,7 @@ def _utcnow() -> datetime:
 
 class Base(DeclarativeBase):
     """Shared declarative base for all ORM models."""
+
     pass
 
 

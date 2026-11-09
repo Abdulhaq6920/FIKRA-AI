@@ -140,9 +140,8 @@ async def list_members(
     if search:
         term = f"%{search.lower()}%"
         from sqlalchemy import or_
-        base = base.where(
-            or_(User.full_name.ilike(term), User.email_normalized.ilike(term))
-        )
+
+        base = base.where(or_(User.full_name.ilike(term), User.email_normalized.ilike(term)))
 
     total = await db.scalar(select(func.count()).select_from(base.subquery()))
     rows = await db.execute(
@@ -153,14 +152,16 @@ async def list_members(
     items = []
     for member, membership in rows.all():
         is_admin = member.is_platform_admin or membership.role == OrgRole.ORG_ADMIN
-        items.append({
-            "id": str(member.id),
-            "full_name": member.full_name,
-            "email": member.email,
-            "role": "admin" if is_admin else "member",
-            "status": member.status.value,
-            "joined_at": membership.created_at.isoformat(),
-        })
+        items.append(
+            {
+                "id": str(member.id),
+                "full_name": member.full_name,
+                "email": member.email,
+                "role": "admin" if is_admin else "member",
+                "status": member.status.value,
+                "joined_at": membership.created_at.isoformat(),
+            }
+        )
     return {"items": items, "total": total or 0, "page": page, "page_size": page_size}
 
 
@@ -182,18 +183,27 @@ async def list_feedback(
     if status:
         base = base.where(Feedback.review_status == status)
     total = await db.scalar(select(func.count()).select_from(base.subquery()))
-    rows = await db.execute(base.order_by(Feedback.created_at.desc()).offset((page - 1) * page_size).limit(page_size))
+    rows = await db.execute(
+        base.order_by(Feedback.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )
     return {
         "items": [
             {
-                "id": str(item.id), "feedback_type": item.feedback_type.value,
-                "comment": item.comment, "review_status": item.review_status,
-                "admin_note": item.admin_note, "user_name": name, "user_email": email,
-                "message_excerpt": message[:240], "created_at": item.created_at.isoformat(),
+                "id": str(item.id),
+                "feedback_type": item.feedback_type.value,
+                "comment": item.comment,
+                "review_status": item.review_status,
+                "admin_note": item.admin_note,
+                "user_name": name,
+                "user_email": email,
+                "message_excerpt": message[:240],
+                "created_at": item.created_at.isoformat(),
             }
             for item, name, email, message in rows.all()
         ],
-        "total": total or 0, "page": page, "page_size": page_size,
+        "total": total or 0,
+        "page": page,
+        "page_size": page_size,
     }
 
 
@@ -205,20 +215,29 @@ async def review_feedback(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     admin, org_id, _role = ctx
-    item = await db.scalar(select(Feedback).where(Feedback.id == feedback_id, Feedback.organization_id == org_id))
+    item = await db.scalar(
+        select(Feedback).where(Feedback.id == feedback_id, Feedback.organization_id == org_id)
+    )
     if item is None:
         from app.core.exceptions import PermissionDeniedError
+
         raise PermissionDeniedError("Feedback not found.")
     item.review_status = body.status
     item.admin_note = body.note
     item.reviewed_by = admin.id
     item.reviewed_at = datetime.now(timezone.utc)
-    db.add(Notification(
-        organization_id=org_id, recipient_user_id=item.user_id, notification_type="feedback_update",
-        title="Your feedback was updated",
-        body="Your feedback is being reviewed." if body.status == "in_review" else "Your feedback was marked as solved.",
-        link="/chat",
-    ))
+    db.add(
+        Notification(
+            organization_id=org_id,
+            recipient_user_id=item.user_id,
+            notification_type="feedback_update",
+            title="Your feedback was updated",
+            body="Your feedback is being reviewed."
+            if body.status == "in_review"
+            else "Your feedback was marked as solved.",
+            link="/chat",
+        )
+    )
     await db.commit()
     return {"status": body.status}
 
@@ -232,16 +251,32 @@ async def list_access_requests(
     status: str | None = Query(default=None, pattern="^(pending|approved|rejected)$"),
 ) -> dict:
     _admin, org_id, _role = ctx
-    base = select(RoleRequest, User.full_name, User.email).join(User, User.id == RoleRequest.requested_by).where(RoleRequest.organization_id == org_id)
+    base = (
+        select(RoleRequest, User.full_name, User.email)
+        .join(User, User.id == RoleRequest.requested_by)
+        .where(RoleRequest.organization_id == org_id)
+    )
     if status:
         base = base.where(RoleRequest.status == RoleRequestStatus(status))
     total = await db.scalar(select(func.count()).select_from(base.subquery()))
-    rows = await db.execute(base.order_by(RoleRequest.created_at.desc()).offset((page - 1) * page_size).limit(page_size))
+    rows = await db.execute(
+        base.order_by(RoleRequest.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )
     return {
         "items": [
-            {"id": str(request.id), "user_name": name, "user_email": email, "reason": request.reason, "status": request.status.value, "created_at": request.created_at.isoformat()}
+            {
+                "id": str(request.id),
+                "user_name": name,
+                "user_email": email,
+                "reason": request.reason,
+                "status": request.status.value,
+                "created_at": request.created_at.isoformat(),
+            }
             for request, name, email in rows.all()
-        ], "total": total or 0, "page": page, "page_size": page_size,
+        ],
+        "total": total or 0,
+        "page": page,
+        "page_size": page_size,
     }
 
 
@@ -253,26 +288,43 @@ async def decide_access_request(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     admin, org_id, _role = ctx
-    request = await db.scalar(select(RoleRequest).where(RoleRequest.id == request_id, RoleRequest.organization_id == org_id))
+    request = await db.scalar(
+        select(RoleRequest).where(
+            RoleRequest.id == request_id, RoleRequest.organization_id == org_id
+        )
+    )
     if request is None or request.status != RoleRequestStatus.PENDING:
         from app.core.exceptions import PermissionDeniedError
+
         raise PermissionDeniedError("Access request is not available for review.")
     request.status = RoleRequestStatus(body.status)
     request.reviewed_by = admin.id
     request.reviewer_note = body.note
     if request.status == RoleRequestStatus.APPROVED:
-        membership = await db.scalar(select(OrganizationMembership).where(
-            OrganizationMembership.organization_id == org_id,
-            OrganizationMembership.user_id == request.requested_by,
-            OrganizationMembership.is_active == True,  # noqa: E712
-        ))
+        membership = await db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == org_id,
+                OrganizationMembership.user_id == request.requested_by,
+                OrganizationMembership.is_active == True,  # noqa: E712
+            )
+        )
         if membership:
             membership.role = OrgRole.ORG_ADMIN
-    db.add(Notification(
-        organization_id=org_id, recipient_user_id=request.requested_by, notification_type="access_request_decision",
-        title="Administrator access request " + ("approved" if request.status == RoleRequestStatus.APPROVED else "rejected"),
-        body=body.note or ("You now have organization-admin access." if request.status == RoleRequestStatus.APPROVED else "An administrator did not approve the request."),
-        link="/chat",
-    ))
+    db.add(
+        Notification(
+            organization_id=org_id,
+            recipient_user_id=request.requested_by,
+            notification_type="access_request_decision",
+            title="Administrator access request "
+            + ("approved" if request.status == RoleRequestStatus.APPROVED else "rejected"),
+            body=body.note
+            or (
+                "You now have organization-admin access."
+                if request.status == RoleRequestStatus.APPROVED
+                else "An administrator did not approve the request."
+            ),
+            link="/chat",
+        )
+    )
     await db.commit()
     return {"status": request.status.value}

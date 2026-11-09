@@ -42,8 +42,7 @@ async def create_initial_data() -> None:
     try:
         # ── Organization ──────────────────────────────────────────────────
         existing_org = await conn.fetchval(
-            "SELECT id FROM organizations WHERE id = $1",
-            uuid.UUID(ORG_ID)
+            "SELECT id FROM organizations WHERE id = $1", uuid.UUID(ORG_ID)
         )
         if existing_org:
             print(f"Organization already exists: {ORG_ID}")
@@ -59,14 +58,15 @@ async def create_initial_data() -> None:
                      100, 1000, 5000,
                      NOW(), NOW())
                 """,
-                uuid.UUID(ORG_ID), "Demo Organization", "demo"
+                uuid.UUID(ORG_ID),
+                "Demo Organization",
+                "demo",
             )
             print(f"Created organization: Demo Organization  (id: {ORG_ID})")
 
         # ── Admin user ────────────────────────────────────────────────────
         existing_user = await conn.fetchval(
-            "SELECT id FROM users WHERE email_normalized = $1",
-            ADMIN_EMAIL.lower()
+            "SELECT id FROM users WHERE email_normalized = $1", ADMIN_EMAIL.lower()
         )
         if existing_user:
             print(f"Admin user already exists: {ADMIN_EMAIL}")
@@ -89,7 +89,7 @@ async def create_initial_data() -> None:
                 ADMIN_EMAIL,
                 ADMIN_EMAIL.lower(),
                 hashed,
-                ADMIN_NAME
+                ADMIN_NAME,
             )
             print(f"Created admin user: {ADMIN_EMAIL}")
             print(f"  Password: {ADMIN_PASSWORD}")
@@ -98,7 +98,8 @@ async def create_initial_data() -> None:
         # ── Membership ────────────────────────────────────────────────────
         existing_mem = await conn.fetchval(
             "SELECT id FROM organization_memberships WHERE user_id = $1 AND organization_id = $2",
-            admin_id, uuid.UUID(ORG_ID)
+            admin_id,
+            uuid.UUID(ORG_ID),
         )
         if not existing_mem:
             await conn.execute(
@@ -108,7 +109,9 @@ async def create_initial_data() -> None:
                 VALUES
                     ($1, $2, $3, 'org_admin', true, NOW(), NOW())
                 """,
-                uuid.uuid4(), admin_id, uuid.UUID(ORG_ID)
+                uuid.uuid4(),
+                admin_id,
+                uuid.UUID(ORG_ID),
             )
             print("Created org_admin membership.")
 

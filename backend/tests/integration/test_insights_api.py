@@ -373,9 +373,7 @@ class TestOrgAnalytics:
         assert member_row["questions"] == 1
         assert member_row["tokens"] == 150
         assert member_row["role"] == "member"
-        inactive_row = next(
-            row for row in data["users"]["items"] if row["email"] == inactive.email
-        )
+        inactive_row = next(row for row in data["users"]["items"] if row["email"] == inactive.email)
         assert inactive_row["is_active"] is False
 
     async def test_search_and_pagination(
@@ -394,25 +392,17 @@ class TestOrgAnalytics:
         await db_session.flush()
         await _login(client, admin_user.email)
 
-        res = await client.get(
-            "/api/v1/admin/analytics", params={"search": "analytics-member"}
-        )
+        res = await client.get("/api/v1/admin/analytics", params={"search": "analytics-member"})
         assert res.status_code == 200, res.text
-        assert [row["email"] for row in res.json()["users"]["items"]] == [
-            member_user.email
-        ]
+        assert [row["email"] for row in res.json()["users"]["items"]] == [member_user.email]
 
-        res = await client.get(
-            "/api/v1/admin/analytics", params={"page": 1, "page_size": 2}
-        )
+        res = await client.get("/api/v1/admin/analytics", params={"page": 1, "page_size": 2})
         assert res.status_code == 200
         data = res.json()
         assert len(data["users"]["items"]) == 2
         assert data["users"]["total"] == 3
 
-    async def test_member_is_forbidden(
-        self, client: AsyncClient, member_user: User
-    ):
+    async def test_member_is_forbidden(self, client: AsyncClient, member_user: User):
         await _login(client, member_user.email)
         res = await client.get("/api/v1/admin/analytics")
         assert res.status_code == 403
@@ -453,9 +443,7 @@ class TestOrgAnalytics:
         assert data["summary"]["total_questions"] == 1
         assert data["summary"]["total_tokens"] == 150
         assert data["recent_questions"][0]["id"] == str(question.id)
-        assert data["recent_questions"][0]["feedback"][0]["comment"] == (
-            "Needs more detail"
-        )
+        assert data["recent_questions"][0]["feedback"][0]["comment"] == ("Needs more detail")
 
     async def test_per_user_detail_cross_tenant_returns_404(
         self,
@@ -464,9 +452,7 @@ class TestOrgAnalytics:
         admin_user: User,
     ):
         await _login(client, admin_user.email)
-        res = await client.get(
-            f"/api/v1/admin/analytics/users/{other_tenant_user.id}"
-        )
+        res = await client.get(f"/api/v1/admin/analytics/users/{other_tenant_user.id}")
         assert res.status_code == 404
 
 
@@ -481,13 +467,9 @@ class TestQuestionExplorer:
         admin_user: User,
         member_user: User,
     ):
-        document = await _make_document(
-            db_session, ORG_ID, admin_user.id, title="Leave Policy"
-        )
+        document = await _make_document(db_session, ORG_ID, admin_user.id, title="Leave Policy")
         chunk = await db_session.scalar(
-            select(DocumentChunk).where(
-                DocumentChunk.document_id == document.id
-            )
+            select(DocumentChunk).where(DocumentChunk.document_id == document.id)
         )
         conversation = await _make_conversation(
             db_session, ORG_ID, member_user.id, "Policy questions"
@@ -569,15 +551,11 @@ class TestQuestionExplorer:
         await db_session.flush()
 
         await _login(client, admin_user.email)
-        res = await client.get(
-            "/api/v1/admin/questions", params={"search": "reimbursement"}
-        )
+        res = await client.get("/api/v1/admin/questions", params={"search": "reimbursement"})
         assert res.status_code == 200, res.text
         assert res.json()["total"] == 1
 
-        res = await client.get(
-            "/api/v1/admin/questions", params={"search": "no-such-term"}
-        )
+        res = await client.get("/api/v1/admin/questions", params={"search": "no-such-term"})
         assert res.status_code == 200
         assert res.json()["total"] == 0
 
@@ -608,14 +586,10 @@ class TestQuestionExplorer:
         assert res.status_code == 200
         assert res.json()["total"] == 0
 
-    async def test_member_is_forbidden(
-        self, client: AsyncClient, member_user: User
-    ):
+    async def test_member_is_forbidden(self, client: AsyncClient, member_user: User):
         await _login(client, member_user.email)
         assert (await client.get("/api/v1/admin/questions")).status_code == 403
-        assert (
-            await client.get(f"/api/v1/admin/questions/{uuid.uuid4()}")
-        ).status_code == 403
+        assert (await client.get(f"/api/v1/admin/questions/{uuid.uuid4()}")).status_code == 403
 
 
 # ─── Document explorer ────────────────────────────────────────────────────
@@ -630,9 +604,7 @@ class TestDocumentExplorer:
         member_user: User,
     ):
         document = await _make_document(db_session, ORG_ID, admin_user.id)
-        conversation = await _make_conversation(
-            db_session, ORG_ID, member_user.id, "Doc questions"
-        )
+        conversation = await _make_conversation(db_session, ORG_ID, member_user.id, "Doc questions")
         await _make_turn(
             db_session,
             conversation,
@@ -691,11 +663,7 @@ class TestDocumentExplorer:
         assert res.status_code == 200
         assert res.json()["total"] == 0
 
-    async def test_member_is_forbidden(
-        self, client: AsyncClient, member_user: User
-    ):
+    async def test_member_is_forbidden(self, client: AsyncClient, member_user: User):
         await _login(client, member_user.email)
         assert (await client.get("/api/v1/admin/documents")).status_code == 403
-        assert (
-            await client.get(f"/api/v1/admin/documents/{uuid.uuid4()}")
-        ).status_code == 403
+        assert (await client.get(f"/api/v1/admin/documents/{uuid.uuid4()}")).status_code == 403

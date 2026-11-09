@@ -46,8 +46,8 @@ _engine_kwargs: dict[str, Any] = {
     "pool_size": settings.database_pool_size,
     "max_overflow": settings.database_max_overflow,
     "pool_timeout": settings.database_pool_timeout,
-    "pool_pre_ping": True,      # detect stale connections
-    "pool_recycle": 1800,       # recycle connections after 30 minutes
+    "pool_pre_ping": True,  # detect stale connections
+    "pool_recycle": 1800,  # recycle connections after 30 minutes
     "connect_args": _connect_args,
 }
 
@@ -59,7 +59,7 @@ engine = create_async_engine(settings.database_url, **_engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
-    expire_on_commit=False,   # avoids lazy-load issues after commit in async
+    expire_on_commit=False,  # avoids lazy-load issues after commit in async
     autocommit=False,
     autoflush=False,
 )

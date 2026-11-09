@@ -39,7 +39,9 @@ class User(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "users"
 
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
-    email_normalized: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
+    email_normalized: Mapped[str] = mapped_column(
+        String(320), unique=True, nullable=False, index=True
+    )
     hashed_password: Mapped[str] = mapped_column(String(1024), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[UserStatus] = mapped_column(

@@ -1,4 +1,5 @@
 """List available Groq models."""
+
 import os
 from groq import Groq
 
@@ -6,6 +7,7 @@ client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 
 # Load from .env if not in env
 from dotenv import load_dotenv
+
 load_dotenv("c:/Users/Lenovo/Desktop/RAG/backend/.env")
 client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 

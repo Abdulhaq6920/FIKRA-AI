@@ -28,7 +28,7 @@ from app.core.exceptions import InvalidTokenError, TokenExpiredError
 _pwd_context = CryptContext(
     schemes=["argon2"],
     deprecated="auto",
-    argon2__memory_cost=65536,   # 64 MB
+    argon2__memory_cost=65536,  # 64 MB
     argon2__time_cost=3,
     argon2__parallelism=4,
 )
@@ -78,9 +78,7 @@ def create_access_token(
         exp   — expiry (UTC epoch seconds)
         jti   — unique token ID for revocation tracking
     """
-    expire = _utcnow() + (
-        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
-    )
+    expire = _utcnow() + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
     payload: dict[str, Any] = {
         "sub": subject,
         "org": organization_id,

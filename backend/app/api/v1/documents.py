@@ -103,9 +103,9 @@ def _safe_download_filename(name: str) -> str:
     Quotes/backslashes/CRLF are escaped rather than trusted — an unfiltered
     filename can break the header or smuggle extra header fields.
     """
-    cleaned = "".join(
-        " " if c in ("\r", "\n") else c for c in name
-    ).replace("\\", "_").replace('"', "_")
+    cleaned = (
+        "".join(" " if c in ("\r", "\n") else c for c in name).replace("\\", "_").replace('"', "_")
+    )
     cleaned = "".join(c if c.isprintable() else "_" for c in cleaned).strip()
     if not cleaned or cleaned.startswith("."):
         cleaned = f"download{Path(name).suffix[:24]}" if "." in name else "download"
@@ -137,9 +137,7 @@ async def upload_document(
             break
         total_size += len(chunk)
         if total_size > max_bytes:
-            raise FileTooLarge(
-                f"File exceeds {settings.max_upload_size_mb}MB limit."
-            )
+            raise FileTooLarge(f"File exceeds {settings.max_upload_size_mb}MB limit.")
         chunks.append(chunk)
     file_bytes = b"".join(chunks)
     del chunks
@@ -204,6 +202,7 @@ async def upload_document(
     # (sentence-transformers), which must not load at API import time.
     from app.workers.document_tasks import ingest_document
     from app.core.logging import get_logger as _gl
+
     _log = _gl(__name__)
     try:
         task = ingest_document.apply_async(
@@ -286,10 +285,7 @@ async def get_document(
     """Get a specific document (must belong to the user's organization)."""
     user, org_id, role = ctx
     doc = await _get_doc_or_404(doc_id, org_id, db)
-    if (
-        doc.access_level == DocumentAccessLevel.RESTRICTED
-        and role != OrgRole.ORG_ADMIN
-    ):
+    if doc.access_level == DocumentAccessLevel.RESTRICTED and role != OrgRole.ORG_ADMIN:
         # Match the not-found contract so we don't confirm existence.
         raise DocumentNotFoundError()
     return DocumentOut.model_validate(doc)
@@ -308,31 +304,42 @@ async def delete_document(
     # Stop a queued ingestion job before its database rows are removed. A task
     # that has already started also checks document existence before writing.
     jobs = (
-        await db.execute(
-            select(DocumentProcessingJob.celery_task_id).where(
-                DocumentProcessingJob.document_id == doc_id,
-                DocumentProcessingJob.organization_id == org_id,
+        (
+            await db.execute(
+                select(DocumentProcessingJob.celery_task_id).where(
+                    DocumentProcessingJob.document_id == doc_id,
+                    DocumentProcessingJob.organization_id == org_id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for task_id in jobs:
         if task_id:
             from app.workers.celery_app import celery_app
+
             celery_app.control.revoke(task_id, terminate=False)
 
     # Preserve conversations, but remove only metadata and excerpts that point
     # to this document. Other citations in the same assistant response remain.
     messages_with_citations = (
-        await db.execute(
-            select(Message).where(
-                Message.organization_id == org_id,
-                Message.citations.is_not(None),
+        (
+            await db.execute(
+                select(Message).where(
+                    Message.organization_id == org_id,
+                    Message.citations.is_not(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for message in messages_with_citations:
         citations = message.citations or []
-        retained = [citation for citation in citations if citation.get("document_id") != str(doc_id)]
+        retained = [
+            citation for citation in citations if citation.get("document_id") != str(doc_id)
+        ]
         if len(retained) != len(citations):
             message.citations = retained or None
 
@@ -362,6 +369,7 @@ async def reindex_document(
 
     from app.workers.document_tasks import ingest_document
     from app.core.logging import get_logger as _gl
+
     _log = _gl(__name__)
     task_id = None
     try:
@@ -371,9 +379,13 @@ async def reindex_document(
         )
         task_id = task.id
     except Exception as exc:
-        _log.warning("celery_unavailable_reindexing_inline", document_id=str(doc_id), error=str(exc)[:200])
+        _log.warning(
+            "celery_unavailable_reindexing_inline", document_id=str(doc_id), error=str(exc)[:200]
+        )
         _dispatch_inline_task(
-            _process_document_inline(doc_id, org_id, str(doc_id), doc.storage_path, doc.file_extension)
+            _process_document_inline(
+                doc_id, org_id, str(doc_id), doc.storage_path, doc.file_extension
+            )
         )
 
     await db.commit()
@@ -416,10 +428,7 @@ async def download_document(
 
     # Restricted documents are organization-admin only — the flag means
     # what it says, for every consumer (download, chat, retrieval).
-    if (
-        doc.access_level == DocumentAccessLevel.RESTRICTED
-        and role != OrgRole.ORG_ADMIN
-    ):
+    if doc.access_level == DocumentAccessLevel.RESTRICTED and role != OrgRole.ORG_ADMIN:
         raise PermissionDeniedError("This document is restricted to admins.")
 
     storage = get_storage()
@@ -460,6 +469,7 @@ async def _get_doc_or_404(
 # as an async background task within the FastAPI process itself.
 # In production with a Celery worker running, this fallback is never used.
 
+
 async def _process_document_inline(
     doc_id: uuid.UUID,
     org_id: uuid.UUID,
@@ -471,7 +481,13 @@ async def _process_document_inline(
     from datetime import datetime, timezone
     from sqlalchemy import delete, select as _select
 
-    from app.db.models.document import Document, DocumentChunk, DocumentProcessingJob, DocumentStatus, JobStatus
+    from app.db.models.document import (
+        Document,
+        DocumentChunk,
+        DocumentProcessingJob,
+        DocumentStatus,
+        JobStatus,
+    )
     from app.db.session import AsyncSessionLocal
     from app.providers.embeddings import embed_documents, get_model_version
     from app.services.ingestion_service import chunk_text, embed_chunks, extract_text
@@ -498,10 +514,12 @@ async def _process_document_inline(
             # Mark as processing
             doc.status = DocumentStatus.PROCESSING
             job = await db.scalar(
-                _select(DocumentProcessingJob).where(
+                _select(DocumentProcessingJob)
+                .where(
                     DocumentProcessingJob.document_id == doc_id,
                     DocumentProcessingJob.organization_id == org_id,
-                ).order_by(DocumentProcessingJob.created_at.desc())
+                )
+                .order_by(DocumentProcessingJob.created_at.desc())
             )
             if job:
                 job.status = JobStatus.RUNNING
@@ -536,9 +554,7 @@ async def _process_document_inline(
                 return
 
             # Delete existing chunks (safe reindex)
-            await db.execute(
-                delete(DocumentChunk).where(DocumentChunk.document_id == doc_id)
-            )
+            await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
 
             # Insert new chunks
             for cd in chunks_data:
@@ -596,10 +612,12 @@ async def _process_document_inline(
                 if doc:
                     doc.status = DocumentStatus.FAILED
                 job = await db.scalar(
-                    _select(DocumentProcessingJob).where(
+                    _select(DocumentProcessingJob)
+                    .where(
                         DocumentProcessingJob.document_id == doc_id,
                         DocumentProcessingJob.organization_id == org_id,
-                    ).order_by(DocumentProcessingJob.created_at.desc())
+                    )
+                    .order_by(DocumentProcessingJob.created_at.desc())
                 )
                 if job:
                     job.status = JobStatus.DEAD

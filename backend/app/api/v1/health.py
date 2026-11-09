@@ -45,6 +45,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> dict:
         checks["database"] = f"error: {type(exc).__name__}"
 
     from app.core.redis import ping_redis
+
     try:
         await ping_redis()
         checks["redis"] = "ok"
@@ -54,6 +55,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> dict:
     all_ok = all(v == "ok" for v in checks.values())
 
     from fastapi.responses import JSONResponse
+
     return JSONResponse(
         status_code=200 if all_ok else 503,
         content={"status": "ready" if all_ok else "degraded", "checks": checks},

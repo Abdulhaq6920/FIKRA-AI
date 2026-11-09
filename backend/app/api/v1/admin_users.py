@@ -154,9 +154,7 @@ async def list_users(
     )
     if search:
         term = f"%{search.strip().lower()}%"
-        base = base.where(
-            or_(User.full_name.ilike(term), User.email_normalized.ilike(term))
-        )
+        base = base.where(or_(User.full_name.ilike(term), User.email_normalized.ilike(term)))
     if role == "admin":
         base = base.where(
             or_(
@@ -181,9 +179,7 @@ async def list_users(
         .limit(page_size)
     )
     items = [_to_out(user, membership, actor.id) for user, membership in rows.all()]
-    return AdminUserListResponse(
-        items=items, total=total, page=page, page_size=page_size
-    )
+    return AdminUserListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=AdminUserOut, status_code=201)
@@ -197,9 +193,7 @@ async def create_user(
     actor, org_id, _role = ctx
     email_normalized = body.email.strip().lower()
 
-    existing = await db.scalar(
-        select(User.id).where(User.email_normalized == email_normalized)
-    )
+    existing = await db.scalar(select(User.id).where(User.email_normalized == email_normalized))
     if existing is not None:
         raise EmailAlreadyExistsError()
 

@@ -2,6 +2,7 @@
 Full end-to-end test: login -> upload doc -> process -> ask question -> verify answer.
 This script lives OUTSIDE the backend dir so it doesn't trigger uvicorn reloads.
 """
+
 import asyncio
 import httpx
 import io
@@ -42,14 +43,16 @@ An optional cross-encoder reranker improves accuracy on the top candidates.
 Citations are constructed from server-side metadata, not from LLM output.
 """
 
+
 async def main():
     async with httpx.AsyncClient() as c:
         print("=" * 60)
         print("STEP 1: Login")
         print("=" * 60)
-        r = await c.post(f"{BACKEND}/api/v1/auth/login", json={
-            "email": EMAIL, "password": PASSWORD, "organization_id": ORG_ID
-        })
+        r = await c.post(
+            f"{BACKEND}/api/v1/auth/login",
+            json={"email": EMAIL, "password": PASSWORD, "organization_id": ORG_ID},
+        )
         assert r.status_code == 200, f"Login failed: {r.status_code} {r.text[:200]}"
         cookies = r.cookies
         print(f"  ✓ Login OK (status {r.status_code})")
@@ -58,8 +61,15 @@ async def main():
         print("=" * 60)
         print("STEP 2: Upload document")
         print("=" * 60)
-        files = {"file": ("tech_docs.txt", io.BytesIO(DOC_CONTENT.encode()), "text/plain")}
-        r = await c.post(f"{BACKEND}/api/v1/documents/upload", files=files, cookies=cookies, timeout=30)
+        files = {
+            "file": ("tech_docs.txt", io.BytesIO(DOC_CONTENT.encode()), "text/plain")
+        }
+        r = await c.post(
+            f"{BACKEND}/api/v1/documents/upload",
+            files=files,
+            cookies=cookies,
+            timeout=30,
+        )
         assert r.status_code == 201, f"Upload failed: {r.status_code} {r.text[:200]}"
         doc = r.json()
         doc_id = doc["id"]
@@ -84,10 +94,14 @@ async def main():
                 elif status == "failed":
                     print(f"  ✗ Document processing failed!")
                     # Check job status for error
-                    r2 = await c.get(f"{BACKEND}/api/v1/documents/{doc_id}/status", cookies=cookies)
+                    r2 = await c.get(
+                        f"{BACKEND}/api/v1/documents/{doc_id}/status", cookies=cookies
+                    )
                     if r2.status_code == 200:
                         job = r2.json()
-                        print(f"    Error: {job.get('error_type')}: {job.get('error_message', '')[:200]}")
+                        print(
+                            f"    Error: {job.get('error_type')}: {job.get('error_message', '')[:200]}"
+                        )
                     return
         else:
             print("  ✗ Timeout waiting for processing")
@@ -97,7 +111,11 @@ async def main():
         print("=" * 60)
         print("STEP 4: Create conversation and ask a question")
         print("=" * 60)
-        r = await c.post(f"{BACKEND}/api/v1/chat/conversations", json={"title": "Tech Q&A"}, cookies=cookies)
+        r = await c.post(
+            f"{BACKEND}/api/v1/chat/conversations",
+            json={"title": "Tech Q&A"},
+            cookies=cookies,
+        )
         assert r.status_code == 201, f"Create conv failed: {r.status_code}"
         conv_id = r.json()["id"]
         print(f"  ✓ Conversation created: {conv_id}")
@@ -106,10 +124,12 @@ async def main():
         question = "What model is used for embeddings in FIKRA AI?"
         print(f"  Question: {question}")
 
-        r = await c.post(f"{BACKEND}/api/v1/chat/ask", json={
-            "question": question,
-            "conversation_id": conv_id
-        }, cookies=cookies, timeout=60)
+        r = await c.post(
+            f"{BACKEND}/api/v1/chat/ask",
+            json={"question": question, "conversation_id": conv_id},
+            cookies=cookies,
+            timeout=60,
+        )
 
         print(f"  Response status: {r.status_code}")
         if r.status_code == 200:
@@ -161,10 +181,12 @@ async def main():
         question2 = "What database does FIKRA AI use?"
         print(f"  Question: {question2}")
 
-        r = await c.post(f"{BACKEND}/api/v1/chat/ask/stream", json={
-            "question": question2,
-            "conversation_id": conv_id
-        }, cookies=cookies, timeout=60)
+        r = await c.post(
+            f"{BACKEND}/api/v1/chat/ask/stream",
+            json={"question": question2, "conversation_id": conv_id},
+            cookies=cookies,
+            timeout=60,
+        )
 
         print(f"  Stream status: {r.status_code}")
         if r.status_code == 200:

@@ -75,9 +75,7 @@ class AuthService:
 
         rows = (
             await self._db.execute(
-                select(Organization.id, Organization.name).where(
-                    Organization.id.in_(valid_ids)
-                )
+                select(Organization.id, Organization.name).where(Organization.id.in_(valid_ids))
             )
         ).all()
         return [(row[0], row[1]) for row in rows]
@@ -104,9 +102,7 @@ class AuthService:
         # Org UUIDs leak readily (JWTs, logs, admin lists) — without this
         # allowlist anyone could mint a membership in a foreign tenant.
         if str(organization_id).lower() not in settings.public_signup_orgs:
-            raise PermissionDeniedError(
-                "This workspace does not accept public sign-ups."
-            )
+            raise PermissionDeniedError("This workspace does not accept public sign-ups.")
 
         existing = await self._db.scalar(
             select(User).where(User.email_normalized == email_normalized)
@@ -341,9 +337,7 @@ class AuthService:
         user_agent: str | None = None,
         ip_address: str | None = None,
     ) -> None:
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            days=settings.refresh_token_expire_days
-        )
+        expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
         session = RefreshSession(
             user_id=user_id,
             token_hash=_hash_refresh_token(refresh_token),

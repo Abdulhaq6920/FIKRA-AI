@@ -87,7 +87,9 @@ class MessageListOut(BaseModel):
 
 class FeedbackRequest(BaseModel):
     message_id: uuid.UUID
-    feedback_type: str = Field(pattern="^(thumbs_up|thumbs_down|incorrect_citation|missing_info|other)$")
+    feedback_type: str = Field(
+        pattern="^(thumbs_up|thumbs_down|incorrect_citation|missing_info|other)$"
+    )
     comment: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")

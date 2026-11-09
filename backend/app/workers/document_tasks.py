@@ -111,7 +111,7 @@ def ingest_document(self: _BaseTask, document_id: str, organization_id: str) -> 
 
         try:
             # Retry with exponential back-off
-            raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
+            raise self.retry(exc=exc, countdown=60 * (2**self.request.retries))
         except MaxRetriesExceededError:
             self._run_async(_mark_failed(doc_id, org_id, error_type, error_msg))
             return {"status": "dead", "error": error_msg}
@@ -125,7 +125,13 @@ async def _run_ingestion(
     """Async implementation of the ingestion pipeline."""
     from sqlalchemy import select
 
-    from app.db.models.document import Document, DocumentChunk, DocumentProcessingJob, DocumentStatus, JobStatus
+    from app.db.models.document import (
+        Document,
+        DocumentChunk,
+        DocumentProcessingJob,
+        DocumentStatus,
+        JobStatus,
+    )
     from app.db.session import AsyncSessionLocal
     from app.providers.embeddings import get_model_version
     from app.services.ingestion_service import chunk_text, embed_chunks, extract_text
@@ -193,9 +199,8 @@ async def _run_ingestion(
 
         # Delete existing chunks (safe reindex)
         from sqlalchemy import delete
-        await db.execute(
-            delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
-        )
+
+        await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
 
         # Insert new chunks
         for cd in chunks_data:
@@ -234,6 +239,7 @@ async def _run_ingestion(
 
 def settings_import():
     from app.core.config import settings
+
     return settings
 
 

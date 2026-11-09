@@ -91,9 +91,7 @@ def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> list[float]:
 
 async def _collect(client: GroqClient) -> str:
     pieces: list[str] = []
-    async for piece in client.generate_stream(
-        messages=[ChatMessage(role="user", content="hello")]
-    ):
+    async for piece in client.generate_stream(messages=[ChatMessage(role="user", content="hello")]):
         pieces.append(piece)
     return "".join(pieces)
 
@@ -154,9 +152,7 @@ class TestGenerateFallback:
             return "fallback answer"
 
         client = _make_client(handler, calls, stream=False)
-        result = await client.generate(
-            messages=[ChatMessage(role="user", content="hello")]
-        )
+        result = await client.generate(messages=[ChatMessage(role="user", content="hello")])
 
         assert result.content == "fallback answer"
         assert result.usage.model == FALLBACK

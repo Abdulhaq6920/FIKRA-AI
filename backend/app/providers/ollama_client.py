@@ -173,9 +173,7 @@ class OllamaClient:
                                 logger.error("ollama_invalid_stream_response")
                                 raise ProviderUnavailableError()
                             if body.get("error"):
-                                logger.error(
-                                    "ollama_request_error", error=str(body["error"])[:300]
-                                )
+                                logger.error("ollama_request_error", error=str(body["error"])[:300])
                                 raise ProviderUnavailableError()
                             message = body.get("message")
                             if isinstance(message, dict) and message.get("content"):

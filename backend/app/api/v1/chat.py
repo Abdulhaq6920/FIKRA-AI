@@ -102,8 +102,7 @@ async def list_conversations(
     )
     total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
     result = await db.execute(
-        base
-        .order_by(Conversation.updated_at.desc())
+        base.order_by(Conversation.updated_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -174,10 +173,7 @@ async def get_messages(
     # Window counted from the end of the timeline so page 1 = newest block.
     offset = max(0, total - page_size * page)
     result = await db.execute(
-        base
-        .order_by(Message.created_at.asc())
-        .offset(offset)
-        .limit(page_size)
+        base.order_by(Message.created_at.asc()).offset(offset).limit(page_size)
     )
     msgs = result.scalars().all()
     return MessageListOut(
@@ -260,6 +256,7 @@ async def ask(
 
     # Record usage
     from app.db.models.audit import UsageRecord
+
     usage = UsageRecord(
         organization_id=org_id,
         user_id=user.id,
@@ -415,9 +412,7 @@ async def ask_stream(
             # Typed application errors carry a stable code and a user-safe
             # message (e.g. the provider rate limit being reached).
             yield (
-                "data: "
-                + json.dumps({"error": exc.error_code, "message": exc.message})
-                + "\n\n"
+                "data: " + json.dumps({"error": exc.error_code, "message": exc.message}) + "\n\n"
             )
         except Exception as exc:
             # Unexpected failures stay opaque to the client — the exception
@@ -496,23 +491,29 @@ async def _do_submit_feedback(
     # Alert only admins in the same organization about actionable negative feedback.
     if body.feedback_type == "thumbs_down":
         admin_ids = (
-            await db.execute(
-                select(OrganizationMembership.user_id).where(
-                    OrganizationMembership.organization_id == org_id,
-                    OrganizationMembership.is_active == True,  # noqa: E712
-                    OrganizationMembership.role == OrgRole.ORG_ADMIN,
+            (
+                await db.execute(
+                    select(OrganizationMembership.user_id).where(
+                        OrganizationMembership.organization_id == org_id,
+                        OrganizationMembership.is_active == True,  # noqa: E712
+                        OrganizationMembership.role == OrgRole.ORG_ADMIN,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for admin_id in admin_ids:
-            db.add(Notification(
-                organization_id=org_id,
-                recipient_user_id=admin_id,
-                notification_type="negative_feedback",
-                title="New negative response feedback",
-                body="A user reported an answer that needs review.",
-                link="/admin",
-            ))
+            db.add(
+                Notification(
+                    organization_id=org_id,
+                    recipient_user_id=admin_id,
+                    notification_type="negative_feedback",
+                    title="New negative response feedback",
+                    body="A user reported an answer that needs review.",
+                    link="/admin",
+                )
+            )
     await db.commit()
     return {"status": "received"}
 

@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Verify database connection
     from app.db.session import engine
     from sqlalchemy import text
+
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
@@ -67,6 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Verify Redis (Celery broker/cache). Non-fatal: ingestion falls back to
     # inline processing when Redis/Celery is unavailable.
     from app.core.redis import ping_redis
+
     try:
         await ping_redis()
         logger.info("redis_connection_ok")
@@ -79,6 +81,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         import asyncio as _asyncio
         from app.providers.embeddings import _get_model
+
         await _asyncio.to_thread(_get_model)
         logger.info("embedding_model_ready")
     except Exception as exc:
@@ -94,6 +97,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -147,9 +151,7 @@ def create_app() -> FastAPI:
             for prefix, methods, spec in rate_policies:
                 if path.startswith(prefix) and request.method in methods:
                     client_ip = request.client.host if request.client else "unknown"
-                    allowed, retry_after = limiter.check(
-                        f"{prefix}:{client_ip}", spec
-                    )
+                    allowed, retry_after = limiter.check(f"{prefix}:{client_ip}", spec)
                     if not allowed:
                         logger.warning(
                             "rate_limit_hit",
@@ -164,9 +166,7 @@ def create_app() -> FastAPI:
                                 "error": {
                                     "code": "RATE_LIMITED",
                                     "message": "Too many requests. Please try again later.",
-                                    "request_id": request.headers.get(
-                                        "X-Request-ID", "unknown"
-                                    ),
+                                    "request_id": request.headers.get("X-Request-ID", "unknown"),
                                 }
                             },
                         )
