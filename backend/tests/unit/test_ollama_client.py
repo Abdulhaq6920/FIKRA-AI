@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.api import dependencies
 from app.core.exceptions import ProviderUnavailableError
 from app.providers import ollama_client as ollama_module
 from app.providers.llm import ChatMessage
@@ -130,3 +131,15 @@ async def test_generate_rejects_malformed_ollama_response() -> None:
 
     with pytest.raises(ProviderUnavailableError):
         await OllamaClient().generate([ChatMessage(role="user", content="hello")])
+
+
+def test_provider_dependency_selects_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dependencies.settings, "llm_provider", "ollama")
+    monkeypatch.setattr(dependencies, "_ollama_client", None)
+    monkeypatch.setattr(
+        dependencies,
+        "get_groq_client",
+        lambda: pytest.fail("Groq client should not be selected"),
+    )
+
+    assert isinstance(dependencies.get_llm_client(), OllamaClient)

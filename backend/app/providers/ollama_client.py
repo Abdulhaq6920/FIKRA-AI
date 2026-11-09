@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
 import httpx
@@ -21,7 +21,7 @@ _ollama_semaphore = asyncio.Semaphore(settings.ollama_max_concurrent_requests)
 
 
 def _serialize_messages(
-    messages: list[ChatMessage | BaseMessage],
+    messages: Sequence[ChatMessage | BaseMessage],
     system_prompt: str | None,
 ) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
@@ -48,7 +48,7 @@ class OllamaClient:
 
     def _payload(
         self,
-        messages: list[ChatMessage | BaseMessage],
+        messages: Sequence[ChatMessage | BaseMessage],
         *,
         model: str | None,
         max_tokens: int | None,
@@ -71,7 +71,7 @@ class OllamaClient:
 
     async def generate(
         self,
-        messages: list[ChatMessage | BaseMessage],
+        messages: Sequence[ChatMessage | BaseMessage],
         *,
         model: str | None = None,
         max_tokens: int | None = None,

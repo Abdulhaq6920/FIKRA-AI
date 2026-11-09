@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 
 import groq
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -142,7 +142,7 @@ class GroqClient:
 
     async def generate(
         self,
-        messages: list[ChatMessage | BaseMessage],
+        messages: Sequence[ChatMessage | BaseMessage],
         *,
         model: str | None = None,
         max_tokens: int | None = None,
@@ -233,7 +233,7 @@ class GroqClient:
 
     async def generate_stream(
         self,
-        messages: list[ChatMessage | BaseMessage],
+        messages: Sequence[ChatMessage | BaseMessage],
         *,
         model: str | None = None,
         max_tokens: int | None = None,
@@ -320,7 +320,7 @@ class GroqClient:
 
     @staticmethod
     def _build_messages(
-        messages: list[ChatMessage | BaseMessage],
+        messages: Sequence[ChatMessage | BaseMessage],
         system_prompt: str | None,
     ) -> list[BaseMessage]:
         """
