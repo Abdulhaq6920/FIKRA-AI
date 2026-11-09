@@ -31,12 +31,12 @@ the "Appearance" card on the page.
 ## Step 5
 Click the "Change theme" button and verify a set of theme cards appears
 (buttons whose label starts with "Use " and ends with " theme") — there must
-be exactly 12 of them.
+be exactly 22 of them, including a "Fantasy" group of ten themes.
 
 ## Step 6
-Click "Use Ocean theme" and verify the applied theme (page attribute
-data-theme) becomes "ocean". Then click the collapse button ("Hide themes")
-and verify the theme cards disappear.
+Click "Use Ember Abyss theme" and verify the applied theme (page attribute
+data-theme) becomes "ember-abyss". Then click the collapse button
+("Hide themes") and verify the theme cards disappear.
 
 ## Step 7
 Open "Analytics" in the left sidebar and verify the Analytics page still

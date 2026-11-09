@@ -1,107 +1,178 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * Forgot-password — themed split-screen shell shared with the other auth pages.
+ *
+ * The workspace ID comes from the public /auth/signup-options endpoint
+ * (never hard-coded). The flow stays deliberately silent on whether the
+ * email exists: the endpoint always succeeds, so an attacker cannot use
+ * this form to enumerate accounts.
+ */
+
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowLeft, Mail, Loader2, CheckCircle } from "lucide-react";
-import { forgotPasswordSchema, type ForgotPasswordFormData } from "@/lib/validation/schemas";
+import { ArrowLeft, CheckCircle2, Loader2, Mail } from "lucide-react";
+import {
+  forgotPasswordSchema,
+  type ForgotPasswordFormData,
+} from "@/lib/validation/schemas";
 import { authApi } from "@/lib/api/auth";
+import {
+  AuthNotice,
+  AuthShell,
+  authErrorTextClass,
+  authInputClass,
+  authLabelClass,
+  authPrimaryButtonClass,
+  invalidInputClass,
+  LogoMark,
+  useRobotStage,
+  useSignupOptions,
+} from "@/features/auth/AuthShell";
 import { cn } from "@/lib/utils/cn";
 
-const DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001";
-
 export default function ForgotPasswordPage() {
+  return (
+    <AuthShell>
+      <ForgotPasswordContent />
+    </AuthShell>
+  );
+}
+
+function ForgotPasswordContent() {
   const [submitted, setSubmitted] = useState(false);
+  const { defaultOrgId, isLoading: orgsLoading, error: orgsError } = useSignupOptions();
+  const { flashMood } = useRobotStage();
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: { organization_id: DEFAULT_ORG_ID },
+    defaultValues: { organization_id: undefined as unknown as string },
   });
 
+  // Fill the workspace ID once the public org list resolves.
+  useEffect(() => {
+    if (defaultOrgId) setValue("organization_id", defaultOrgId);
+  }, [defaultOrgId, setValue]);
+
   const onSubmit = async (data: ForgotPasswordFormData) => {
-    // Always show success — prevents email enumeration
+    // Always show success — prevents email enumeration.
     await authApi.initiatePasswordReset(data.email, data.organization_id).catch(() => {});
+    flashMood("happy"); // good-news bounce with the email confirmation
     setSubmitted(true);
   };
 
   return (
-    <div className="min-h-screen bg-surface-950 flex items-center justify-center px-4">
-      <div className="absolute inset-0 auth-canvas" />
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 w-full max-w-md"
-      >
-        <div className="rounded-2xl glass-panel p-8">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 mb-6 focus:outline-none focus:underline"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to sign in
-          </Link>
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+      className="w-full max-w-[400px]"
+    >
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-2 text-sm font-medium text-surface-400 underline-offset-4 transition-colors hover:text-brand-400 focus:outline-none focus-visible:underline"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to sign in
+        </Link>
 
-          {submitted ? (
-            <div className="text-center py-4">
-              <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-              <h1 className="text-xl font-semibold text-surface-100 mb-2">Check your email</h1>
-              <p className="text-surface-400 text-sm">
-                If an account exists for that email, we&apos;ve sent a password reset link.
-              </p>
-            </div>
-          ) : (
-            <>
-              <h1 className="text-2xl font-semibold text-surface-100 mb-1">Reset password</h1>
-              <p className="text-surface-400 text-sm mb-6">
-                Enter your email and we&apos;ll send you a reset link.
-              </p>
-
-              <form onSubmit={handleSubmit(onSubmit)} noValidate>
-                <div className="mb-4">
-                  <label htmlFor="email" className="block text-sm font-medium text-surface-200 mb-1.5">
-                    Email address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
-                    <input
-                      id="email"
-                      type="email"
-                      autoComplete="email"
-                      className={cn(
-                        "w-full pl-10 pr-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100",
-                        "placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
-                        errors.email ? "border-red-500/60" : "border-surface-600/60"
-                      )}
-                      placeholder="you@company.com"
-                      {...register("email")}
-                    />
-                  </div>
-                  {errors.email && (
-                    <p className="mt-1 text-xs text-red-400" role="alert">{errors.email.message}</p>
-                  )}
-                </div>
-
-                <input type="hidden" {...register("organization_id")} />
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm disabled:opacity-60 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                >
-                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Send reset link
-                </button>
-              </form>
-            </>
-          )}
+        <div className="mt-8">
+          <LogoMark />
         </div>
-      </motion.div>
-    </div>
+
+        {submitted ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-6"
+          >
+            <h1 className="text-3xl font-bold tracking-tight text-surface-100">
+              Check your email
+            </h1>
+            <p className="mt-3 flex items-start gap-2.5 text-sm text-surface-400">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" aria-hidden="true" />
+              If an account exists for that email, we&apos;ve sent a password reset
+              link. It expires shortly, so try again soon if you missed it.
+            </p>
+            <Link
+              href="/login"
+              className={cn(authPrimaryButtonClass, "mt-8")}
+            >
+              Return to sign in
+            </Link>
+          </motion.div>
+        ) : (
+          <>
+            <h1 className="mt-5 text-3xl font-bold tracking-tight text-surface-100">
+              Forgot password?
+            </h1>
+            <p className="mt-2 text-sm text-surface-400">
+              Enter your email and we&apos;ll send you a reset link.
+            </p>
+
+            <form
+              onSubmit={handleSubmit(onSubmit, () => flashMood("sad", 1400))}
+              noValidate
+              className="mt-8"
+            >
+              <div>
+                <label htmlFor="email" className={authLabelClass}>
+                  Email address
+                </label>
+                <div className="relative">
+                  <Mail
+                    className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-500"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    className={cn(authInputClass, "pl-10", errors.email && invalidInputClass)}
+                    aria-invalid={!!errors.email}
+                    aria-describedby={errors.email ? "email-error" : undefined}
+                    {...register("email")}
+                  />
+                </div>
+                {errors.email && (
+                  <p id="email-error" className={authErrorTextClass} role="alert">
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Hidden workspace ID resolved from the public signup-options endpoint */}
+              <input type="hidden" {...register("organization_id")} />
+
+              {orgsError && (
+                <div className="mt-5">
+                  <AuthNotice>{orgsError}</AuthNotice>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting || orgsLoading || !defaultOrgId}
+                className={cn(authPrimaryButtonClass, "mt-6")}
+              >
+                {(isSubmitting || orgsLoading) && (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                )}
+                {isSubmitting ? "Sending…" : "Send reset link"}
+              </button>
+            </form>
+          </>
+        )}
+    </motion.div>
   );
 }

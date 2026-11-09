@@ -26,9 +26,19 @@ import type { User, LoginRequest } from "@/types";
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
-  login: (data: LoginRequest) => Promise<void>;
+  login: (data: LoginRequest, options?: LoginOptions) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+}
+
+interface LoginOptions {
+  /**
+   * Presentation-only pause between a successful login and the route change.
+   * The auth shell uses it so the mascot's success animation (wink) is
+   * visible before navigation unmounts the page. Business/auth logic is
+   * unaffected — tokens and state are already set before the pause.
+   */
+  successDelayMs?: number;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -52,10 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const login = useCallback(
-    async (data: LoginRequest) => {
+    async (data: LoginRequest, options?: LoginOptions) => {
       await authApi.login(data);
       const me = await authApi.me();
       setUser(me);
+      // Optional beat lets the auth page play its success animation before
+      // navigation unmounts it.
+      if (options?.successDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.successDelayMs));
+      }
       if (me.is_platform_admin || me.organization_role === "org_admin") {
         router.push("/admin");
       } else {

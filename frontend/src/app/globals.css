@@ -606,6 +606,264 @@
   --surface-950: 8 18 15;
 }
 
+/* ─── Fantasy animated backdrops ──────────────────────────────────────────
+   Two fixed, non-interactive ambient layers hang behind the page:
+
+   • body::before — a soft gradient "glow canvas" that slowly drifts.
+   • body::after  — a repeating particle field (embers, snow, petals,
+     fireflies, stars…) whose direction and palette each theme sets.
+
+   Themes opt in per palette via three hooks:
+   --fx-canvas      gradient image(s) for body::before
+   --fx-anim        its animation (shorthand)
+   --fx-particles   particle image(s) for body::after (exactly 3 layers)
+   --fx-particles-anim  its animation shorthand list
+   --fx-p-opacity   peak opacity of the particle field
+
+   Non-fantasy themes define none of these, and the layers default to
+   `opacity: 0` / `animation: none`, so they cost nothing there.
+
+   Particle tile sizes are fixed at 160px, 260px and 400px and every
+   particles keyframe moves each layer by an integer multiple of its own
+   tile, so the loop is seamless. */
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  z-index: -1;
+  pointer-events: none;
+  animation: none;
+}
+
+body::before {
+  background-image: var(--fx-canvas, none);
+  background-size: cover;
+  animation: var(--fx-anim, none);
+}
+
+body::after {
+  opacity: 0;
+  background-image: var(--fx-particles, none);
+  background-size: 160px 160px, 260px 260px, 400px 400px;
+  animation: var(--fx-particles-anim, none);
+}
+
+@keyframes fancyGlowDrift {
+  0%, 100% { transform: translate3d(-2.5%, -1.5%, 0) scale(1.06); }
+  50%      { transform: translate3d(2.5%, 2%, 0) scale(1.16); }
+}
+
+@keyframes fancyGlowBreath {
+  0%, 100% { transform: scale(1.05) translate3d(-1.5%, -1%, 0); opacity: 0.9; }
+  50%      { transform: scale(1.14) translate3d(1.5%, 1%, 0);   opacity: 1; }
+}
+
+@keyframes fancyRise {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to   { background-position: 0 -320px, 0 -520px, 0 -800px; }
+}
+
+@keyframes fancyFall {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to   { background-position: 0 320px, 0 520px, 0 800px; }
+}
+
+@keyframes fancyDust {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to   { background-position: 160px 160px, -260px -260px, 400px 400px; }
+}
+
+@keyframes fancyTwinkle {
+  0%, 100% { opacity: var(--fx-p-opacity, 0.5); }
+  50%      { opacity: calc(var(--fx-p-opacity, 0.5) * 0.25); }
+}
+
+/* The page canvas normally sits opaque above the fx layers; fantasy themes
+   unveil them by going translucent (cards/panels untouched). */
+:is(
+  [data-theme="enchanted-dawn"], [data-theme="fae-meadowlight"],
+  [data-theme="crystal-realm"], [data-theme="celestial-voyage"],
+  [data-theme="blossom-breeze"], [data-theme="arcane-midnight"],
+  [data-theme="ember-abyss"], [data-theme="frozen-citadel"],
+  [data-theme="void-nebula"], [data-theme="emerald-enigma"]
+) {
+  /* Let the canvas background drop through so the fixed fx layers show. */
+  background-color: transparent;
+}
+
+:is(
+  [data-theme="enchanted-dawn"], [data-theme="fae-meadowlight"],
+  [data-theme="crystal-realm"], [data-theme="celestial-voyage"],
+  [data-theme="blossom-breeze"], [data-theme="arcane-midnight"],
+  [data-theme="ember-abyss"], [data-theme="frozen-citadel"],
+  [data-theme="void-nebula"], [data-theme="emerald-enigma"]
+) body::after {
+  opacity: var(--fx-p-opacity, 0.5);
+}
+
+:is(
+  [data-theme="enchanted-dawn"], [data-theme="fae-meadowlight"],
+  [data-theme="crystal-realm"], [data-theme="celestial-voyage"],
+  [data-theme="blossom-breeze"], [data-theme="arcane-midnight"],
+  [data-theme="ember-abyss"], [data-theme="frozen-citadel"],
+  [data-theme="void-nebula"], [data-theme="emerald-enigma"]
+) [class*="bg-surface-950"] {
+  background-color: rgb(var(--surface-950) / 0.78);
+}
+
+/* ── Enchanted Dawn — golden sunrise, motes of light rising ────────────── */
+[data-theme="enchanted-dawn"] {
+  --fx-canvas:
+    radial-gradient(120% 90% at 82% 8%, rgb(234 179 8 / 0.22), transparent 60%),
+    radial-gradient(110% 90% at 12% 100%, rgb(217 119 6 / 0.16), transparent 55%),
+    linear-gradient(180deg, rgb(255 251 244), rgb(253 246 236));
+  --fx-anim: fancyGlowBreath 26s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2px 2px at 30% 80%, rgb(202 138 4 / 0.55), transparent 65%),
+    radial-gradient(1.5px 1.5px at 70% 55%, rgb(245 158 11 / 0.45), transparent 65%),
+    radial-gradient(1px 1px at 52% 88%, rgb(253 230 138 / 0.6), transparent 65%);
+  --fx-particles-anim: fancyRise 24s linear infinite, fancyTwinkle 6s ease-in-out infinite;
+  --fx-p-opacity: 0.55;
+}
+
+/* ── Fae Meadowlight — moonlit glade, fireflies drifting ───────────────── */
+[data-theme="fae-meadowlight"] {
+  --fx-canvas:
+    radial-gradient(110% 85% at 18% 10%, rgb(45 212 191 / 0.18), transparent 58%),
+    radial-gradient(120% 95% at 88% 95%, rgb(16 185 129 / 0.14), transparent 55%),
+    linear-gradient(180deg, rgb(254 255 253), rgb(248 253 250));
+  --fx-anim: fancyGlowDrift 34s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2px 2px at 25% 75%, rgb(13 148 136 / 0.5), transparent 65%),
+    radial-gradient(1.5px 1.5px at 75% 60%, rgb(20 184 166 / 0.4), transparent 65%),
+    radial-gradient(1px 1px at 55% 85%, rgb(153 246 228 / 0.65), transparent 65%);
+  --fx-particles-anim: fancyDust 22s linear infinite alternate, fancyTwinkle 5s ease-in-out infinite;
+  --fx-p-opacity: 0.6;
+}
+
+/* ── Crystal Realm — amethyst halls, icy shimmer ───────────────────────── */
+[data-theme="crystal-realm"] {
+  --fx-canvas:
+    radial-gradient(115% 85% at 80% 12%, rgb(167 139 250 / 0.2), transparent 58%),
+    radial-gradient(110% 90% at 10% 95%, rgb(129 140 248 / 0.16), transparent 55%),
+    linear-gradient(180deg, rgb(252 252 255), rgb(248 248 254));
+  --fx-anim: fancyGlowBreath 30s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2px 2px at 35% 70%, rgb(139 92 246 / 0.45), transparent 65%),
+    radial-gradient(1.5px 1.5px at 65% 40%, rgb(124 58 237 / 0.4), transparent 65%),
+    radial-gradient(1px 1px at 50% 90%, rgb(199 210 254 / 0.7), transparent 65%);
+  --fx-particles-anim: fancyDust 26s linear infinite alternate, fancyTwinkle 7s ease-in-out infinite;
+  --fx-p-opacity: 0.55;
+}
+
+/* ── Celestial Voyage — sky-ship deck, twinkling far stars ─────────────── */
+[data-theme="celestial-voyage"] {
+  --fx-canvas:
+    radial-gradient(120% 90% at 50% 0%, rgb(96 165 250 / 0.2), transparent 60%),
+    radial-gradient(110% 85% at 85% 90%, rgb(37 99 235 / 0.12), transparent 55%),
+    linear-gradient(180deg, rgb(252 254 255), rgb(245 250 255));
+  --fx-anim: fancyGlowDrift 38s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(1.5px 1.5px at 30% 60%, rgb(37 99 235 / 0.45), transparent 65%),
+    radial-gradient(1px 1px at 70% 70%, rgb(59 130 246 / 0.4), transparent 65%),
+    radial-gradient(1px 1px at 48% 85%, rgb(147 197 253 / 0.65), transparent 65%);
+  --fx-particles-anim: fancyTwinkle 4.5s ease-in-out infinite;
+  --fx-p-opacity: 0.6;
+}
+
+/* ── Blossom Breeze — sakura courtyard, petals falling ─────────────────── */
+[data-theme="blossom-breeze"] {
+  --fx-canvas:
+    radial-gradient(115% 90% at 15% 8%, rgb(244 114 182 / 0.16), transparent 58%),
+    radial-gradient(120% 95% at 90% 100%, rgb(219 39 119 / 0.12), transparent 55%),
+    linear-gradient(180deg, rgb(255 251 253), rgb(255 245 249));
+  --fx-anim: fancyGlowBreath 28s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(3px 3px at 28% 20%, rgb(219 39 119 / 0.35), transparent 65%),
+    radial-gradient(2px 2px at 72% 45%, rgb(236 72 153 / 0.3), transparent 65%),
+    radial-gradient(1.5px 1.5px at 55% 70%, rgb(251 207 232 / 0.7), transparent 65%);
+  --fx-particles-anim: fancyFall 18s linear infinite;
+  --fx-p-opacity: 0.65;
+}
+
+/* ── Arcane Midnight — wizard's tower, violet spellfire drifting ───────── */
+[data-theme="arcane-midnight"] {
+  --fx-canvas:
+    radial-gradient(110% 85% at 22% 12%, rgb(139 92 246 / 0.24), transparent 58%),
+    radial-gradient(120% 95% at 85% 90%, rgb(76 29 149 / 0.3), transparent 55%),
+    linear-gradient(180deg, rgb(11 9 22), rgb(18 15 33));
+  --fx-anim: fancyGlowDrift 36s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2px 2px at 30% 80%, rgb(167 139 250 / 0.6), transparent 65%),
+    radial-gradient(1.5px 1.5px at 70% 50%, rgb(124 58 237 / 0.5), transparent 65%),
+    radial-gradient(1px 1px at 52% 85%, rgb(196 181 253 / 0.55), transparent 65%);
+  --fx-particles-anim: fancyRise 20s linear infinite, fancyTwinkle 6s ease-in-out infinite;
+  --fx-p-opacity: 0.55;
+}
+
+/* ── Ember Abyss — forge-dark depths, sparks rising ────────────────────── */
+[data-theme="ember-abyss"] {
+  --fx-canvas:
+    radial-gradient(120% 80% at 50% 108%, rgb(234 88 12 / 0.22), transparent 60%),
+    radial-gradient(100% 70% at 12% 100%, rgb(194 65 12 / 0.18), transparent 55%),
+    linear-gradient(180deg, rgb(12 9 8), rgb(20 15 13));
+  --fx-anim: fancyGlowBreath 24s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2.5px 2.5px at 32% 85%, rgb(251 146 60 / 0.65), transparent 65%),
+    radial-gradient(1.5px 1.5px at 68% 65%, rgb(251 191 36 / 0.55), transparent 65%),
+    radial-gradient(1px 1px at 50% 95%, rgb(254 215 170 / 0.5), transparent 65%);
+  --fx-particles-anim: fancyRise 15s linear infinite, fancyTwinkle 4s ease-in-out infinite;
+  --fx-p-opacity: 0.65;
+}
+
+/* ── Frozen Citadel — glacial keep, endless snowfall ───────────────────── */
+[data-theme="frozen-citadel"] {
+  --fx-canvas:
+    radial-gradient(115% 85% at 20% 10%, rgb(34 211 238 / 0.16), transparent 58%),
+    radial-gradient(120% 95% at 85% 100%, rgb(8 145 178 / 0.2), transparent 55%),
+    linear-gradient(180deg, rgb(8 17 26), rgb(13 26 38));
+  --fx-anim: fancyGlowDrift 40s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2px 2px at 26% 15%, rgb(103 232 249 / 0.6), transparent 65%),
+    radial-gradient(1.5px 1.5px at 74% 40%, rgb(165 243 252 / 0.5), transparent 65%),
+    radial-gradient(1px 1px at 55% 60%, rgb(224 244 255 / 0.6), transparent 65%);
+  --fx-particles-anim: fancyFall 21s linear infinite, fancyTwinkle 8s ease-in-out infinite;
+  --fx-p-opacity: 0.55;
+}
+
+/* ── Void Nebula — deep space, breathing nebula and far stars ──────────── */
+[data-theme="void-nebula"] {
+  --fx-canvas:
+    radial-gradient(115% 90% at 75% 15%, rgb(192 38 211 / 0.22), transparent 58%),
+    radial-gradient(110% 95% at 18% 90%, rgb(74 4 78 / 0.35), transparent 55%),
+    radial-gradient(90% 70% at 50% 55%, rgb(46 16 101 / 0.25), transparent 60%),
+    linear-gradient(180deg, rgb(10 8 18), rgb(17 13 28));
+  --fx-anim: fancyGlowDrift 44s ease-in-out infinite alternate;
+  --fx-particles:
+    radial-gradient(1.5px 1.5px at 28% 30%, rgb(232 121 249 / 0.6), transparent 65%),
+    radial-gradient(1px 1px at 66% 55%, rgb(217 70 239 / 0.5), transparent 65%),
+    radial-gradient(1px 1px at 45% 80%, rgb(245 208 254 / 0.6), transparent 65%);
+  --fx-particles-anim: fancyTwinkle 5s ease-in-out infinite;
+  --fx-p-opacity: 0.6;
+}
+
+/* ── Emerald Enigma — ancient forest, jade wisps wandering ─────────────── */
+[data-theme="emerald-enigma"] {
+  --fx-canvas:
+    radial-gradient(110% 85% at 15% 15%, rgb(16 185 129 / 0.18), transparent 58%),
+    radial-gradient(120% 95% at 88% 92%, rgb(6 95 70 / 0.3), transparent 55%),
+    linear-gradient(180deg, rgb(8 18 15), rgb(13 27 23));
+  --fx-anim: fancyGlowDrift 38s ease-in-out infinite;
+  --fx-particles:
+    radial-gradient(2.5px 2.5px at 30% 75%, rgb(52 211 153 / 0.55), transparent 65%),
+    radial-gradient(1.5px 1.5px at 70% 55%, rgb(16 185 129 / 0.5), transparent 65%),
+    radial-gradient(1px 1px at 50% 90%, rgb(167 243 208 / 0.55), transparent 65%);
+  --fx-particles-anim: fancyDust 27s linear infinite alternate, fancyTwinkle 6.5s ease-in-out infinite;
+  --fx-p-opacity: 0.55;
+}
+
 @layer base {
   * {
     box-sizing: border-box;
@@ -722,6 +980,12 @@
   @keyframes floatIn {
     from { opacity: 0; transform: translateY(10px) scale(0.985); }
     to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Looped sweep used by the animated preview badges in the theme picker. */
+  @keyframes fancyShimmer {
+    0%       { transform: translateX(0) skewX(-12deg); }
+    55%, 100% { transform: translateX(340%) skewX(-12deg); }
   }
   .line-clamp-2 {
     display: -webkit-box;

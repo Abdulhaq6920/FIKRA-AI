@@ -1,45 +1,90 @@
 "use client";
 
+/**
+ * Reset-password — themed split-screen shell shared with the other auth pages.
+ *
+ * Reads the one-time `?token=` from the reset email and swaps the account
+ * password. The Suspense boundary is required: useSearchParams() needs one
+ * during static prerender, and the token must survive a fresh navigation
+ * from the email link.
+ */
+
 import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2, CheckCircle, ArrowLeft } from "lucide-react";
-import { resetPasswordSchema, type ResetPasswordFormData } from "@/lib/validation/schemas";
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
+import {
+  resetPasswordSchema,
+  type ResetPasswordFormData,
+} from "@/lib/validation/schemas";
 import { authApi } from "@/lib/api/auth";
 import { ApiRequestError } from "@/lib/api/client";
+import {
+  AuthNotice,
+  AuthShell,
+  authErrorTextClass,
+  authInputClass,
+  authLabelClass,
+  authPrimaryButtonClass,
+  invalidInputClass,
+  LogoMark,
+  useRobotStage,
+} from "@/features/auth/AuthShell";
 import { cn } from "@/lib/utils/cn";
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-surface-950" />}>
+    <Suspense fallback={null}>
       <ResetPasswordContent />
     </Suspense>
   );
 }
 
 function ResetPasswordContent() {
-  const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token") ?? "";
+
+  return (
+    <AuthShell>
+      <ResetPasswordForm token={token} />
+    </AuthShell>
+  );
+}
+
+function ResetPasswordForm({ token }: { token: string }) {
+  const router = useRouter();
 
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const { flashMood, holdMood } = useRobotStage();
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } =
-    useForm<ResetPasswordFormData>({ resolver: zodResolver(resetPasswordSchema) });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ResetPasswordFormData>({ resolver: zodResolver(resetPasswordSchema) });
 
   const onSubmit = async (data: ResetPasswordFormData) => {
     setServerError(null);
-    if (!token) { setServerError("Invalid or missing reset token."); return; }
+    if (!token) {
+      flashMood("sad", 2000);
+      setServerError("This reset link is missing its token. Please request a new one.");
+      return;
+    }
     try {
       await authApi.completePasswordReset(token, data.new_password);
+      // Wink and hold: the redirect to /login lands 3s after success, so the
+      // mascot's celebration stays on screen right up to route change.
+      holdMood("wink");
       setDone(true);
+      // Give the success state a beat to be read, then land on sign-in.
       setTimeout(() => router.push("/login"), 3000);
     } catch (err) {
+      flashMood("sad", 2200);
       if (err instanceof ApiRequestError) {
         setServerError("This reset link is invalid or has expired. Please request a new one.");
       } else {
@@ -49,88 +94,147 @@ function ResetPasswordContent() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-950 flex items-center justify-center px-4">
-      <div className="absolute inset-0 auth-canvas" />
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 w-full max-w-md"
-      >
-        <div className="rounded-2xl glass-panel p-8">
-          <Link href="/login" className="inline-flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 mb-6">
-            <ArrowLeft className="w-4 h-4" /> Back to sign in
-          </Link>
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+      className="w-full max-w-[400px]"
+    >
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-2 text-sm font-medium text-surface-400 underline-offset-4 transition-colors hover:text-brand-400 focus:outline-none focus-visible:underline"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to sign in
+        </Link>
 
-          {done ? (
-            <div className="text-center py-4">
-              <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-              <h1 className="text-xl font-semibold text-surface-100 mb-2">Password updated</h1>
-              <p className="text-surface-400 text-sm">Redirecting you to sign in…</p>
-            </div>
-          ) : (
-            <>
-              <h1 className="text-2xl font-semibold text-surface-100 mb-1">Set new password</h1>
-              <p className="text-surface-400 text-sm mb-6">Choose a strong password for your account.</p>
-
-              <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-                <div>
-                  <label htmlFor="new_password" className="block text-sm font-medium text-surface-200 mb-1.5">New password</label>
-                  <div className="relative">
-                    <input
-                      id="new_password"
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="new-password"
-                      className={cn(
-                        "w-full px-4 pr-10 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
-                        errors.new_password ? "border-red-500/60" : "border-surface-600/60"
-                      )}
-                      placeholder="••••••••"
-                      {...register("new_password")}
-                    />
-                    <button type="button" onClick={() => setShowPassword(p => !p)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-200"
-                      aria-label={showPassword ? "Hide" : "Show"}>
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {errors.new_password && <p className="mt-1 text-xs text-red-400">{errors.new_password.message}</p>}
-                </div>
-
-                <div>
-                  <label htmlFor="confirm_password" className="block text-sm font-medium text-surface-200 mb-1.5">Confirm password</label>
-                  <input
-                    id="confirm_password"
-                    type="password"
-                    autoComplete="new-password"
-                    className={cn(
-                      "w-full px-4 py-2.5 rounded-lg bg-surface-800/60 border text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm transition-colors",
-                      errors.confirm_password ? "border-red-500/60" : "border-surface-600/60"
-                    )}
-                    placeholder="••••••••"
-                    {...register("confirm_password")}
-                  />
-                  {errors.confirm_password && <p className="mt-1 text-xs text-red-400">{errors.confirm_password.message}</p>}
-                </div>
-
-                {serverError && (
-                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30" role="alert">
-                    <p className="text-sm text-red-400">{serverError}</p>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm disabled:opacity-60 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                >
-                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Update password
-                </button>
-              </form>
-            </>
-          )}
+        <div className="mt-8">
+          <LogoMark />
         </div>
-      </motion.div>
-    </div>
+
+        {done ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-6"
+          >
+            <h1 className="text-3xl font-bold tracking-tight text-surface-100">
+              Password updated
+            </h1>
+            <p className="mt-3 flex items-start gap-2.5 text-sm text-surface-400">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" aria-hidden="true" />
+              Your password has been changed. Redirecting you to sign in…
+            </p>
+            <Link href="/login" className={cn(authPrimaryButtonClass, "mt-8")}>
+              Sign in now
+            </Link>
+          </motion.div>
+        ) : (
+          <>
+            <h1 className="mt-5 text-3xl font-bold tracking-tight text-surface-100">
+              Set new password
+            </h1>
+            <p className="mt-2 text-sm text-surface-400">
+              Choose a strong password for your account.
+            </p>
+
+            <form
+              onSubmit={handleSubmit(onSubmit, () => flashMood("sad", 1400))}
+              noValidate
+              className="mt-8"
+            >
+              {/* New password */}
+              <div>
+                <label htmlFor="new_password" className={authLabelClass}>
+                  New password
+                </label>
+                <div className="relative">
+                  <input
+                    id="new_password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder="••••••••"
+                    className={cn(
+                      authInputClass,
+                      "pr-11",
+                      errors.new_password && invalidInputClass
+                    )}
+                    aria-invalid={!!errors.new_password}
+                    aria-describedby={errors.new_password ? "new-password-error" : undefined}
+                    {...register("new_password")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((p) => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-surface-400 transition-colors hover:text-surface-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                {errors.new_password ? (
+                  <p id="new-password-error" className={authErrorTextClass} role="alert">
+                    {errors.new_password.message}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-xs text-surface-500">
+                    At least 8 characters with a number and an uppercase letter.
+                  </p>
+                )}
+              </div>
+
+              {/* Confirm */}
+              <div className="mt-4">
+                <label htmlFor="confirm_password" className={authLabelClass}>
+                  Confirm password
+                </label>
+                <input
+                  id="confirm_password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  className={cn(
+                    authInputClass,
+                    errors.confirm_password && invalidInputClass
+                  )}
+                  aria-invalid={!!errors.confirm_password}
+                  aria-describedby={
+                    errors.confirm_password ? "confirm-password-error" : undefined
+                  }
+                  {...register("confirm_password")}
+                />
+                {errors.confirm_password && (
+                  <p id="confirm-password-error" className={authErrorTextClass} role="alert">
+                    {errors.confirm_password.message}
+                  </p>
+                )}
+              </div>
+
+              {serverError && (
+                <div className="mt-5">
+                  <AuthNotice>{serverError}</AuthNotice>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={cn(authPrimaryButtonClass, "mt-6")}
+              >
+                {isSubmitting && (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                )}
+                {isSubmitting ? "Updating…" : "Update password"}
+              </button>
+            </form>
+          </>
+        )}
+    </motion.div>
   );
 }

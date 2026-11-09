@@ -44,15 +44,23 @@ async function request<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  // Handle 401 — try token refresh once
+  // Handle 401 — try token refresh once (except on the auth endpoints
+  // themselves, which would ping-pong forever while logged out).
   if (res.status === 401 && path !== "/auth/refresh" && path !== "/auth/login") {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
       // Retry original request
       return request<T>(method, path, body, headers);
     }
-    // Refresh failed — redirect to login
-    if (typeof window !== "undefined") {
+    // Refresh failed — redirect to login, unless we are already on a public
+    // auth page (the mount-time /auth/me probe 401s for logged-out visitors
+    // on every public page and must not hijack those routes, e.g. it would
+    // clobber the /register → /login?mode=signup hand-off).
+    const PUBLIC_AUTH_PATHS = ["/login", "/register", "/forgot-password", "/reset-password"];
+    if (
+      typeof window !== "undefined" &&
+      !PUBLIC_AUTH_PATHS.some((p) => window.location.pathname.startsWith(p))
+    ) {
       window.location.href = "/login?session_expired=1";
     }
     throw new ApiRequestError(401, "SESSION_EXPIRED", "Session expired", "");
@@ -83,11 +91,13 @@ async function request<T>(
 
 async function tryRefreshToken(): Promise<boolean> {
   try {
-    await fetch(`${BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: "POST",
       credentials: "include",
     });
-    return true;
+    // Only treat an HTTP 2xx as refresh success; a 401/false previously
+    // let callers loop me→refresh→me forever while logged out.
+    return res.ok;
   } catch {
     return false;
   }

@@ -67,3 +67,19 @@ class UserPublic(BaseModel):
     organization_role: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Public sign-up context
+# ---------------------------------------------------------------------------
+
+
+class PublicOrganization(BaseModel):
+    """An organization that accepts public self-registration (name + id)."""
+
+    id: uuid.UUID
+    name: str
+
+
+class SignupOptionsResponse(BaseModel):
+    organizations: list[PublicOrganization]

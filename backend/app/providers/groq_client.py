@@ -117,13 +117,14 @@ def _map_groq_error(exc: Exception) -> AppError:
         return ProviderUnavailableError()
     if isinstance(exc, groq.APIStatusError):
         body_str = str(exc.body)[:300] if exc.body else ""
+        # Upstream bodies can echo request fragments — keep them in logs,
+        # never in user-facing messages.
         logger.error("groq_api_error", status=exc.status_code, body=body_str)
         if exc.status_code == 400:
             # Bad request — likely invalid model or bad input
             return ProviderUnavailableError(
-                f"Provider rejected the request (HTTP 400). "
-                f"This often means the model ID is invalid or decommissioned. "
-                f"Check GROQ_PRIMARY_MODEL in .env. Detail: {body_str[:200]}"
+                "The AI provider rejected the request. "
+                "Please try again later."
             )
         return ProviderUnavailableError(f"Provider error: {exc.status_code}")
     logger.exception("groq_unexpected_error", exc_info=exc)

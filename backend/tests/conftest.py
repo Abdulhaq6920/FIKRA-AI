@@ -10,6 +10,11 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncGenerator
 
+# Rate limiting is in-process and keyed by client IP; the whole integration
+# suite shares one testclient IP and routinely exceeds the login limit.
+# Settings are cached at first import of app.main, so set this first.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

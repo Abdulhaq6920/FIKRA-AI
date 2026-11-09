@@ -39,7 +39,6 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
-import { CurrencySwitch } from "@/features/currency/CurrencySwitch";
 import { chatApi } from "@/lib/api/chat";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
@@ -423,7 +422,6 @@ export function AppShell({
           <span className="ml-2 text-sm font-semibold text-surface-100 md:hidden">FIKRA AI</span>
 
           <div className="ml-auto flex items-center gap-2">
-            <CurrencySwitch />
             <NotificationBell />
           </div>
         </header>

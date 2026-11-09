@@ -74,7 +74,7 @@ export function QuestionsTab() {
     try {
       const result = await adminAnalyticsApi.questions({
         page,
-        page_size: 20,
+        page_size: 10,
         search: search || undefined,
         user_id: userId ?? undefined,
       });
@@ -121,7 +121,7 @@ export function QuestionsTab() {
     }
   };
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / 20)) : 1;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / 10)) : 1;
 
   // Detail overlays page through the rows already loaded in this list so
   // reading a question never navigates away from the explorer.
@@ -216,11 +216,6 @@ export function QuestionsTab() {
                       <p className="mt-1 truncate text-xs text-surface-500">
                         {item.user_name} · {item.user_email} · {item.conversation_title}
                       </p>
-                      {item.answer_excerpt && (
-                        <p className="mt-1 line-clamp-2 text-xs text-surface-400">
-                          {item.answer_excerpt}
-                        </p>
-                      )}
                     </div>
                     <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-surface-600" />
                   </div>

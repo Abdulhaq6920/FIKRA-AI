@@ -52,6 +52,7 @@ class _FakeRAGService:
         conversation_id: uuid.UUID,
         user_id: uuid.UUID,
         organization_id: uuid.UUID,
+        include_restricted: bool = False,
     ) -> AsyncGenerator[str, None]:
         yield "Leave requests "
         yield "need two weeks of notice."

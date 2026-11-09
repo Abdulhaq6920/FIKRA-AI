@@ -86,9 +86,20 @@ class Settings(BaseSettings):
             v = v.strip()
             if v.startswith("["):
                 import json
-                return json.loads(v)
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v
+                origins = json.loads(v)
+            else:
+                origins = [o.strip() for o in v.split(",") if o.strip()]
+        else:
+            origins = v
+        # A wildcard origin combined with allow_credentials=True lets any
+        # site make credentialed cross-origin requests (cookies carry the
+        # JWT). Fail fast instead of silently reflecting every origin.
+        if any(o in ("*", "null", "") for o in origins):
+            raise ValueError(
+                "ALLOWED_ORIGINS must list explicit origins — '*' or 'null' "
+                "is not safe with credentialed cookies."
+            )
+        return origins
 
     # ------------------------------------------------------------------
     # Embeddings & Reranking
@@ -167,11 +178,23 @@ class Settings(BaseSettings):
     rag_answer_max_tokens: int = Field(default=1024, ge=256, le=8192)
 
     # ------------------------------------------------------------------
-    # Rate limits
-    # ------------------------------------------------------------------
+    # Rate limits — enforced by the sliding-window limiter in core/rate_limit.py
+    rate_limit_enabled: bool = Field(default=True)
     rate_limit_login: str = Field(default="10/minute")
     rate_limit_chat: str = Field(default="30/minute")
     rate_limit_upload: str = Field(default="5/minute")
+    rate_limit_password_reset: str = Field(default="5/hour")
+
+    # ------------------------------------------------------------------
+    # Public sign-up
+    # ------------------------------------------------------------------
+    # Organizations whose ID is on this list accept self-registration.
+    # Every other organization ID must be provisioned by an admin
+    # (admin_users.py), otherwise anyone who learns an org UUID could
+    # mint themselves a membership. Comma-separated env var.
+    public_signup_org_ids: str = Field(
+        default="00000000-0000-0000-0000-000000000001"
+    )
 
     # ------------------------------------------------------------------
     # Logging
@@ -199,12 +222,22 @@ class Settings(BaseSettings):
     def email_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_user)
 
+    @property
+    def public_signup_orgs(self) -> frozenset[str]:
+        """Normalized UUID strings of organizations open to self-registration."""
+        return frozenset(
+            o.strip().lower() for o in self.public_signup_org_ids.split(",") if o.strip()
+        )
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         """In production, reject placeholder/default secrets."""
         if self.is_production:
-            if self.jwt_secret_key.startswith("CHANGE_ME"):
-                raise ValueError("jwt_secret_key must be set to a real secret in production")
+            if self.jwt_secret_key.startswith("CHANGE_ME") or len(self.jwt_secret_key) < 32:
+                raise ValueError(
+                    "jwt_secret_key must be a real secret of at least 32 "
+                    "characters in production"
+                )
             if not self.groq_api_key or self.groq_api_key.startswith("gsk_CHANGE"):
                 raise ValueError("groq_api_key must be set in production")
         return self

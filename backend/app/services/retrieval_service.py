@@ -19,12 +19,12 @@ import asyncio
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import Float, Integer, func, literal, select, text
+from sqlalchemy import ColumnElement, func, select, text, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.db.models.document import Document, DocumentChunk, DocumentStatus
+from app.db.models.document import Document, DocumentAccessLevel, DocumentChunk, DocumentStatus
 
 logger = get_logger(__name__)
 
@@ -53,12 +53,16 @@ async def retrieve(
     db: AsyncSession,
     *,
     top_k: int | None = None,
+    include_restricted: bool = False,
 ) -> list[RetrievedPassage]:
     """
     Retrieve the most relevant document passages for *query*.
 
     All DB queries are filtered by organization_id — this is the primary
-    tenant-isolation enforcement point for retrieval.
+    tenant-isolation enforcement point for retrieval. Documents marked
+    ``access_level=restricted`` are excluded unless *include_restricted*
+    is set (org admins only), so the chat pipeline cannot leak content a
+    member is not allowed to read.
     """
     # Lazy import so app starts without sentence-transformers installed
     from app.providers.embeddings import embed_query  # noqa: PLC0415
@@ -77,6 +81,7 @@ async def retrieve(
         organization_id=organization_id,
         db=db,
         limit=k,
+        include_restricted=include_restricted,
     )
 
     # Step 3: Full-text keyword search
@@ -85,6 +90,7 @@ async def retrieve(
         organization_id=organization_id,
         db=db,
         limit=k,
+        include_restricted=include_restricted,
     )
 
     # Step 4: RRF fusion
@@ -117,11 +123,22 @@ async def retrieve(
     return filtered
 
 
+def _access_scope_condition(
+    include_restricted: bool,
+) -> ColumnElement[bool] | None:
+    """Document-level access condition: restricted docs require an admin."""
+    if include_restricted:
+        return None
+    return Document.access_level == DocumentAccessLevel.ORGANIZATION
+
+
 async def _vector_search(
     query_vector: list[float],
     organization_id: uuid.UUID,
     db: AsyncSession,
     limit: int,
+    *,
+    include_restricted: bool = False,
 ) -> list[RetrievedPassage]:
     """
     Cosine similarity search using pgvector.
@@ -129,6 +146,7 @@ async def _vector_search(
     The organization_id filter is mandatory — it is part of the WHERE clause,
     not a post-filter, so the database enforces tenant isolation.
     """
+    access_condition = _access_scope_condition(include_restricted)
     stmt = (
         select(
             DocumentChunk.id,
@@ -146,6 +164,7 @@ async def _vector_search(
             Document.organization_id == organization_id,  # redundant, defense-in-depth
             Document.status == DocumentStatus.READY,
             Document.is_active == True,  # noqa: E712
+            access_condition or true(),
         )
         .order_by(text("score DESC"))
         .limit(limit)
@@ -175,6 +194,8 @@ async def _keyword_search(
     organization_id: uuid.UUID,
     db: AsyncSession,
     limit: int,
+    *,
+    include_restricted: bool = False,
 ) -> list[RetrievedPassage]:
     """
     Full-text search using PostgreSQL tsvector.
@@ -182,6 +203,8 @@ async def _keyword_search(
     Uses plainto_tsquery for safety — never passes raw user input
     directly into a tsquery expression.
     """
+    access_condition = _access_scope_condition(include_restricted)
+
     stmt = (
         select(
             DocumentChunk.id,
@@ -201,7 +224,10 @@ async def _keyword_search(
             Document.organization_id == organization_id,
             Document.status == DocumentStatus.READY,
             Document.is_active == True,  # noqa: E712
-            text("document_chunks.content_tsv @@ plainto_tsquery('english', :q)").bindparams(q=query),
+            text(
+                "document_chunks.content_tsv @@ plainto_tsquery('english', :q)"
+            ).bindparams(q=query),
+            access_condition or true(),
         )
         .order_by(text("score DESC"))
         .limit(limit)

@@ -1,6 +1,7 @@
 """
 Authentication API endpoints.
 
+GET  /api/v1/auth/signup-options
 POST /api/v1/auth/register
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
@@ -12,26 +13,49 @@ GET  /api/v1/auth/me
 
 from __future__ import annotations
 
-from datetime import timedelta
+import json
+import uuid
 
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser
 from app.core.config import settings
+from app.core.exceptions import ConflictError, ValidationError
 from app.db.session import get_db
 from app.schemas.auth import (
     LoginRequest,
     PasswordResetCompleteRequest,
     PasswordResetInitRequest,
+    PublicOrganization,
     RegisterRequest,
-    RefreshRequest,
+    SignupOptionsResponse,
     TokenResponse,
     UserPublic,
 )
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# The refresh-token cookie fallback body must stay tiny (caps DoS surface).
+_MAX_REFRESH_BODY_BYTES = 4096
+
+
+@router.get("/signup-options", response_model=SignupOptionsResponse)
+async def signup_options(
+    db: AsyncSession = Depends(get_db),
+) -> SignupOptionsResponse:
+    """
+    List organizations that accept public self-registration.
+
+    Public by design — the sign-up form needs it before any account exists
+    (fixes the previously hard-coded default organization UUID in the UI).
+    Only allowlisted organizations are ever returned.
+    """
+    options = await AuthService(db).signup_options()
+    return SignupOptionsResponse(
+        organizations=[PublicOrganization(id=org_id, name=name) for org_id, name in options]
+    )
 
 
 @router.post("/register", response_model=UserPublic, status_code=201)
@@ -41,13 +65,26 @@ async def register(
 ) -> UserPublic:
     """Register a new user in an organization."""
     service = AuthService(db)
-    user = await service.register(
-        email=body.email,
-        password=body.password,
-        full_name=body.full_name,
-        organization_id=body.organization_id,
-    )
-    return UserPublic.model_validate(user)
+    try:
+        user = await service.register(
+            email=body.email,
+            password=body.password,
+            full_name=body.full_name,
+            organization_id=body.organization_id,
+        )
+        return UserPublic.model_validate(user)
+    except ConflictError:
+        # Email already exists. Responding 201 with a synthetic profile
+        # keeps "address taken" indistinguishable from success, so the
+        # endpoint cannot be used to enumerate registered accounts
+        # (genuine entries are persisted; this payload is never stored).
+        return UserPublic(
+            id=uuid.uuid4(),
+            email=str(body.email),
+            full_name=body.full_name,
+            status="active",
+            is_platform_admin=False,
+        )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -121,12 +158,19 @@ async def refresh(
     """Issue a new access token using the refresh token cookie."""
     refresh_token = request.cookies.get("refresh_token", "")
     if not refresh_token:
-        # Fallback: check body (for non-browser clients)
+        # Fallback: check body (for non-browser clients). Cap the body so an
+        # unauthenticated client cannot make the server parse arbitrarily
+        # large payloads, and validate the shape strictly.
         body_bytes = await request.body()
-        import json
+        if len(body_bytes) > _MAX_REFRESH_BODY_BYTES:
+            raise ValidationError("Request body too large.")
         try:
             body_data = json.loads(body_bytes)
-            refresh_token = body_data.get("refresh_token", "")
+            if not isinstance(body_data, dict):
+                refresh_token = ""
+            else:
+                token_value = body_data.get("refresh_token", "")
+                refresh_token = token_value if isinstance(token_value, str) else ""
         except Exception:
             refresh_token = ""
 

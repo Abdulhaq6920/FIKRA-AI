@@ -6,10 +6,11 @@ Registers middleware, routes, error handlers, and lifespan events.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -23,6 +24,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
     app_exception_handler,
 )
+from app.core.rate_limit import RateSpec, limiter, parse_rate
 
 # Initialize logging first, before anything else
 configure_logging()
@@ -117,6 +119,58 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIDMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Rate limiting on abuse-prone endpoints (brute force, LLM cost abuse,
+    # disk-fill via uploads). Runs as middleware and answers 429 with the
+    # same JSON error envelope as AppError responses.
+    if settings.rate_limit_enabled:
+        rate_policies: tuple[tuple[str, tuple[str, ...], RateSpec], ...] = (
+            (
+                "/api/v1/auth/password-reset",
+                ("POST",),
+                parse_rate(settings.rate_limit_password_reset),
+            ),
+            ("/api/v1/auth/login", ("POST",), parse_rate(settings.rate_limit_login)),
+            ("/api/v1/auth/register", ("POST",), parse_rate(settings.rate_limit_login)),
+            ("/api/v1/auth/refresh", ("POST",), parse_rate(settings.rate_limit_login)),
+            ("/api/v1/chat/ask", ("POST",), parse_rate(settings.rate_limit_chat)),
+            ("/api/v1/documents/upload", ("POST",), parse_rate(settings.rate_limit_upload)),
+        )
+
+        @app.middleware("http")
+        async def rate_limit_middleware(
+            request: Request,
+            call_next: Callable[..., Awaitable[Response]],
+        ) -> Response:
+            path = request.url.path
+            for prefix, methods, spec in rate_policies:
+                if path.startswith(prefix) and request.method in methods:
+                    client_ip = request.client.host if request.client else "unknown"
+                    allowed, retry_after = limiter.check(
+                        f"{prefix}:{client_ip}", spec
+                    )
+                    if not allowed:
+                        logger.warning(
+                            "rate_limit_hit",
+                            path=path,
+                            client_ip=client_ip,
+                            limit=f"{spec.max_events}/{spec.period_seconds}s",
+                        )
+                        return JSONResponse(
+                            status_code=429,
+                            headers={"Retry-After": str(retry_after)},
+                            content={
+                                "error": {
+                                    "code": "RATE_LIMITED",
+                                    "message": "Too many requests. Please try again later.",
+                                    "request_id": request.headers.get(
+                                        "X-Request-ID", "unknown"
+                                    ),
+                                }
+                            },
+                        )
+                    break
+            return await call_next(request)
 
     # Exception handler for all AppError subclasses
     app.add_exception_handler(AppError, app_exception_handler)

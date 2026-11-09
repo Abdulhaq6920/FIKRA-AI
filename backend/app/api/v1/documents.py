@@ -12,14 +12,16 @@ GET    /api/v1/documents/{doc_id}/download
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import mimetypes
 import uuid
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser, OrgAdminUser
@@ -31,14 +33,83 @@ from app.core.exceptions import (
     PermissionDeniedError,
 )
 from app.core.logging import get_logger
-from app.db.models.document import Document, DocumentProcessingJob, DocumentStatus, JobStatus
+from app.db.models.document import (
+    Document,
+    DocumentAccessLevel,
+    DocumentProcessingJob,
+    DocumentStatus,
+    JobStatus,
+)
 from app.db.models.conversation import Message
+from app.db.models.user import OrgRole
 from app.db.session import get_db
 from app.schemas.document import DocumentListResponse, DocumentOut, ProcessingJobOut
 from app.storage.local_storage import get_storage
 
+# Optional native dependency: python-magic needs the libmagic system library
+# (installed in the Docker image). Import once at module level; when it is
+# unavailable the upload endpoint falls back to a static extension→MIME map
+# instead of trusting the client-supplied Content-Type.
+try:
+    import magic as _magic
+except ImportError:  # pragma: no cover - libmagic missing locally
+    _magic = None
+
 logger = get_logger(__name__)
+
+# References to inline-ingestion background tasks. asyncio only keeps weak
+# references to tasks, so the set below prevents them from being garbage
+# collected mid-run; completed tasks are discarded automatically.
+_inline_tasks: set[asyncio.Task[None]] = set()
+
+
+def _dispatch_inline_task(coro: Any) -> None:
+    """Start a fire-and-forget ingestion task that cannot be GC'd mid-run."""
+    task = asyncio.create_task(coro)
+    _inline_tasks.add(task)
+    task.add_done_callback(_inline_tasks.discard)
+
+
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+# Static extension → MIME fallback for environments where python-magic
+# cannot import (missing libmagic). Uses mimetypes' registry first so the
+# mapping never diverges from a working `file` classification.
+def _extension_mime(ext: str) -> str:
+    """Return a safe MIME type for *ext*, defaulting to octet-stream."""
+    guessed, _ = mimetypes.guess_type(f"f.{ext}", strict=True)
+    if guessed:
+        return guessed
+    return {
+        "md": "text/markdown",
+        "markdown": "text/markdown",
+        "tsv": "text/tab-separated-values",
+        "odt": "application/vnd.oasis.opendocument.text",
+        "odp": "application/vnd.oasis.opendocument.presentation",
+        "ods": "application/vnd.oasis.opendocument.spreadsheet",
+        "tif": "image/tiff",
+        "tiff": "image/tiff",
+        "bmp": "image/bmp",
+        "html": "text/html",
+        "htm": "text/html",
+    }.get(ext, "application/octet-stream")
+
+
+def _safe_download_filename(name: str) -> str:
+    """
+    Scrub an uploaded filename for use in the Content-Disposition header.
+
+    Quotes/backslashes/CRLF are escaped rather than trusted — an unfiltered
+    filename can break the header or smuggle extra header fields.
+    """
+    cleaned = "".join(
+        " " if c in ("\r", "\n") else c for c in name
+    ).replace("\\", "_").replace('"', "_")
+    cleaned = "".join(c if c.isprintable() else "_" for c in cleaned).strip()
+    if not cleaned or cleaned.startswith("."):
+        cleaned = f"download{Path(name).suffix[:24]}" if "." in name else "download"
+    return cleaned[:512]
 
 
 @router.post("/upload", response_model=DocumentOut, status_code=201)
@@ -55,12 +126,23 @@ async def upload_document(
     """
     user, org_id, role = ctx
 
-    # Validate file size
-    file_bytes = await file.read()
-    if len(file_bytes) > settings.max_upload_size_bytes:
-        raise FileTooLarge(
-            f"File exceeds {settings.max_upload_size_mb}MB limit."
-        )
+    # Validate file size by streaming — never buffer an unbounded upload
+    # in memory before checking its size (resource-exhaustion vector).
+    max_bytes = settings.max_upload_size_bytes
+    chunks: list[bytes] = []
+    total_size = 0
+    while True:
+        chunk = await file.read(1024 * 1024)  # 1 MB
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_bytes:
+            raise FileTooLarge(
+                f"File exceeds {settings.max_upload_size_mb}MB limit."
+            )
+        chunks.append(chunk)
+    file_bytes = b"".join(chunks)
+    del chunks
 
     # Validate extension
     original_name = file.filename or "unknown"
@@ -71,12 +153,14 @@ async def upload_document(
             f"Allowed: {', '.join(settings.allowed_extensions)}"
         )
 
-    # Detect actual MIME type (not trusting the client's Content-Type)
-    try:
-        import magic
-        detected_mime = magic.from_buffer(file_bytes[:4096], mime=True)
-    except Exception:
-        detected_mime = file.content_type or "application/octet-stream"
+    # Detect actual MIME type (not trusting the client's Content-Type).
+    # If libmagic is unavailable, fall back to a static extension map —
+    # echoing the client-supplied Content-Type would let an upload choose
+    # its own content class (e.g. text/html payloads stored as .txt).
+    if _magic is not None:
+        detected_mime = _magic.from_buffer(file_bytes[:4096], mime=True)
+    else:
+        detected_mime = _extension_mime(ext)
 
     # Compute checksum for deduplication
     checksum = hashlib.sha256(file_bytes).hexdigest()
@@ -115,7 +199,9 @@ async def upload_document(
     db.add(job)
     await db.commit()
 
-    # Dispatch background ingestion task
+    # Dispatch background ingestion task. Kept function-local on purpose:
+    # the workers module pulls in the Celery app and the ingestion pipeline
+    # (sentence-transformers), which must not load at API import time.
     from app.workers.document_tasks import ingest_document
     from app.core.logging import get_logger as _gl
     _log = _gl(__name__)
@@ -142,8 +228,9 @@ async def upload_document(
             document_id=str(doc_uuid),
             error=str(exc)[:200],
         )
-        import asyncio as _aio
-        _aio.create_task(_process_document_inline(doc_uuid, org_id, str(doc_uuid), storage_path, ext))
+        _dispatch_inline_task(
+            _process_document_inline(doc_uuid, org_id, str(doc_uuid), storage_path, ext)
+        )
 
     return DocumentOut.model_validate(document)
 
@@ -159,28 +246,32 @@ async def list_documents(
     """List documents for the authenticated user's organization."""
     user, org_id, role = ctx
 
-    query = select(Document).where(
+    conditions: list[Any] = [
         Document.organization_id == org_id,
         Document.is_active == True,  # noqa: E712
-    )
+    ]
+    # Restricted documents are admin-only in every consumer; members must
+    # not even be able to list their metadata.
+    if role != OrgRole.ORG_ADMIN:
+        conditions.append(Document.access_level == DocumentAccessLevel.ORGANIZATION)
     if status:
-        query = query.where(Document.status == status)
+        conditions.append(Document.status == status)
 
-    count_result = await db.execute(
-        select(Document.id).where(
-            Document.organization_id == org_id,
-            Document.is_active == True,  # noqa: E712
-        )
+    total = await db.scalar(select(func.count()).select_from(Document).where(*conditions))
+
+    query = (
+        select(Document)
+        .where(*conditions)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .order_by(Document.created_at.desc())
     )
-    total = len(count_result.all())
-
-    query = query.offset((page - 1) * page_size).limit(page_size).order_by(Document.created_at.desc())
     result = await db.execute(query)
     docs = result.scalars().all()
 
     return DocumentListResponse(
         items=[DocumentOut.model_validate(d) for d in docs],
-        total=total,
+        total=total or 0,
         page=page,
         page_size=page_size,
     )
@@ -195,6 +286,12 @@ async def get_document(
     """Get a specific document (must belong to the user's organization)."""
     user, org_id, role = ctx
     doc = await _get_doc_or_404(doc_id, org_id, db)
+    if (
+        doc.access_level == DocumentAccessLevel.RESTRICTED
+        and role != OrgRole.ORG_ADMIN
+    ):
+        # Match the not-found contract so we don't confirm existence.
+        raise DocumentNotFoundError()
     return DocumentOut.model_validate(doc)
 
 
@@ -275,8 +372,9 @@ async def reindex_document(
         task_id = task.id
     except Exception as exc:
         _log.warning("celery_unavailable_reindexing_inline", document_id=str(doc_id), error=str(exc)[:200])
-        import asyncio as _aio
-        _aio.create_task(_process_document_inline(doc_id, org_id, str(doc_id), doc.storage_path, doc.file_extension))
+        _dispatch_inline_task(
+            _process_document_inline(doc_id, org_id, str(doc_id), doc.storage_path, doc.file_extension)
+        )
 
     await db.commit()
     return {"task_id": task_id or "inline", "status": "queued"}
@@ -316,6 +414,14 @@ async def download_document(
     user, org_id, role = ctx
     doc = await _get_doc_or_404(doc_id, org_id, db)
 
+    # Restricted documents are organization-admin only — the flag means
+    # what it says, for every consumer (download, chat, retrieval).
+    if (
+        doc.access_level == DocumentAccessLevel.RESTRICTED
+        and role != OrgRole.ORG_ADMIN
+    ):
+        raise PermissionDeniedError("This document is restricted to admins.")
+
     storage = get_storage()
     file_bytes = await storage.read(doc.storage_path)
 
@@ -323,7 +429,9 @@ async def download_document(
         iter([file_bytes]),
         media_type=doc.mime_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{doc.original_filename}"'
+            "Content-Disposition": (
+                f'attachment; filename="{_safe_download_filename(doc.original_filename)}"'
+            )
         },
     )
 

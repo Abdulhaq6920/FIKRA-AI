@@ -15,6 +15,7 @@ Security:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -40,6 +41,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.models.user import OrgRole, OrganizationMembership, RefreshSession, User, UserStatus
+from app.db.models.organization import Organization
 
 logger = get_logger(__name__)
 
@@ -53,6 +55,33 @@ class AuthService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
+    async def signup_options(self) -> list[tuple[uuid.UUID, str]]:
+        """
+        Resolve the self-registration allowlist to (org_id, org_name) pairs.
+
+        Invalid UUIDs in the setting are skipped (logged, not fatal). Only
+        allowlisted organizations are returned — this endpoint is public and
+        its purpose is letting the sign-up form pick a workspace.
+        """
+        valid_ids: list[uuid.UUID] = []
+        for raw in settings.public_signup_orgs:
+            try:
+                valid_ids.append(uuid.UUID(raw))
+            except ValueError:
+                logger.warning("invalid_public_signup_org_id", value=raw)
+
+        if not valid_ids:
+            return []
+
+        rows = (
+            await self._db.execute(
+                select(Organization.id, Organization.name).where(
+                    Organization.id.in_(valid_ids)
+                )
+            )
+        ).all()
+        return [(row[0], row[1]) for row in rows]
+
     async def register(
         self,
         email: str,
@@ -65,8 +94,19 @@ class AuthService:
 
         Returns the created user (status=pending until email confirmed).
         Raises ConflictError if the email already exists.
+        Raises PermissionDeniedError if the organization does not accept
+        self-registration (only orgs in settings.public_signup_orgs do);
+        membership in any other organization must be provisioned by admins.
         """
         email_normalized = email.strip().lower()
+
+        # Self-registration is only allowed into explicitly open orgs.
+        # Org UUIDs leak readily (JWTs, logs, admin lists) — without this
+        # allowlist anyone could mint a membership in a foreign tenant.
+        if str(organization_id).lower() not in settings.public_signup_orgs:
+            raise PermissionDeniedError(
+                "This workspace does not accept public sign-ups."
+            )
 
         existing = await self._db.scalar(
             select(User).where(User.email_normalized == email_normalized)
@@ -137,7 +177,10 @@ class AuthService:
 
         user, membership = row
         if not verify_password(password, user.hashed_password):
-            logger.warning("login_failed_bad_password", email_normalized=email_normalized)
+            # Log a short hash of the email, never the address itself —
+            # aggregated logs count as a PII sink.
+            email_hint = hashlib.sha256(email_normalized.encode()).hexdigest()[:12]
+            logger.warning("login_failed_bad_password", email_hash=email_hint)
             raise AuthenticationError(_GENERIC)
 
         if user.status != UserStatus.ACTIVE:
@@ -267,11 +310,26 @@ class AuthService:
             raise InvalidTokenError()
 
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        if user.password_reset_token != token_hash:
+        # Constant-time comparison — avoids a timing oracle on the
+        # per-user stored digest (defense-in-depth; tokens are random).
+        if not hmac.compare_digest(user.password_reset_token or "", token_hash):
             raise InvalidTokenError()
 
         user.hashed_password = hash_password(new_password)
         user.password_reset_token = None  # Consume the token
+
+        # Any stolen refresh session must not survive a password reset —
+        # otherwise a hijacker keeps a valid session after the victim
+        # recovers their account (mirrors the admin reset behavior).
+        result = await self._db.execute(
+            select(RefreshSession).where(
+                RefreshSession.user_id == user.id,
+                RefreshSession.is_revoked == False,  # noqa: E712
+            )
+        )
+        for session in result.scalars().all():
+            session.is_revoked = True
+
         await self._db.flush()
         logger.info("password_reset_complete", user_id=str(user.id))
 

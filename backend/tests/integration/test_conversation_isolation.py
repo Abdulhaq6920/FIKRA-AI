@@ -132,7 +132,10 @@ class TestConversationIsolation:
 
         res = await client.get("/api/v1/chat/conversations")
         assert res.status_code == 200
-        titles = [c["title"] for c in res.json()]
+        payload = res.json()
+        titles = [
+            c["title"] for c in (payload["items"] if isinstance(payload, dict) else payload)
+        ]
         assert "User A Conv" in titles
         assert "User B Conv" not in titles, (
             "SECURITY VIOLATION: User A can see User B's conversation in list"

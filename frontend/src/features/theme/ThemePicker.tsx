@@ -15,6 +15,7 @@ import { NinjaArtwork } from "./NinjaArtwork";
 import { useTheme } from "./ThemeProvider";
 import {
   ANIME_THEMES,
+  FANTASY_THEMES,
   PROFESSIONAL_THEMES,
   type ThemeDefinition,
 } from "./themes";
@@ -83,6 +84,14 @@ export function ThemePicker() {
                 title="Professional"
                 hint="10 polished palettes for everyday work"
                 themes={PROFESSIONAL_THEMES}
+                activeTheme={theme}
+                onSelect={setTheme}
+              />
+
+              <ThemeGroup
+                title="Fantasy"
+                hint="Ten animated storybook worlds — five light, five dark"
+                themes={FANTASY_THEMES}
                 activeTheme={theme}
                 onSelect={setTheme}
               />
@@ -219,6 +228,7 @@ function ThemeGroup({
 
 function MiniPreview({ theme }: { theme: ThemeDefinition }) {
   const [canvas, card, accent] = theme.swatches;
+  const isLight = theme.mode === "light";
   return (
     <div
       className="relative h-24 overflow-hidden p-2.5"
@@ -242,6 +252,30 @@ function MiniPreview({ theme }: { theme: ThemeDefinition }) {
           </div>
         </div>
       </div>
+
+      {/* Fantasy themes preview their live ambient FX with a looping
+          shimmer sweep + badge (the real theme is fully animated). */}
+      {theme.animated && (
+        <>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <span
+              className="absolute inset-y-0 -left-1/2 w-1/2 animate-[fancyShimmer_3.2s_ease-in-out_infinite]"
+              style={{ background: `linear-gradient(100deg, transparent, ${
+                isLight ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)"
+              }, transparent)` }}
+            />
+          </div>
+          <span
+            className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider backdrop-blur"
+            style={{
+              background: isLight ? "rgba(15,23,42,0.10)" : "rgba(0,0,0,0.35)",
+              color: isLight ? "#1e293b" : "#ffffff",
+            }}
+          >
+            <Sparkles className="h-2.5 w-2.5" /> Animated
+          </span>
+        </>
+      )}
     </div>
   );
 }

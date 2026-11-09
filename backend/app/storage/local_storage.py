@@ -44,7 +44,9 @@ class LocalStorageBackend(StorageBackend):
         (path traversal protection).
         """
         resolved = (self._base / storage_path).resolve()
-        if not str(resolved).startswith(str(self._base)):
+        # is_relative_to is the correct traversal check — a string prefix
+        # match would accept sibling directories like {base}2/.
+        if not resolved.is_relative_to(self._base):
             raise StorageError(f"Path traversal detected: {storage_path!r}")
         return resolved
 

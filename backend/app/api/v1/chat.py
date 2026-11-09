@@ -55,9 +55,12 @@ from app.schemas.chat import (
     MessageListOut,
     MessageOut,
 )
+from app.core.logging import get_logger
 from app.services.rag_service import RAGService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+logger = get_logger(__name__)
 
 # In-memory cancel registry: maps stream_key → asyncio.Event
 # stream_key = f"{user_id}:{conversation_id}"
@@ -205,6 +208,7 @@ async def ask(
         conversation_id=body.conversation_id,
         user_id=user.id,
         organization_id=org_id,
+        include_restricted=role == OrgRole.ORG_ADMIN,
     )
 
     # Persist user message
@@ -324,6 +328,7 @@ async def ask_stream(
                 conversation_id=body.conversation_id,
                 user_id=user.id,
                 organization_id=org_id,
+                include_restricted=role == OrgRole.ORG_ADMIN,
             ):
                 if cancel_event.is_set() or await request.is_disconnected():
                     client_disconnected = True
@@ -415,8 +420,11 @@ async def ask_stream(
                 + "\n\n"
             )
         except Exception as exc:
-            # Unexpected failures stay opaque to the client.
-            yield f"data: {json.dumps({'error': type(exc).__name__})}\n\n"
+            # Unexpected failures stay opaque to the client — the exception
+            # class name alone fingerprints internals; log details instead.
+            logger.exception("chat_stream_unexpected_error", error=str(exc)[:200])
+            generic = {"error": "internal_error", "message": "Something went wrong."}
+            yield f"data: {json.dumps(generic)}\n\n"
         finally:
             # Always clean up the cancel event
             _cancel_events.pop(stream_key, None)

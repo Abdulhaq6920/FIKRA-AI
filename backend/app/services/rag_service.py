@@ -151,11 +151,15 @@ class RAGService:
         conversation_id: uuid.UUID,
         user_id: uuid.UUID,
         organization_id: uuid.UUID,
+        *,
+        include_restricted: bool = False,
     ) -> RAGResult:
         """
         Answer a question and return the result with validated citations.
 
         The conversation must belong to the authenticated user's organization.
+        Restricted documents are only retrievable when include_restricted=True
+        (org admins).
         """
         start_total = time.perf_counter()
 
@@ -172,6 +176,7 @@ class RAGService:
             organization_id=organization_id,
             db=self._db,
             top_k=settings.rag_retrieval_candidates,
+            include_restricted=include_restricted,
         )
         retrieval_ms = int((time.perf_counter() - t_retrieval) * 1000)
 
@@ -212,6 +217,8 @@ class RAGService:
         conversation_id: uuid.UUID,
         user_id: uuid.UUID,
         organization_id: uuid.UUID,
+        *,
+        include_restricted: bool = False,
     ) -> AsyncGenerator[str, None]:
         """
         Stream the answer token-by-token.
@@ -230,6 +237,7 @@ class RAGService:
             organization_id=organization_id,
             db=self._db,
             top_k=settings.rag_retrieval_candidates,
+            include_restricted=include_restricted,
         )
         retrieval_ms = int((time.perf_counter() - t_retrieval) * 1000)
 

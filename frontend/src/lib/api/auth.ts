@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { LoginRequest, RegisterRequest, TokenResponse, User } from "@/types";
+import type { LoginRequest, RegisterRequest, SignupOptions, TokenResponse, User } from "@/types";
 
 export const authApi = {
   login: (data: LoginRequest) =>
@@ -7,6 +7,9 @@ export const authApi = {
 
   register: (data: RegisterRequest) =>
     api.post<User>("/auth/register", data),
+
+  /** Organizations accepting public sign-up (fixes hard-coded org UUIDs). */
+  signupOptions: () => api.get<SignupOptions>("/auth/signup-options"),
 
   logout: () => api.post<void>("/auth/logout"),
 

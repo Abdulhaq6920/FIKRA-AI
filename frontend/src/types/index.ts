@@ -34,6 +34,16 @@ export interface RegisterRequest {
   organization_id: string;
 }
 
+/** An organization that accepts public self-registration. */
+export interface PublicOrganization {
+  id: string;
+  name: string;
+}
+
+export interface SignupOptions {
+  organizations: PublicOrganization[];
+}
+
 // ─── Conversations ────────────────────────────────────────────────────────
 
 export interface Conversation {
