@@ -24,7 +24,13 @@ const themeInitScript = `
       aurora: "light", parchment: "light", ocean: "light", emerald: "light",
       sunset: "light", lavender: "light", quartz: "light", cobalt: "light",
       midnight: "dark", graphite: "dark",
-      "naruto-leaf": "light", "naruto-sharingan": "dark"
+      "naruto-leaf": "light", "naruto-sharingan": "dark",
+      "enchanted-dawn": "light", "fae-meadowlight": "light",
+      "crystal-realm": "light", "celestial-voyage": "light",
+      "blossom-breeze": "light",
+      "arcane-midnight": "dark", "ember-abyss": "dark",
+      "frozen-citadel": "dark", "void-nebula": "dark",
+      "emerald-enigma": "dark"
     };
     var stored = localStorage.getItem("fikra-theme");
     var theme = stored && themes[stored] ? stored : "aurora";

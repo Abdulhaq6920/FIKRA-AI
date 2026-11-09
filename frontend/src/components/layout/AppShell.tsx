@@ -28,6 +28,7 @@ import {
   X,
   Sparkles,
   ChevronLeft,
+  ChevronRight,
   Plus,
   Trash2,
   Edit2,
@@ -89,6 +90,8 @@ export function AppShell({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [convPage, setConvPage] = useState(1);
+  const [convTotal, setConvTotal] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const pathname = usePathname();
@@ -112,20 +115,28 @@ export function AppShell({
     return true;
   });
 
+  const CONV_PAGE_SIZE = 15;
+
   // Load conversations when on chat page
   const loadConversations = useCallback(async () => {
     if (!isOnChat) return;
     try {
-      const convs = await chatApi.listConversations();
-      setConversations(convs);
+      const result = await chatApi.listConversations(convPage, CONV_PAGE_SIZE);
+      setConversations(result.items);
+      setConvTotal(result.total);
     } catch {
       // non-fatal
     }
-  }, [isOnChat]);
+  }, [isOnChat, convPage]);
 
   useEffect(() => {
     loadConversations();
   }, [loadConversations, conversationRefreshTrigger]);
+
+  // Coming back to chat always restarts at the newest page.
+  useEffect(() => {
+    if (isOnChat) setConvPage(1);
+  }, [isOnChat]);
 
   const handleNewConversation = async () => {
     if (onNewConversation) {
@@ -133,6 +144,8 @@ export function AppShell({
     } else {
       try {
         const conv = await chatApi.createConversation();
+        setConvTotal((prev) => prev + 1);
+        setConvPage(1);
         setConversations((prev) => [conv, ...prev]);
         router.push(`/chat?conversation=${conv.id}`);
       } catch {}
@@ -143,6 +156,7 @@ export function AppShell({
     e.stopPropagation();
     await chatApi.deleteConversation(id).catch(() => {});
     setConversations((prev) => prev.filter((c) => c.id !== id));
+    setConvTotal((prev) => Math.max(0, prev - 1));
   };
 
   const handleRename = async (id: string) => {
@@ -287,6 +301,37 @@ export function AppShell({
               ))
             )}
           </div>
+
+          {/* Conversation pagination */}
+          {convTotal > CONV_PAGE_SIZE && (
+            <div className="flex items-center justify-between px-3 pb-2 pt-1 text-[11px] text-surface-500 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setConvPage((p) => Math.max(1, p - 1))}
+                disabled={convPage <= 1}
+                className="rounded p-1 hover:bg-surface-800 hover:text-surface-200 disabled:opacity-30 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-brand-500"
+                aria-label="Previous conversations"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="truncate">
+                {convPage} / {Math.max(1, Math.ceil(convTotal / CONV_PAGE_SIZE))} · {convTotal} chats
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setConvPage((p) =>
+                    Math.min(Math.ceil(convTotal / CONV_PAGE_SIZE), p + 1)
+                  )
+                }
+                disabled={convPage >= Math.ceil(convTotal / CONV_PAGE_SIZE)}
+                className="rounded p-1 hover:bg-surface-800 hover:text-surface-200 disabled:opacity-30 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-brand-500"
+                aria-label="Next conversations"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -408,26 +453,65 @@ interface NotificationItem {
 }
 
 function NotificationBell() {
+  const NOTIF_PAGE_SIZE = 10;
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [page, setNotifPage] = useState(1);
+  const [notifTotal, setNotifTotal] = useState(0);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const router = useRouter();
 
   const load = useCallback(async () => {
     try {
-      const data = await api.get<{ items: NotificationItem[]; unread: number }>("/notifications?page_size=10");
+      const data = await api.get<{
+        items: NotificationItem[];
+        unread: number;
+        total: number;
+        page: number;
+      }>(`/notifications?page=${page}&page_size=${NOTIF_PAGE_SIZE}`);
       setItems(data.items);
       setUnread(data.unread);
+      setNotifTotal(data.total ?? data.items.length);
     } catch {
       // A notification outage must never block navigation or chat.
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     load();
-    const id = window.setInterval(load, 15_000);
+  }, [load, page]);
+
+  // Background refresh only resets to the newest page; if the user paged
+  // deeper, appending duplicates must be avoided.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (page === 1) load();
+    }, 15_000);
     return () => window.clearInterval(id);
-  }, [load]);
+  }, [load, page]);
+
+  const loadOlder = async () => {
+    if (loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const data = await api.get<{
+        items: NotificationItem[];
+        unread: number;
+        total: number;
+      }>(`/notifications?page=${page + 1}&page_size=${NOTIF_PAGE_SIZE}`);
+      setItems((current) => {
+        const seen = new Set(current.map((entry) => entry.id));
+        return [...current, ...data.items.filter((entry) => !seen.has(entry.id))];
+      });
+      setNotifPage((value) => value + 1);
+      setNotifTotal(data.total ?? 0);
+    } catch {
+      // non-fatal
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   const openItem = async (item: NotificationItem) => {
     if (!item.is_read) {
@@ -441,19 +525,38 @@ function NotificationBell() {
 
   return (
     <div className="relative">
-      <button onClick={() => { setOpen((value) => !value); load(); }} className="relative rounded-xl border border-surface-700 bg-surface-900/90 p-2 text-surface-300 shadow-lg backdrop-blur hover:text-cyan-300" aria-label="Notifications">
+      <button onClick={() => { setOpen((value) => !value); if (page !== 1) { setNotifPage(1); } else { load(); } }} className="relative rounded-xl border border-surface-700 bg-surface-900/90 p-2 text-surface-300 shadow-lg backdrop-blur hover:text-cyan-300" aria-label="Notifications">
         <Bell className="h-4 w-4" />
         {unread > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-brand-500 px-1 text-center text-[10px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>}
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-surface-700 bg-surface-900 shadow-2xl">
-          <p className="border-b border-surface-800 px-3 py-2 text-xs font-semibold text-surface-200">Notifications</p>
-          {items.length ? items.map((item) => (
-            <button key={item.id} onClick={() => openItem(item)} className={cn("block w-full border-b border-surface-800/70 px-3 py-3 text-left hover:bg-surface-800", !item.is_read && "bg-brand-500/5")}>
-              <p className="text-xs font-medium text-surface-100">{item.title}</p>
-              <p className="mt-0.5 text-xs text-surface-400">{item.body}</p>
+          <p className="border-b border-surface-800 px-3 py-2 text-xs font-semibold text-surface-200">
+            Notifications
+            {notifTotal > NOTIF_PAGE_SIZE && (
+              <span className="ml-2 font-normal text-surface-500">
+                {items.length} of {notifTotal}
+              </span>
+            )}
+          </p>
+          <div className="max-h-96 overflow-y-auto">
+            {items.length ? items.map((item) => (
+              <button key={item.id} onClick={() => openItem(item)} className={cn("block w-full border-b border-surface-800/70 px-3 py-3 text-left hover:bg-surface-800", !item.is_read && "bg-brand-500/5")}>
+                <p className="text-xs font-medium text-surface-100">{item.title}</p>
+                <p className="mt-0.5 text-xs text-surface-400">{item.body}</p>
+              </button>
+            )) : <p className="px-3 py-7 text-center text-xs text-surface-500">You’re all caught up.</p>}
+          </div>
+          {items.length < notifTotal && (
+            <button
+              type="button"
+              onClick={loadOlder}
+              disabled={loadingOlder}
+              className="block w-full border-t border-surface-800 px-3 py-2.5 text-center text-[11px] font-medium text-brand-300 hover:bg-surface-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              {loadingOlder ? "Loading…" : "Show older notifications"}
             </button>
-          )) : <p className="px-3 py-7 text-center text-xs text-surface-500">You’re all caught up.</p>}
+          )}
         </div>
       )}
     </div>

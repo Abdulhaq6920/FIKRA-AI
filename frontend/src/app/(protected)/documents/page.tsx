@@ -37,21 +37,29 @@ export default function DocumentsPage() {
   const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  const DOC_PAGE_SIZE = 20;
+  const totalPages = Math.max(1, Math.ceil(total / DOC_PAGE_SIZE));
 
   const isAdmin = user?.is_platform_admin || user?.organization_role === "org_admin";
 
   const loadDocuments = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const res = await documentsApi.list();
+      const res = await documentsApi.list(page, DOC_PAGE_SIZE);
       setDocuments(res.items);
+      setTotal(res.total);
     } catch {
       // non-fatal
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
+  // Changing pages always shows the loading skeleton again.
   useEffect(() => { loadDocuments(); }, [loadDocuments]);
 
   // This library is shared across the organization. Refresh in the
@@ -85,7 +93,7 @@ export default function DocumentsPage() {
         <div className="mb-6">
           <h1 className="text-xl font-semibold text-surface-100">Documents</h1>
           <p className="text-sm text-surface-400 mt-0.5">
-            {documents.length} document{documents.length !== 1 ? "s" : ""} in your organization
+            {total} document{total !== 1 ? "s" : ""} in your organization
           </p>
         </div>
 
@@ -131,6 +139,31 @@ export default function DocumentsPage() {
                 <DocumentRow key={doc.id} doc={doc} />
               ))}
             </AnimatePresence>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!loading && total > DOC_PAGE_SIZE && (
+          <div className="mt-6 flex items-center justify-between border-t border-surface-800 pt-4 text-xs text-surface-500">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded px-2 py-1.5 transition-colors hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              ← Previous
+            </button>
+            <span>
+              Page {page} of {totalPages} · {total} documents
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded px-2 py-1.5 transition-colors hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-surface-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              Next →
+            </button>
           </div>
         )}
       </div>

@@ -20,9 +20,9 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser, get_groq
@@ -48,9 +48,11 @@ from app.schemas.chat import (
     ChatResponse,
     CitationOut,
     ConversationCreate,
+    ConversationListOut,
     ConversationOut,
     ConversationUpdate,
     FeedbackRequest,
+    MessageListOut,
     MessageOut,
 )
 from app.services.rag_service import RAGService
@@ -81,25 +83,34 @@ async def create_conversation(
     return ConversationOut.model_validate(conv)
 
 
-@router.get("/conversations", response_model=list[ConversationOut])
+@router.get("/conversations", response_model=ConversationListOut)
 async def list_conversations(
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> list[ConversationOut]:
-    """List the user's conversations."""
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ConversationListOut:
+    """List the user's conversations, newest first, paginated."""
     user, org_id, role = ctx
+    base = select(Conversation).where(
+        Conversation.user_id == user.id,
+        Conversation.organization_id == org_id,
+        Conversation.is_active == True,  # noqa: E712
+    )
+    total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
     result = await db.execute(
-        select(Conversation)
-        .where(
-            Conversation.user_id == user.id,
-            Conversation.organization_id == org_id,
-            Conversation.is_active == True,  # noqa: E712
-        )
+        base
         .order_by(Conversation.updated_at.desc())
-        .limit(100)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     convs = result.scalars().all()
-    return [ConversationOut.model_validate(c) for c in convs]
+    return ConversationListOut(
+        items=[ConversationOut.model_validate(c) for c in convs],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.patch("/conversations/{conv_id}", response_model=ConversationOut)
@@ -131,26 +142,47 @@ async def delete_conversation(
     await db.commit()
 
 
-@router.get("/conversations/{conv_id}/messages", response_model=list[MessageOut])
+@router.get(
+    "/conversations/{conv_id}/messages",
+    response_model=MessageListOut,
+)
 async def get_messages(
     conv_id: uuid.UUID,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> list[MessageOut]:
-    """Return all messages for a conversation."""
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=30, ge=1, le=100),
+) -> MessageListOut:
+    """Return a page of messages for a conversation, oldest first.
+
+    Pagination anchors to the newest block: page 1 is the most recent
+    ``page_size`` messages, page 2 the block right before it, and so on.
+    New messages therefore never shift already-fetched history around.
+    """
     user, org_id, role = ctx
     await _get_conv_or_404(conv_id, user.id, org_id, db)  # ownership check
 
+    base = select(Message).where(
+        Message.conversation_id == conv_id,
+        Message.organization_id == org_id,
+    )
+    total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
+
+    # Window counted from the end of the timeline so page 1 = newest block.
+    offset = max(0, total - page_size * page)
     result = await db.execute(
-        select(Message)
-        .where(
-            Message.conversation_id == conv_id,
-            Message.organization_id == org_id,
-        )
+        base
         .order_by(Message.created_at.asc())
+        .offset(offset)
+        .limit(page_size)
     )
     msgs = result.scalars().all()
-    return [MessageOut.model_validate(m) for m in msgs]
+    return MessageListOut(
+        items=[MessageOut.model_validate(m) for m in msgs],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("/ask", response_model=ChatResponse)

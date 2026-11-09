@@ -7,7 +7,7 @@
  */
 
 export type ThemeMode = "light" | "dark";
-export type ThemeCollection = "professional" | "anime";
+export type ThemeCollection = "professional" | "anime" | "fantasy";
 
 export interface ThemeDefinition {
   id: ThemeId;
@@ -19,6 +19,11 @@ export interface ThemeDefinition {
   swatches: readonly [string, string, string];
   /** Anime themes also render an original chibi-ninja illustration. */
   artwork?: "leaf" | "sharingan";
+  /**
+   * Fantasy themes ship an animated ambient backdrop (drifting nebulae,
+   * twinkling stars, rising embers…) rendered purely in CSS.
+   */
+  animated?: boolean;
 }
 
 export type ThemeId =
@@ -33,7 +38,17 @@ export type ThemeId =
   | "midnight"
   | "graphite"
   | "naruto-leaf"
-  | "naruto-sharingan";
+  | "naruto-sharingan"
+  | "enchanted-dawn"
+  | "fae-meadowlight"
+  | "crystal-realm"
+  | "celestial-voyage"
+  | "blossom-breeze"
+  | "arcane-midnight"
+  | "ember-abyss"
+  | "frozen-citadel"
+  | "void-nebula"
+  | "emerald-enigma";
 
 export const THEMES: readonly ThemeDefinition[] = [
   {
@@ -134,6 +149,100 @@ export const THEMES: readonly ThemeDefinition[] = [
     swatches: ["#0b0505", "#140a0a", "#ef4444"],
     artwork: "sharingan",
   },
+
+  // ─── Fantasy — five animated light worlds ────────────────────────────────
+  {
+    id: "enchanted-dawn",
+    name: "Enchanted Dawn",
+    description: "A golden sunrise over a storybook kingdom, drifting light.",
+    mode: "light",
+    collection: "fantasy",
+    swatches: ["#fdf6ec", "#fffdf9", "#d97706"],
+    animated: true,
+  },
+  {
+    id: "fae-meadowlight",
+    name: "Fae Meadowlight",
+    description: "A moonlit fae glade where tiny lights drift upward.",
+    mode: "light",
+    collection: "fantasy",
+    swatches: ["#f8fdfa", "#fefffe", "#0d9488"],
+    animated: true,
+  },
+  {
+    id: "crystal-realm",
+    name: "Crystal Realm",
+    description: "Frozen amethyst halls shifting with icy shimmer.",
+    mode: "light",
+    collection: "fantasy",
+    swatches: ["#f8f8fe", "#fcfcff", "#8b5cf6"],
+    animated: true,
+  },
+  {
+    id: "celestial-voyage",
+    name: "Celestial Voyage",
+    description: "A sky-ship deck beneath drifting, twinkling stars.",
+    mode: "light",
+    collection: "fantasy",
+    swatches: ["#f5faff", "#fcfeff", "#2563eb"],
+    animated: true,
+  },
+  {
+    id: "blossom-breeze",
+    name: "Blossom Breeze",
+    description: "A sakura courtyard with petals falling forever.",
+    mode: "light",
+    collection: "fantasy",
+    swatches: ["#fff5f9", "#fffbfd", "#db2777"],
+    animated: true,
+  },
+
+  // ─── Fantasy — five animated dark worlds ─────────────────────────────────
+  {
+    id: "arcane-midnight",
+    name: "Arcane Midnight",
+    description: "A wizard's tower bathed in drifting violet spellfire.",
+    mode: "dark",
+    collection: "fantasy",
+    swatches: ["#0b0916", "#120f21", "#a78bfa"],
+    animated: true,
+  },
+  {
+    id: "ember-abyss",
+    name: "Ember Abyss",
+    description: "Deep forge-dark where sparks rise from the depths.",
+    mode: "dark",
+    collection: "fantasy",
+    swatches: ["#0c0908", "#16100d", "#fb923c"],
+    animated: true,
+  },
+  {
+    id: "frozen-citadel",
+    name: "Frozen Citadel",
+    description: "A glacial keep under silent, endless snowfall.",
+    mode: "dark",
+    collection: "fantasy",
+    swatches: ["#08111a", "#0d1a26", "#67e8f9"],
+    animated: true,
+  },
+  {
+    id: "void-nebula",
+    name: "Void Nebula",
+    description: "Deep space with a breathing violet nebula and far stars.",
+    mode: "dark",
+    collection: "fantasy",
+    swatches: ["#09060f", "#150c1f", "#e879f9"],
+    animated: true,
+  },
+  {
+    id: "emerald-enigma",
+    name: "Emerald Enigma",
+    description: "An ancient forest where jade wisps wander the dark.",
+    mode: "dark",
+    collection: "fantasy",
+    swatches: ["#08120f", "#0e1f19", "#34d399"],
+    animated: true,
+  },
 ];
 
 export const DEFAULT_THEME: ThemeId = "aurora";
@@ -153,3 +262,4 @@ export const PROFESSIONAL_THEMES = THEMES.filter(
   (theme) => theme.collection === "professional"
 );
 export const ANIME_THEMES = THEMES.filter((theme) => theme.collection === "anime");
+export const FANTASY_THEMES = THEMES.filter((theme) => theme.collection === "fantasy");

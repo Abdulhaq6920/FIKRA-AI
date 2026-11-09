@@ -104,6 +104,20 @@ export interface DocumentListResponse {
   page_size: number;
 }
 
+export interface ConversationListResponse {
+  items: Conversation[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface MessageListResponse {
+  items: Message[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface ProcessingJob {
   id: string;
   document_id: string;

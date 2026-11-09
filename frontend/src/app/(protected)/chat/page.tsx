@@ -56,6 +56,9 @@ const PROVIDER_ERROR_MESSAGES: Record<string, string> = {
 export default function ChatPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [msgPage, setMsgPage] = useState(1);
+  const [msgTotal, setMsgTotal] = useState(0);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [input, setInput] = useState("");
   const [sendingSessions, setSendingSessions] = useState<Record<string, boolean>>({});
   const [streamingSessions, setStreamingSessions] = useState<Record<string, string | null>>({});
@@ -63,18 +66,24 @@ export default function ChatPage() {
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const activeConversationRef = useRef<string | null>(null);
   const streamControllersRef = useRef<Record<string, AbortController>>({});
+  const justLoadedEarlierRef = useRef(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+
+  const MSG_PAGE_SIZE = 30;
 
   useEffect(() => {
     const conversationId = searchParams.get("conversation");
     activeConversationRef.current = conversationId;
     setActiveConvId(conversationId);
     setMessages([]);
+    setMsgTotal(0);
+    setMsgPage(1);
     setGeneralError(null);
   }, [searchParams]);
 
@@ -87,20 +96,72 @@ export default function ChatPage() {
     });
   }, []);
 
-  // Load messages when conversation changes
+  // Load the most recent page of messages when conversation changes
   useEffect(() => {
-    if (!activeConvId) { setMessages([]); return; }
+    if (!activeConvId) {
+      setMessages([]);
+      setMsgTotal(0);
+      setMsgPage(1);
+      return;
+    }
     let cancelled = false;
     setLoadingMsgs(true);
-    chatApi.getMessages(activeConvId)
-      .then((loadedMessages) => { if (!cancelled) setMessages(loadedMessages); })
-      .catch(() => { if (!cancelled) setMessages([]); })
-      .finally(() => { if (!cancelled) setLoadingMsgs(false); });
+    chatApi
+      .getMessages(activeConvId, 1, MSG_PAGE_SIZE)
+      .then((res) => {
+        if (cancelled) return;
+        setMessages(res.items);
+        setMsgTotal(res.total);
+        setMsgPage(Math.max(1, res.page));
+      })
+      .catch(() => {
+        if (!cancelled) setMessages([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMsgs(false);
+      });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConvId]);
 
-  // Scroll to bottom
+  // Older history pages prepend above the current window; the scroll anchor
+  // is preserved so the view does not jump while reading a long thread.
+  const loadEarlierMessages = useCallback(async () => {
+    if (!activeConvId || loadingEarlier || loadingMsgs) return;
+    setLoadingEarlier(true);
+    const container = scrollRef.current;
+    const prevHeight = container?.scrollHeight ?? 0;
+    try {
+      const res = await chatApi.getMessages(activeConvId, msgPage + 1, MSG_PAGE_SIZE);
+      if (res.items.length) {
+        setMessages((prev) => {
+          const seen = new Set(prev.map((msg) => msg.id));
+          const older = res.items.filter((msg) => !seen.has(msg.id));
+          return [...older, ...prev];
+        });
+        setMsgPage(res.page ?? msgPage + 1);
+        setMsgTotal(res.total);
+        if (container) {
+          justLoadedEarlierRef.current = true;
+          requestAnimationFrame(() => {
+            if (container) container.scrollTop = container.scrollHeight - prevHeight;
+          });
+        }
+      }
+    } catch {
+      setSessionError(activeConvId, "Could not load earlier messages. Please try again.");
+    } finally {
+      setLoadingEarlier(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvId, loadingEarlier, loadingMsgs, msgPage]);
+
+  // Scroll to bottom — never when history pages were just prepended
   useEffect(() => {
+    if (justLoadedEarlierRef.current) {
+      justLoadedEarlierRef.current = false;
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activeConvId, streamingSessions]);
 
@@ -296,12 +357,27 @@ export default function ChatPage() {
         </div>
       </header>
       {/* Messages area */}
-      <div className="relative z-10 flex-1 overflow-y-auto p-4 space-y-5 md:p-8">
+      <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto p-4 space-y-5 md:p-8">
         {!activeConvId && !loadingMsgs && messages.length === 0 && (
           <EmptyState name={user?.full_name} />
         )}
 
         {loadingMsgs && <MessagesSkeleton />}
+
+        {!loadingMsgs && activeConvId && messages.length < msgTotal && (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={loadEarlierMessages}
+              disabled={loadingEarlier}
+              className="rounded-full border border-surface-700 bg-surface-900/70 px-4 py-1.5 text-xs text-surface-400 transition-colors hover:border-surface-600 hover:text-surface-100 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              {loadingEarlier
+                ? "Loading earlier messages…"
+                : `Load earlier messages · ${msgTotal - messages.length} older`}
+            </button>
+          </div>
+        )}
 
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} onFeedback={handleFeedback} />

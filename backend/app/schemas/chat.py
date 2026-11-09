@@ -26,6 +26,15 @@ class ConversationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ConversationListOut(BaseModel):
+    """Paginated conversation page (newest first)."""
+
+    items: list[ConversationOut]
+    total: int
+    page: int
+    page_size: int
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     conversation_id: uuid.UUID
@@ -65,6 +74,15 @@ class MessageOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class MessageListOut(BaseModel):
+    """Paginated message window. Page 1 is always the most recent block."""
+
+    items: list[MessageOut]
+    total: int
+    page: int
+    page_size: int
 
 
 class FeedbackRequest(BaseModel):
