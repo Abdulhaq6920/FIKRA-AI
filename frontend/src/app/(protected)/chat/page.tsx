@@ -6,7 +6,7 @@
  * This page handles: message display, streaming, citations, feedback.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -14,7 +14,6 @@ import {
   Copy,
   FileText,
   FolderOpen,
-  Heart,
   Link2,
   MessageSquare,
   Mic,
@@ -25,19 +24,19 @@ import {
   Share2,
   Sparkles,
   Square,
+  Star,
   ThumbsDown,
   ThumbsUp,
   Upload,
+  X,
 } from "lucide-react";
 import { chatApi } from "@/lib/api/chat";
 import { ApiRequestError } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
-import type { Message, Citation } from "@/types";
+import type { Message, Citation, FavoriteQuestion } from "@/types";
 import { useAuth } from "@/features/auth/AuthContext";
 import { MarkdownContent } from "@/features/chat/MarkdownContent";
-import { NinjaArtwork } from "@/features/theme/NinjaArtwork";
-import { useTheme } from "@/features/theme/ThemeProvider";
 
 // ─── Context bridge — AppShell needs to know about active conversation ─────
 // We use a global event bus so AppShell can react to new conversations
@@ -63,6 +62,11 @@ const PROVIDER_ERROR_MESSAGES: Record<string, string> = {
   ProviderUnavailableError:
     "The AI provider is temporarily unavailable. Please try again in a moment.",
 };
+
+/** Collapse whitespace the same way the API does, for favourite matching. */
+function normalizeQuestion(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
 
 /** Minimal Web Speech API surface — Safari/Chrome ship it under two names. */
 interface SpeechRecognitionResultLike {
@@ -126,16 +130,23 @@ export default function ChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const { definition } = useTheme();
 
   // ── Royal header / composer chrome ──────────────────────────────────────
-  const [favorite, setFavorite] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  // ── Favourite questions (per user, hideable) ────────────────────────────
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [favoriteQuestions, setFavoriteQuestions] = useState<FavoriteQuestion[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
+  const favoriteSet = useMemo(
+    () => new Set(favoriteQuestions.map((entry) => normalizeQuestion(entry.question))),
+    [favoriteQuestions]
+  );
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -179,11 +190,114 @@ export default function ChatPage() {
     }
   }, [showToast]);
 
-  const handleFavorite = useCallback(() => {
-    const next = !favorite;
-    setFavorite(next);
-    showToast(next ? "Saved to favourites" : "Removed from favourites");
-  }, [favorite, showToast]);
+  // Load this user's saved questions once per session and restore whether the
+  // panel was left open for this browser + account.
+  useEffect(() => {
+    if (!user?.id) {
+      setFavoriteQuestions([]);
+      setFavoritesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const storageKey = `fikra-fav-questions:${user.id}`;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored !== null) setFavoritesOpen(stored === "1");
+    } catch {
+      // Private browsing can deny localStorage; the panel still works.
+    }
+    setFavoritesLoading(true);
+    chatApi
+      .listFavoriteQuestions()
+      .then((response) => {
+        if (!cancelled) setFavoriteQuestions(response.items);
+      })
+      .catch(() => {
+        // Non-fatal: the panel simply starts empty.
+      })
+      .finally(() => {
+        if (!cancelled) setFavoritesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const setFavoritesVisibility = useCallback(
+    (open: boolean) => {
+      setFavoritesOpen(open);
+      if (!user?.id) return;
+      try {
+        window.localStorage.setItem(
+          `fikra-fav-questions:${user.id}`,
+          open ? "1" : "0"
+        );
+      } catch {
+        // Persistence is a convenience, not a requirement.
+      }
+    },
+    [user?.id]
+  );
+
+  const saveFavorite = useCallback(
+    async (question: string) => {
+      const normalized = normalizeQuestion(question);
+      if (!normalized) return;
+      if (normalized.length > 500) {
+        showToast("That question is too long to save");
+        return;
+      }
+      if (favoriteSet.has(normalized)) {
+        showToast("Already in your favourites");
+        return;
+      }
+      try {
+        const created = await chatApi.saveFavoriteQuestion(normalized);
+        setFavoriteQuestions((previous) =>
+          previous.some((entry) => entry.id === created.id)
+            ? previous
+            : [created, ...previous]
+        );
+        showToast("Question saved to favourites");
+      } catch {
+        showToast("Could not save that question");
+      }
+    },
+    [favoriteSet, showToast]
+  );
+
+  const removeFavorite = useCallback(
+    async (id: string) => {
+      const removed = favoriteQuestions.find((entry) => entry.id === id);
+      setFavoriteQuestions((previous) =>
+        previous.filter((entry) => entry.id !== id)
+      );
+      try {
+        await chatApi.deleteFavoriteQuestion(id);
+      } catch {
+        if (removed) {
+          setFavoriteQuestions((previous) =>
+            previous.some((entry) => entry.id === removed.id)
+              ? previous
+              : [removed, ...previous]
+          );
+        }
+        showToast("Could not remove that question");
+      }
+    },
+    [favoriteQuestions, showToast]
+  );
+
+  const useFavoriteQuestion = useCallback((question: string) => {
+    setInput(question);
+    // Focus after the textarea has received the new value so the caret lands
+    // at the end, ready to edit or send.
+    requestAnimationFrame(() => {
+      const element = textareaRef.current;
+      element?.focus();
+      element?.setSelectionRange(question.length, question.length);
+    });
+  }, []);
 
   const handleVoice = useCallback(() => {
     if (listening) {
@@ -601,13 +715,17 @@ export default function ChatPage() {
     }
   };
 
-  const handleFeedback = async (messageId: string, type: "thumbs_up" | "thumbs_down") => {
-    const comment = type === "thumbs_down"
-      ? window.prompt("What should we improve about this answer?")?.trim()
-      : undefined;
-    if (type === "thumbs_down" && !comment) return;
-    await chatApi.submitFeedback(messageId, type, comment).catch(() => {});
-  };
+  const handleFeedback = useCallback(
+    async (messageId: string, type: "thumbs_up" | "thumbs_down") => {
+      const comment =
+        type === "thumbs_down"
+          ? window.prompt("What should we improve about this answer?")?.trim()
+          : undefined;
+      if (type === "thumbs_down" && !comment) return;
+      await chatApi.submitFeedback(messageId, type, comment).catch(() => {});
+    },
+    []
+  );
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-surface-950">
@@ -635,18 +753,15 @@ export default function ChatPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-          <div className="mr-1 hidden items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-[11px] font-medium text-emerald-300 lg:flex">
-            <Radio className="h-3 w-3 animate-pulse" aria-hidden="true" />
-            System online
-          </div>
           <PillButton
-            label="Favorite"
-            onClick={handleFavorite}
-            active={favorite}
-            pressed={favorite}
+            label="Favourites"
+            onClick={() => setFavoritesVisibility(!favoritesOpen)}
+            active={favoritesOpen}
+            pressed={favoritesOpen}
+            expanded={favoritesOpen}
           >
-            <Heart
-              className={cn("h-4 w-4", favorite && "fill-current")}
+            <Star
+              className={cn("h-4 w-4", favoritesOpen && "fill-current")}
               aria-hidden="true"
             />
           </PillButton>
@@ -720,7 +835,6 @@ export default function ChatPage() {
           {!activeConvId && !loadingMsgs && messages.length === 0 && (
             <EmptyState
               name={user?.full_name}
-              artwork={definition.artwork}
               onPick={(prompt) => {
                 setInput(prompt);
                 requestAnimationFrame(() => {
@@ -751,7 +865,15 @@ export default function ChatPage() {
           )}
 
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} onFeedback={handleFeedback} />
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              onFeedback={handleFeedback}
+              isFavorite={
+                msg.role === "user" && favoriteSet.has(normalizeQuestion(msg.content))
+              }
+              onSaveFavorite={saveFavorite}
+            />
           ))}
 
           {sending && streamingText === null && <SseLoadingIndicator />}
@@ -781,6 +903,19 @@ export default function ChatPage() {
       {/* Composer */}
       <div className="relative z-20 flex-shrink-0 px-3 pb-3 sm:px-6 sm:pb-5">
         <div className="mx-auto w-full max-w-3xl">
+          <AnimatePresence initial={false}>
+            {favoritesOpen && (
+              <FavoritesPanel
+                key="favorites-panel"
+                questions={favoriteQuestions}
+                loading={favoritesLoading}
+                onUse={useFavoriteQuestion}
+                onRemove={(id) => void removeFavorite(id)}
+                onClose={() => setFavoritesVisibility(false)}
+              />
+            )}
+          </AnimatePresence>
+
           <div className="relative">
             <AnimatePresence>
               {attachOpen && (
@@ -936,12 +1071,16 @@ function SseLoadingIndicator() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   message,
   onFeedback,
+  isFavorite,
+  onSaveFavorite,
 }: {
   message: Message;
   onFeedback: (id: string, type: "thumbs_up" | "thumbs_down") => void;
+  isFavorite: boolean;
+  onSaveFavorite: (question: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
@@ -983,6 +1122,30 @@ function MessageBubble({
           )}
         </div>
 
+        {isUser && (
+          <div className="mt-1 flex justify-end pr-1">
+            <button
+              type="button"
+              onClick={() => onSaveFavorite(message.content)}
+              disabled={isFavorite}
+              aria-label={isFavorite ? "Question saved" : "Save question to favourites"}
+              title={isFavorite ? "Saved to favourites" : "Save question to favourites"}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40",
+                isFavorite
+                  ? "text-brand-300"
+                  : "text-surface-500 hover:bg-surface-100/5 hover:text-surface-200"
+              )}
+            >
+              <Star
+                className={cn("h-3 w-3", isFavorite && "fill-current")}
+                aria-hidden="true"
+              />
+              {isFavorite ? "Saved" : "Save question"}
+            </button>
+          </div>
+        )}
+
         {!isUser && message.citations && message.citations.length > 0 && (
           <CitationList citations={message.citations} />
         )}
@@ -1020,6 +1183,98 @@ function MessageBubble({
         )}
       </div>
     </motion.div>
+  );
+});
+
+function FavoritesPanel({
+  questions,
+  loading,
+  onUse,
+  onRemove,
+  onClose,
+}: {
+  questions: FavoriteQuestion[];
+  loading: boolean;
+  onUse: (question: string) => void;
+  onRemove: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, height: 0, y: 8 }}
+      animate={{ opacity: 1, height: "auto", y: 0 }}
+      exit={{ opacity: 0, height: 0, y: 6 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      className="overflow-hidden"
+      aria-label="Favourite questions"
+    >
+      <div className="glass-surface mb-2 rounded-2xl px-3 py-2.5">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-surface-400">
+            <Star className="h-3 w-3 text-brand-300" aria-hidden="true" />
+            Favourite questions
+            {questions.length > 0 && (
+              <span className="rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[9px] font-bold text-brand-200">
+                {questions.length}
+              </span>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Hide favourite questions"
+            title="Hide favourites"
+            className="rounded-full p-1 text-surface-500 transition-colors hover:bg-surface-100/10 hover:text-surface-200 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex gap-1.5" aria-label="Loading favourite questions">
+            {[1, 2, 3].map((index) => (
+              <span
+                key={index}
+                className="h-6 w-28 animate-pulse rounded-full bg-surface-100/5"
+              />
+            ))}
+          </div>
+        ) : questions.length > 0 ? (
+          <div className="flex max-h-28 flex-wrap items-start gap-1.5 overflow-y-auto pr-1">
+            {questions.map((entry) => (
+              <span
+                key={entry.id}
+                className="glass-chip inline-flex max-w-full items-center rounded-full py-1 pl-3 pr-1"
+              >
+                <button
+                  type="button"
+                  onClick={() => onUse(entry.question)}
+                  title={entry.question}
+                  className="max-w-[17rem] truncate text-left text-[11px] text-surface-300 transition-colors hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 sm:max-w-[22rem]"
+                >
+                  {entry.question}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRemove(entry.id)}
+                  aria-label={`Remove favourite: ${entry.question}`}
+                  title="Remove favourite"
+                  className="ml-1 rounded-full p-0.5 text-surface-500 transition-colors hover:bg-red-400/10 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400/40"
+                >
+                  <X className="h-2.5 w-2.5" aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-surface-500">
+            No saved questions yet. Tap{" "}
+            <span className="font-medium text-surface-300">Save question</span>{" "}
+            under any message you send to keep it here.
+          </p>
+        )}
+      </div>
+    </motion.section>
   );
 }
 
@@ -1181,22 +1436,13 @@ const STARTER_PROMPTS = [
 
 function EmptyState({
   name,
-  artwork,
   onPick,
 }: {
   name?: string;
-  artwork?: "leaf" | "sharingan" | "jinwoo" | "igris";
   onPick: (prompt: string) => void;
 }) {
   return (
     <div className="relative flex min-h-[58vh] w-full items-center justify-center py-6 sm:py-10">
-      {/* On anime themes the character joins the welcome moment, card-less. */}
-      {artwork && (
-        <NinjaArtwork
-          variant={artwork}
-          className="pointer-events-none absolute -right-6 -top-6 hidden h-[19rem] w-[19rem] object-contain opacity-25 drop-shadow-[0_24px_36px_rgba(0,0,0,0.55)] sm:block"
-        />
-      )}
       <div className="glass-surface relative w-full max-w-xl rounded-[28px] p-6 text-center sm:p-8">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-400/30 bg-brand-500/10 shadow-[0_0_32px_rgb(var(--brand-500)/0.18)]">
           <Sparkles className="h-6 w-6 text-brand-300" aria-hidden="true" />

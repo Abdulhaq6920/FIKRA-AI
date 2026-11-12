@@ -3,20 +3,18 @@
 /**
  * Theme picker used by Settings.
  *
- * Previews are pure CSS + inline SVG so the grid stays instant even with the
- * animated anime illustrations.
+ * Every shipped theme is animated; previews are pure CSS so the grid stays
+ * instant without decoding image assets.
  */
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, Moon, Palette, Sparkles, Sun } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { NinjaArtwork } from "./NinjaArtwork";
 import { useTheme } from "./ThemeProvider";
 import {
-  ANIME_THEMES,
   FANTASY_THEMES,
-  PROFESSIONAL_THEMES,
+  SIGNATURE_THEMES,
   type ThemeDefinition,
 } from "./themes";
 
@@ -29,8 +27,8 @@ export function ThemePicker() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1.5">
           <p className="text-xs text-surface-500">
-            Choose a palette for this browser. Your selection applies instantly and is
-            remembered.
+            Choose an animated palette for this browser. Your selection applies
+            instantly and is remembered.
           </p>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-surface-700 bg-surface-850 px-2.5 py-1 text-[11px] text-surface-400">
@@ -81,9 +79,9 @@ export function ThemePicker() {
           >
             <div className="space-y-6 pt-1">
               <ThemeGroup
-                title="Professional"
-                hint="Eight refined palettes, including the Royal Glass signature"
-                themes={PROFESSIONAL_THEMES}
+                title="Signature"
+                hint="Royal Glass — the default, lit by amber, bronze and indigo"
+                themes={SIGNATURE_THEMES}
                 activeTheme={theme}
                 onSelect={setTheme}
               />
@@ -94,15 +92,6 @@ export function ThemePicker() {
                 themes={FANTASY_THEMES}
                 activeTheme={theme}
                 onSelect={setTheme}
-              />
-
-              <ThemeGroup
-                title="Anime 3D"
-                hint="Four original anime worlds with hand-built 3D characters"
-                themes={ANIME_THEMES}
-                activeTheme={theme}
-                onSelect={setTheme}
-                anime
               />
             </div>
           </motion.div>
@@ -118,14 +107,12 @@ function ThemeGroup({
   themes,
   activeTheme,
   onSelect,
-  anime = false,
 }: {
   title: string;
   hint: string;
   themes: readonly ThemeDefinition[];
   activeTheme: string;
   onSelect: (theme: ThemeDefinition["id"]) => void;
-  anime?: boolean;
 }) {
   return (
     <section aria-labelledby={`theme-group-${title}`}>
@@ -138,14 +125,7 @@ function ThemeGroup({
         </h3>
         <span className="text-[11px] text-surface-500">· {hint}</span>
       </div>
-      <div
-        className={cn(
-          "grid gap-3",
-          anime
-            ? "grid-cols-1 sm:grid-cols-2"
-            : "grid-cols-2 lg:grid-cols-4"
-        )}
-      >
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {themes.map((item, index) => {
           const active = activeTheme === item.id;
           return (
@@ -158,53 +138,23 @@ function ThemeGroup({
               initial={{ opacity: 0, scale: 0.985 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.025 }}
-              whileHover={{ y: anime ? -4 : -2 }}
+              whileHover={{ y: -2 }}
               whileTap={{ scale: 0.985 }}
               className={cn(
-                "group relative overflow-hidden rounded-xl border text-left transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500",
-                anime
-                  ? "border-surface-700 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)]"
-                  : "border-surface-800 bg-surface-900",
+                "group relative overflow-hidden rounded-xl border border-surface-800 bg-surface-900 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500",
                 active && "border-brand-500 ring-1 ring-brand-500/30"
               )}
             >
-              {anime && item.artwork ? (
-                <div
-                  className="relative h-40 overflow-hidden"
-                  style={{
-                    background: `radial-gradient(circle at 78% 20%, ${item.swatches[2]}33, transparent 55%), linear-gradient(135deg, ${item.swatches[0]}, ${item.swatches[1]})`,
-                  }}
-                >
-                  <NinjaArtwork
-                    variant={item.artwork}
-                    className="absolute -bottom-4 right-0 h-[150%] w-[78%] object-contain transition-transform duration-500 group-hover:scale-[1.04] group-hover:-rotate-1"
-                  />
-                  <div className="absolute inset-y-0 left-0 flex w-[58%] flex-col justify-end bg-gradient-to-r from-black/5 to-transparent p-3">
-                    <span className="mb-2 inline-flex w-fit items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-800 backdrop-blur">
-                      <Sparkles className="h-2.5 w-2.5" /> 3D Anime
-                    </span>
-                    <p className="text-sm font-semibold text-slate-900 drop-shadow-sm">
-                      {item.name}
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-700/80">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <MiniPreview theme={item} />
-              )}
+              <MiniPreview theme={item} />
 
               <div className="flex items-center gap-2 border-t border-surface-800/80 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-surface-100">
                     {item.name}
                   </p>
-                  {!anime && (
-                    <p className="mt-0.5 line-clamp-1 text-[10px] text-surface-500">
-                      {item.description}
-                    </p>
-                  )}
+                  <p className="mt-0.5 line-clamp-1 text-[10px] text-surface-500">
+                    {item.description}
+                  </p>
                 </div>
                 <span
                   className={cn(
@@ -253,29 +203,26 @@ function MiniPreview({ theme }: { theme: ThemeDefinition }) {
         </div>
       </div>
 
-      {/* Fantasy themes preview their live ambient FX with a looping
-          shimmer sweep + badge (the real theme is fully animated). */}
-      {theme.animated && (
-        <>
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <span
-              className="absolute inset-y-0 -left-1/2 w-1/2 animate-[fancyShimmer_3.2s_ease-in-out_infinite]"
-              style={{ background: `linear-gradient(100deg, transparent, ${
-                isLight ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)"
-              }, transparent)` }}
-            />
-          </div>
-          <span
-            className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider backdrop-blur"
-            style={{
-              background: isLight ? "rgba(15,23,42,0.10)" : "rgba(0,0,0,0.35)",
-              color: isLight ? "#1e293b" : "#ffffff",
-            }}
-          >
-            <Sparkles className="h-2.5 w-2.5" /> Animated
-          </span>
-        </>
-      )}
+      {/* Preview the live ambient FX with a looping shimmer sweep + badge. */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <span
+          className="absolute inset-y-0 -left-1/2 w-1/2 animate-[fancyShimmer_3.2s_ease-in-out_infinite]"
+          style={{
+            background: `linear-gradient(100deg, transparent, ${
+              isLight ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)"
+            }, transparent)`,
+          }}
+        />
+      </div>
+      <span
+        className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider backdrop-blur"
+        style={{
+          background: isLight ? "rgba(15,23,42,0.10)" : "rgba(0,0,0,0.35)",
+          color: isLight ? "#1e293b" : "#ffffff",
+        }}
+      >
+        <Sparkles className="h-2.5 w-2.5" /> Animated
+      </span>
     </div>
   );
 }

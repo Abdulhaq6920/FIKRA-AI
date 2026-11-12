@@ -31,9 +31,9 @@ the "Appearance" card on the page.
 ## Step 5
 Click the "Change theme" button and verify a set of theme cards appears
 (buttons whose label starts with "Use " and ends with " theme") — there must
-be exactly 19 of them, including a "Fantasy" group of seven themes and an
-"Anime 3D" group of four. The Professional group leads with the gold-accented
-"Royal Glass" signature theme.
+be exactly 8 of them: a "Signature" group containing only the gold-accented
+"Royal Glass" default, plus a "Fantasy" group of seven animated worlds. No
+Naruto, Solo Leveling, or non-animated professional palettes may appear.
 
 ## Step 6
 Click "Use Ember Abyss theme" and verify the applied theme (page attribute

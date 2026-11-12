@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { motion } from "framer-motion";
-import { User, Mail, Shield, LogOut, Palette, ShieldCheck } from "lucide-react";
+import { User, Mail, Shield, LogOut, Palette, ShieldCheck, Activity } from "lucide-react";
 import { ThemePicker } from "@/features/theme/ThemePicker";
 import { api } from "@/lib/api/client";
 
@@ -94,6 +94,37 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.04 }}
+          className="mb-4 overflow-hidden rounded-xl border border-surface-800 bg-surface-900"
+        >
+          <div className="flex items-center gap-2 border-b border-surface-800 px-5 py-4">
+            <Activity className="h-4 w-4 text-brand-400" />
+            <h2 className="text-sm font-medium text-surface-200">System status</h2>
+          </div>
+          <div className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-emerald-200">System online</p>
+                  <p className="text-xs text-surface-400">
+                    Chat, retrieval and document indexing services are operational.
+                  </p>
+                </div>
+              </div>
+              <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                Healthy
+              </span>
+            </div>
           </div>
         </motion.div>
 

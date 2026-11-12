@@ -29,7 +29,6 @@ import {
   type ThemeDefinition,
   type ThemeId,
 } from "./themes";
-import { signalCompanion } from "@/lib/companion";
 
 interface ThemeContextValue {
   theme: ThemeId;
@@ -86,9 +85,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setVeilOn(true);
     window.clearTimeout(veilTimer.current);
     veilTimer.current = window.setTimeout(() => setVeilOn(false), 700);
-
-    // A palette change reads as a transformation — the companion celebrates.
-    signalCompanion("success", 1700);
   }, []);
 
   const value = useMemo(

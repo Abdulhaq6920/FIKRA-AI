@@ -4,13 +4,14 @@
  * Colours themselves live in `globals.css` as `[data-theme]` CSS-variable
  * blocks so switching themes never triggers a React render of the whole app.
  * This module only holds the metadata the picker and shell need.
+ *
+ * Only animated palettes ship: the Royal Glass signature plus seven fantasy
+ * worlds. Every entry renders live ambient motion, and Royal Glass is the
+ * default for everyone (including users with an older stored preference).
  */
 
 export type ThemeMode = "light" | "dark";
-export type ThemeCollection = "professional" | "anime" | "fantasy";
-
-/** Original hand-built illustration variants shipped with anime themes. */
-export type ThemeArtwork = "leaf" | "sharingan" | "jinwoo" | "igris";
+export type ThemeCollection = "signature" | "fantasy";
 
 export interface ThemeDefinition {
   id: ThemeId;
@@ -20,28 +21,15 @@ export interface ThemeDefinition {
   collection: ThemeCollection;
   /** Three representative colours used by the picker preview. */
   swatches: readonly [string, string, string];
-  /** Anime themes render an original character illustration. */
-  artwork?: ThemeArtwork;
   /**
    * Themes with a richer ambient backdrop (drifting nebulae, twinkling
    * stars, rising embers…) rendered purely in CSS.
    */
-  animated?: boolean;
+  animated: true;
 }
 
 export type ThemeId =
   | "royal-glass"
-  | "aurora"
-  | "parchment"
-  | "ocean"
-  | "emerald"
-  | "sunset"
-  | "midnight"
-  | "graphite"
-  | "naruto-leaf"
-  | "naruto-sharingan"
-  | "solo-jinwoo"
-  | "solo-igris"
   | "enchanted-dawn"
   | "blossom-breeze"
   | "arcane-midnight"
@@ -51,110 +39,14 @@ export type ThemeId =
   | "emerald-enigma";
 
 export const THEMES: readonly ThemeDefinition[] = [
-  // ─── Professional — eight focused, production-grade palettes ─────────────
+  // ─── Signature — the default Royal Glass world ───────────────────────────
   {
     id: "royal-glass",
     name: "Royal Glass",
     description: "Charcoal and navy glass lit by amber, bronze and royal indigo.",
     mode: "dark",
-    collection: "professional",
+    collection: "signature",
     swatches: ["#0d0d10", "#121118", "#d4af37"],
-    animated: true,
-  },
-  {
-    id: "aurora",
-    name: "Aurora",
-    description: "Airy indigo light with a calm, product-grade finish.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#f7f9fc", "#ffffff", "#4f46e5"],
-  },
-  {
-    id: "parchment",
-    name: "Parchment",
-    description: "Warm editorial cream, ink text, and burnt-orange accents.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#faf6ee", "#fffcf6", "#c2410c"],
-  },
-  {
-    id: "ocean",
-    name: "Ocean",
-    description: "Cool coastal blues with crisp white cards.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#f6fafd", "#ffffff", "#0369a1"],
-  },
-  {
-    id: "emerald",
-    name: "Evergreen",
-    description: "Fresh mint surfaces and a grounded forest accent.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#f5fbf7", "#ffffff", "#047857"],
-  },
-  {
-    id: "sunset",
-    name: "Sunset Coral",
-    description: "Peach-washed canvas with confident coral highlights.",
-    mode: "light",
-    collection: "professional",
-    swatches: ["#fff8f5", "#fffdfc", "#e11d48"],
-  },
-  {
-    id: "midnight",
-    name: "Midnight Ink",
-    description: "Deep ink surfaces and luminous indigo highlights.",
-    mode: "dark",
-    collection: "professional",
-    swatches: ["#070a12", "#0e131f", "#818cf8"],
-  },
-  {
-    id: "graphite",
-    name: "Graphite Pro",
-    description: "Low-glare charcoal with precise steel-blue accents.",
-    mode: "dark",
-    collection: "professional",
-    swatches: ["#090d14", "#111827", "#60a5fa"],
-  },
-
-  // ─── Anime — two ninja worlds + two Solo Leveling worlds ─────────────────
-  {
-    id: "naruto-leaf",
-    name: "Konoha Dawn",
-    description: "Leaf-village sunrise: warm sand, chakra orange, and ninja spirit.",
-    mode: "light",
-    collection: "anime",
-    swatches: ["#fdf8f0", "#fffdf8", "#ea580c"],
-    artwork: "leaf",
-  },
-  {
-    id: "naruto-sharingan",
-    name: "Sharingan Nightfall",
-    description: "Crimson dōjutsu glow over a midnight mission canvas.",
-    mode: "dark",
-    collection: "anime",
-    swatches: ["#0b0505", "#140a0a", "#ef4444"],
-    artwork: "sharingan",
-  },
-  {
-    id: "solo-jinwoo",
-    name: "Sung Jinwoo",
-    description: "Shadow-monarch navy lit by violet mana and rising shadow motes.",
-    mode: "dark",
-    collection: "anime",
-    swatches: ["#05060f", "#0b1024", "#818cf8"],
-    artwork: "jinwoo",
-    animated: true,
-  },
-  {
-    id: "solo-igris",
-    name: "Igris",
-    description: "Crimson knight plate, ember sparks, and a blood-red command glow.",
-    mode: "dark",
-    collection: "anime",
-    swatches: ["#080505", "#170b0b", "#ef4444"],
-    artwork: "igris",
     animated: true,
   },
 
@@ -225,7 +117,12 @@ export const THEMES: readonly ThemeDefinition[] = [
 ];
 
 export const DEFAULT_THEME: ThemeId = "royal-glass";
-export const THEME_STORAGE_KEY = "fikra-theme";
+/**
+ * Bumped from `fikra-theme` so removed/retired palettes (including the anime
+ * worlds) cannot persist. Everyone re-enters on Royal Glass exactly once;
+ * choices made from here on are remembered as usual.
+ */
+export const THEME_STORAGE_KEY = "fikra-theme-v2";
 
 const THEME_IDS = new Set<string>(THEMES.map((theme) => theme.id));
 
@@ -237,8 +134,7 @@ export function getTheme(id: ThemeId): ThemeDefinition {
   return THEMES.find((theme) => theme.id === id) ?? THEMES[0];
 }
 
-export const PROFESSIONAL_THEMES = THEMES.filter(
-  (theme) => theme.collection === "professional"
+export const SIGNATURE_THEMES = THEMES.filter(
+  (theme) => theme.collection === "signature"
 );
-export const ANIME_THEMES = THEMES.filter((theme) => theme.collection === "anime");
 export const FANTASY_THEMES = THEMES.filter((theme) => theme.collection === "fantasy");

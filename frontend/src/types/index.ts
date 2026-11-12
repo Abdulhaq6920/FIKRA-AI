@@ -128,6 +128,17 @@ export interface MessageListResponse {
   page_size: number;
 }
 
+/** A saved question owned by the signed-in user inside their organization. */
+export interface FavoriteQuestion {
+  id: string;
+  question: string;
+  created_at: string;
+}
+
+export interface FavoriteQuestionListResponse {
+  items: FavoriteQuestion[];
+}
+
 export interface ProcessingJob {
   id: string;
   document_id: string;

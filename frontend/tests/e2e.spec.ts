@@ -233,48 +233,52 @@ async function applyTheme(page: Page, label: string) {
   await page.waitForTimeout(900);
 }
 
-test.describe("Themes & Companion", () => {
-  test("Solo Leveling themes apply and the companion reacts to menus", async ({ page }) => {
+test.describe("Animated themes", () => {
+  test("Royal Glass is the default and only animated palettes remain", async ({
+    page,
+  }) => {
     await loginViaUI(page);
-    await applyTheme(page, "Use Sung Jinwoo theme");
 
+    // A fresh browser has no stored v2 choice, so the boot script applies the
+    // Royal Glass default before the first paint.
     expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(
-      "solo-jinwoo"
+      "royal-glass"
     );
 
-    await page.goto("/documents");
-    await page.waitForTimeout(2000);
-
-    const companion = page.locator("[data-companion]");
-    await expect(companion).toHaveCount(1);
-    await expect(companion).toHaveAttribute("data-action", "read");
-
-    const kebab = page.locator('button[aria-label^="Actions for"]').first();
-    test.skip((await kebab.count()) === 0, "No documents to open a menu on");
-    await kebab.click();
-    await expect(companion).toHaveAttribute("data-action", "think");
-
-    await page.getByRole("menuitem", { name: "Copy title" }).click();
-    await expect(companion).toHaveAttribute("data-action", "success");
-    await expect(companion).toContainText("Mission complete");
-
-    // Switching to Igris swaps the artwork, and a non-anime theme removes it.
-    await applyTheme(page, "Use Igris theme");
-    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(
-      "solo-igris"
-    );
-    await applyTheme(page, "Use Aurora theme");
-    await expect(page.locator("[data-companion]")).toHaveCount(0);
-  });
-
-  test("removed palettes are gone and Solo themes are listed", async ({ page }) => {
-    await loginViaUI(page);
-    await applyTheme(page, "Use Sung Jinwoo theme");
-    await expect(page.locator('button[aria-label="Use Sung Jinwoo theme"]')).toHaveCount(1);
-    await expect(page.locator('button[aria-label="Use Igris theme"]')).toHaveCount(1);
-    for (const removed of ["Lavender", "Quartz", "Cobalt"]) {
-      await expect(page.locator(`button[aria-label="Use ${removed} theme"]`)).toHaveCount(0);
+    await page.goto("/settings");
+    await page.waitForTimeout(800);
+    const opener = page.getByRole("button", { name: /Change theme|Hide themes/ }).first();
+    if (await opener.isVisible().catch(() => false)) {
+      if (/Change theme/i.test((await opener.textContent()) || "")) await opener.click();
     }
+
+    for (const removed of [
+      "Aurora",
+      "Parchment",
+      "Ocean",
+      "Evergreen",
+      "Sunset Coral",
+      "Midnight Ink",
+      "Graphite Pro",
+      "Konoha Dawn",
+      "Sharingan Nightfall",
+      "Sung Jinwoo",
+      "Igris",
+    ]) {
+      await expect(
+        page.locator(`button[aria-label="Use ${removed} theme"]`)
+      ).toHaveCount(0);
+    }
+
+    await applyTheme(page, "Use Blossom Breeze theme");
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(
+      "blossom-breeze"
+    );
+
+    // No anime companion or theme watermark remains on any route.
+    await page.goto("/documents");
+    await page.waitForTimeout(1200);
+    await expect(page.locator("[data-companion]")).toHaveCount(0);
   });
 });
 

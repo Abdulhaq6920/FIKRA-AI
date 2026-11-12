@@ -3,6 +3,8 @@ import type {
   ChatResponse,
   Conversation,
   ConversationListResponse,
+  FavoriteQuestion,
+  FavoriteQuestionListResponse,
   Message,
   MessageListResponse,
 } from "@/types";
@@ -36,6 +38,15 @@ export const chatApi = {
 
   cancelStream: (question: string, conversation_id: string) =>
     api.post<void>("/chat/ask/stream/cancel", { question, conversation_id }),
+
+  listFavoriteQuestions: () =>
+    api.get<FavoriteQuestionListResponse>("/chat/favorites"),
+
+  saveFavoriteQuestion: (question: string) =>
+    api.post<FavoriteQuestion>("/chat/favorites", { question }),
+
+  deleteFavoriteQuestion: (id: string) =>
+    api.delete<void>(`/chat/favorites/${id}`),
 
   submitFeedback: (
     message_id: string,

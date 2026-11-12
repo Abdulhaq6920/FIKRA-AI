@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from datetime import datetime
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
 
@@ -46,17 +45,17 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    organization: Mapped["Organization"] = relationship(  # noqa: F821
+    organization: Mapped[Organization] = relationship(  # noqa: F821
         "Organization", back_populates="conversations"
     )
-    owner: Mapped["User"] = relationship("User", back_populates="conversations")  # noqa: F821
-    messages: Mapped[list["Message"]] = relationship(
+    owner: Mapped[User] = relationship("User", back_populates="conversations")  # noqa: F821
+    messages: Mapped[list[Message]] = relationship(
         "Message",
         back_populates="conversation",
         cascade="all, delete-orphan",
         order_by="Message.created_at",
     )
-    summaries: Mapped[list["ConversationSummary"]] = relationship(
+    summaries: Mapped[list[ConversationSummary]] = relationship(
         "ConversationSummary", back_populates="conversation", cascade="all, delete-orphan"
     )
 
@@ -95,8 +94,8 @@ class Message(UUIDMixin, TimestampMixin, Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     citations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
-    conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
-    feedback: Mapped[list["Feedback"]] = relationship(
+    conversation: Mapped[Conversation] = relationship("Conversation", back_populates="messages")
+    feedback: Mapped[list[Feedback]] = relationship(
         "Feedback", back_populates="message", cascade="all, delete-orphan"
     )
 
@@ -125,7 +124,48 @@ class ConversationSummary(UUIDMixin, TimestampMixin, Base):
     )
     message_count_covered: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="summaries")
+    conversation: Mapped[Conversation] = relationship("Conversation", back_populates="summaries")
+
+
+class FavoriteQuestion(UUIDMixin, TimestampMixin, Base):
+    """A per-user, per-tenant saved question shown in the chat shortcuts panel.
+
+    Ownership is the composite ``(organization_id, user_id)`` pair, so a
+    favourite can never be read, reused or deleted across tenants or between
+    users of the same tenant. The unique constraint makes saving the same
+    question twice idempotent.
+    """
+
+    __tablename__ = "favorite_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "user_id",
+            "question",
+            name="uq_favorite_questions_owner_question",
+        ),
+        Index(
+            "ix_favorite_questions_owner_created",
+            "organization_id",
+            "user_id",
+            "created_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    question: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<FavoriteQuestion id={self.id} user_id={self.user_id}>"
 
 
 class FeedbackType(str, enum.Enum):
@@ -170,7 +210,7 @@ class Feedback(UUIDMixin, TimestampMixin, Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    message: Mapped["Message"] = relationship("Message", back_populates="feedback")
-    user: Mapped["User"] = relationship(  # noqa: F821
+    message: Mapped[Message] = relationship("Message", back_populates="feedback")
+    user: Mapped[User] = relationship(  # noqa: F821
         "User", back_populates="feedback", foreign_keys=[user_id]
     )

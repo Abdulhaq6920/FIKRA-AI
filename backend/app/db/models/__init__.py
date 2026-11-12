@@ -6,6 +6,7 @@ from app.db.models.audit import AuditLog, Notification, RoleRequest, RoleRequest
 from app.db.models.conversation import (
     Conversation,
     ConversationSummary,
+    FavoriteQuestion,
     Feedback,
     FeedbackType,
     Message,
@@ -21,8 +22,8 @@ from app.db.models.document import (
 )
 from app.db.models.organization import Organization, OrganizationStatus
 from app.db.models.user import (
-    OrgRole,
     OrganizationMembership,
+    OrgRole,
     RefreshSession,
     User,
     UserStatus,
@@ -46,6 +47,7 @@ __all__ = [
     "Message",
     "MessageRole",
     "ConversationSummary",
+    "FavoriteQuestion",
     "Feedback",
     "FeedbackType",
     "AuditLog",

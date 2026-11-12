@@ -23,6 +23,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser, get_llm_client
@@ -30,12 +31,14 @@ from app.core.config import settings
 from app.core.exceptions import (
     AppError,
     ConversationNotFoundError,
+    NotFoundError,
     PermissionDeniedError,
 )
 from app.core.logging import get_logger
 from app.db.models.audit import Notification
 from app.db.models.conversation import (
     Conversation,
+    FavoriteQuestion,
     Feedback,
     FeedbackType,
     Message,
@@ -52,6 +55,9 @@ from app.schemas.chat import (
     ConversationListOut,
     ConversationOut,
     ConversationUpdate,
+    FavoriteQuestionCreate,
+    FavoriteQuestionListOut,
+    FavoriteQuestionOut,
     FeedbackRequest,
     MessageListOut,
     MessageOut,
@@ -460,6 +466,89 @@ async def submit_feedback(
 ) -> dict:
     """Submit feedback on an assistant message."""
     return await _do_submit_feedback(body, ctx, db)
+
+
+@router.get("/favorites", response_model=FavoriteQuestionListOut)
+async def list_favorite_questions(
+    ctx: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> FavoriteQuestionListOut:
+    """List the current user's saved questions, newest first.
+
+    Scoped by both organization and user, so another member of the same
+    organization can never see these rows.
+    """
+    user, org_id, _role = ctx
+    result = await db.execute(
+        select(FavoriteQuestion)
+        .where(
+            FavoriteQuestion.organization_id == org_id,
+            FavoriteQuestion.user_id == user.id,
+        )
+        .order_by(FavoriteQuestion.created_at.desc())
+        .limit(200)
+    )
+    return FavoriteQuestionListOut(
+        items=[FavoriteQuestionOut.model_validate(row) for row in result.scalars().all()]
+    )
+
+
+@router.post("/favorites", response_model=FavoriteQuestionOut)
+async def save_favorite_question(
+    body: FavoriteQuestionCreate,
+    ctx: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> FavoriteQuestionOut:
+    """Save a question for quick reuse; saving the same text is idempotent."""
+    user, org_id, _role = ctx
+    owner_filter = (
+        FavoriteQuestion.organization_id == org_id,
+        FavoriteQuestion.user_id == user.id,
+        FavoriteQuestion.question == body.question,
+    )
+    existing = await db.scalar(select(FavoriteQuestion).where(*owner_filter))
+    if existing is not None:
+        return FavoriteQuestionOut.model_validate(existing)
+
+    favorite = FavoriteQuestion(
+        organization_id=org_id,
+        user_id=user.id,
+        question=body.question,
+    )
+    db.add(favorite)
+    try:
+        await db.commit()
+    except IntegrityError:
+        # A concurrent request inserted the same question first — return it
+        # rather than surfacing a uniqueness error to the user.
+        await db.rollback()
+        existing = await db.scalar(select(FavoriteQuestion).where(*owner_filter))
+        if existing is None:
+            raise
+        return FavoriteQuestionOut.model_validate(existing)
+    await db.refresh(favorite)
+    return FavoriteQuestionOut.model_validate(favorite)
+
+
+@router.delete("/favorites/{favorite_id}", status_code=204, response_model=None)
+async def delete_favorite_question(
+    favorite_id: uuid.UUID,
+    ctx: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete one of the current user's saved questions."""
+    user, org_id, _role = ctx
+    favorite = await db.scalar(
+        select(FavoriteQuestion).where(
+            FavoriteQuestion.id == favorite_id,
+            FavoriteQuestion.organization_id == org_id,
+            FavoriteQuestion.user_id == user.id,
+        )
+    )
+    if favorite is None:
+        raise NotFoundError("Favourite question not found.")
+    await db.delete(favorite)
+    await db.commit()
 
 
 async def _do_submit_feedback(

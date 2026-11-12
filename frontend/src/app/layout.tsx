@@ -22,16 +22,12 @@ const themeInitScript = `
   try {
     var themes = {
       "royal-glass": "dark",
-      aurora: "light", parchment: "light", ocean: "light", emerald: "light",
-      sunset: "light", midnight: "dark", graphite: "dark",
-      "naruto-leaf": "light", "naruto-sharingan": "dark",
-      "solo-jinwoo": "dark", "solo-igris": "dark",
       "enchanted-dawn": "light", "blossom-breeze": "light",
       "arcane-midnight": "dark", "ember-abyss": "dark",
       "frozen-citadel": "dark", "void-nebula": "dark",
       "emerald-enigma": "dark"
     };
-    var stored = localStorage.getItem("fikra-theme");
+    var stored = localStorage.getItem("fikra-theme-v2");
     var theme = stored && themes[stored] ? stored : "royal-glass";
     var root = document.documentElement;
     root.dataset.theme = theme;

@@ -13,7 +13,7 @@
  * were in a separate inner sidebar only visible on the chat page.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -41,14 +41,10 @@ import {
 import { useAuth } from "@/features/auth/AuthContext";
 import { chatApi } from "@/lib/api/chat";
 import { AmbientMotion } from "@/components/ui/AmbientMotion";
-import { CompanionScene } from "@/features/theme/CompanionScene";
-import { COMPANION_EVENT, type CompanionAction } from "@/lib/companion";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
 import { api } from "@/lib/api/client";
 import { useHistoryNavigation } from "@/lib/hooks/useHistoryNavigation";
-import { NinjaArtwork } from "@/features/theme/NinjaArtwork";
-import { useTheme } from "@/features/theme/ThemeProvider";
 import type { Conversation } from "@/types";
 
 interface NavItem {
@@ -106,37 +102,7 @@ export function AppShell({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, logout } = useAuth();
-  const { definition } = useTheme();
   const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
-
-  // The themed anime companion acts out the current section by default and
-  // reacts to `signalCompanion()` events from anywhere in the app.
-  const [companionAction, setCompanionAction] = useState<CompanionAction>(() =>
-    routeCompanionAction(pathname)
-  );
-  const companionTimer = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    setCompanionAction(routeCompanionAction(pathname));
-  }, [pathname]);
-
-  useEffect(() => {
-    const onSignal = (event: Event) => {
-      const detail = (event as CustomEvent<{ action: CompanionAction; duration: number }>)
-        .detail;
-      if (!detail?.action) return;
-      setCompanionAction(detail.action);
-      window.clearTimeout(companionTimer.current);
-      companionTimer.current = window.setTimeout(() => {
-        setCompanionAction(routeCompanionAction(pathname));
-      }, detail.duration);
-    };
-    window.addEventListener(COMPANION_EVENT, onSignal);
-    return () => {
-      window.removeEventListener(COMPANION_EVENT, onSignal);
-      window.clearTimeout(companionTimer.current);
-    };
-  }, [pathname]);
 
   const isOnChat = pathname.startsWith("/chat");
   const selectedConversationId = isOnChat
@@ -282,11 +248,7 @@ export function AppShell({
           className="flex-shrink-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 hover:bg-brand-600/20 p-1 transition-colors"
         >
           <span className="block w-7 h-7 rounded-lg bg-brand-600/30 border border-brand-500/40 flex items-center justify-center">
-            {definition.artwork ? (
-              <NinjaArtwork variant={definition.artwork} className="h-6 w-7" />
-            ) : (
-              <Sparkles className="w-4 h-4 text-brand-400" />
-            )}
+            <Sparkles className="w-4 h-4 text-brand-400" />
           </span>
         </button>
         <AnimatePresence>
@@ -545,11 +507,6 @@ export function AppShell({
               {children}
             </motion.div>
           </AnimatePresence>
-
-          {/* Decorative only. Hidden on chat so it never competes with the composer. */}
-          {definition.artwork && !isOnChat && (
-            <CompanionScene variant={definition.artwork} action={companionAction} />
-          )}
         </main>
       </div>
 
@@ -618,14 +575,6 @@ export function AppShell({
       </AnimatePresence>
     </div>
   );
-}
-
-/** Default acting state for a section, used whenever no event is firing. */
-function routeCompanionAction(pathname: string): CompanionAction {
-  if (pathname.startsWith("/documents")) return "read";
-  if (pathname.startsWith("/admin") || pathname.startsWith("/analytics")) return "write";
-  if (pathname.startsWith("/chat")) return "think";
-  return "idle";
 }
 
 interface NotificationItem {
