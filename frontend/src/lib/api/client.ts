@@ -32,7 +32,8 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
+  retried = false
 ): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -46,11 +47,17 @@ async function request<T>(
 
   // Handle 401 — try token refresh once (except on the auth endpoints
   // themselves, which would ping-pong forever while logged out).
-  if (res.status === 401 && path !== "/auth/refresh" && path !== "/auth/login") {
+  if (
+    res.status === 401 &&
+    !retried &&
+    path !== "/auth/refresh" &&
+    path !== "/auth/login"
+  ) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
-      // Retry original request
-      return request<T>(method, path, body, headers);
+      // Retry original request once; `retried` stops a second 401 from
+      // starting another refresh cycle.
+      return request<T>(method, path, body, headers, true);
     }
     // Refresh failed — redirect to login, unless we are already on a public
     // auth page (the mount-time /auth/me probe 401s for logged-out visitors
@@ -89,18 +96,32 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
-async function tryRefreshToken(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
-    // Only treat an HTTP 2xx as refresh success; a 401/false previously
-    // let callers loop me→refresh→me forever while logged out.
-    return res.ok;
-  } catch {
-    return false;
+/**
+ * Shared in-flight refresh. Refresh tokens rotate, so two concurrent refreshes
+ * invalidate each other and can trip the auth rate limiter — which ends in a
+ * spurious "session expired" logout. Parallel 401s therefore await one call.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function tryRefreshToken(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+        // Only treat an HTTP 2xx as refresh success; a 401/false previously
+        // let callers loop me→refresh→me forever while logged out.
+        return res.ok;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
   }
+  return refreshInFlight;
 }
 
 // ---------------------------------------------------------------------------

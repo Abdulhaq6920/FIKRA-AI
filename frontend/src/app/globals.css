@@ -326,10 +326,9 @@
    --fx-p-opacity   peak opacity of the particle field
 
    When a palette defines none of them, the brand-variable fallbacks below
-   keep subtle motion alive everywhere — professional and anime themes
-   included. Particle tile sizes are fixed at 160px, 260px and 400px and
-   every keyframe moves each layer by an integer multiple of its own tile,
-   so the loop is seamless. */
+   keep subtle motion alive everywhere. Particle tile sizes are fixed at
+   160px, 260px and 400px and every keyframe moves each layer by an integer
+   multiple of its own tile, so the loop is seamless. */
 
 body::before,
 body::after {

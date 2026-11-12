@@ -353,7 +353,6 @@ function DocumentRow({
               label: "View details",
               icon: <FileText className="h-3.5 w-3.5" />,
               onSelect: onOpen,
-              reaction: "read",
             },
             {
               key: "download",

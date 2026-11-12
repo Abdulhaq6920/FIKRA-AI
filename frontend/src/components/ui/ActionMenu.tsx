@@ -25,7 +25,6 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { signalCompanion, type CompanionAction } from "@/lib/companion";
 
 export interface ActionMenuItem {
   /** Stable key; falls back to the label. */
@@ -37,8 +36,6 @@ export interface ActionMenuItem {
   href?: string;
   download?: boolean;
   tone?: "default" | "danger" | "success";
-  /** Which reaction the anime companion performs for this entry. */
-  reaction?: CompanionAction;
   disabled?: boolean;
   /** Draw a divider above this entry. */
   separator?: boolean;
@@ -103,8 +100,6 @@ export function ActionMenu({
   const openMenu = useCallback(() => {
     place();
     setOpen(true);
-    // The companion leans in whenever a menu is opened.
-    signalCompanion("think", 900);
   }, [place]);
 
   // Measure once after mount so the menu appears in the right place before
@@ -172,10 +167,6 @@ export function ActionMenu({
   const run = (item: ActionMenuItem) => {
     if (item.disabled) return;
     close();
-    signalCompanion(
-      item.reaction ?? (item.tone === "danger" ? "alert" : "success"),
-      1200
-    );
     item.onSelect?.();
   };
 
@@ -255,10 +246,7 @@ export function ActionMenu({
                           href={item.href}
                           download={item.download}
                           aria-disabled={item.disabled || undefined}
-                          onClick={() => {
-                            close();
-                            signalCompanion(item.reaction ?? "success", 1200);
-                          }}
+                          onClick={close}
                           className={entryClass}
                         >
                           {content}

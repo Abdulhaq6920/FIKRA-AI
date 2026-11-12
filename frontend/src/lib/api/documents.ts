@@ -14,7 +14,10 @@ export const documentsApi = {
       page_size: String(page_size),
       ...(status ? { status } : {}),
     });
-    return api.get<DocumentListResponse>(`/documents/?${params}`);
+    // No trailing slash: Next's trailing-slash normalisation would answer with
+    // a 308, and the backend's redirect to `/documents/` escapes the proxied
+    // origin, which loses the auth cookies and logs the user out.
+    return api.get<DocumentListResponse>(`/documents?${params}`);
   },
 
   get: (id: string) => api.get<Document>(`/documents/${id}`),

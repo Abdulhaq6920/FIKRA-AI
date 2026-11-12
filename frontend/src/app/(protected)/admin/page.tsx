@@ -29,7 +29,6 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { api } from "@/lib/api/client";
 import { adminApi } from "@/lib/api/admin";
 import { ActionMenu } from "@/components/ui/ActionMenu";
-import { signalCompanion } from "@/lib/companion";
 import { DocumentsTab } from "@/features/admin/DocumentsTab";
 import { QuestionsTab } from "@/features/admin/QuestionsTab";
 import type {
@@ -366,7 +365,6 @@ function UsersTab() {
     e.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
-    signalCompanion("read", 1000);
   };
 
   const runAction = async (successMessage: string, id: string, action: () => Promise<void>) => {
@@ -376,13 +374,11 @@ function UsersTab() {
       await action();
       await load();
       setFeedback({ kind: "success", message: successMessage });
-      signalCompanion("success", 1500);
     } catch (err) {
       setFeedback({
         kind: "error",
         message: err instanceof Error ? err.message : "Action failed.",
       });
-      signalCompanion("alert", 1500);
     } finally {
       setActioning(null);
     }
@@ -407,13 +403,11 @@ function UsersTab() {
       setShowCreate(false);
       setPage(1);
       await load();
-      signalCompanion("success", 1500);
     } catch (err) {
       setFeedback({
         kind: "error",
         message: err instanceof Error ? err.message : "Could not create user.",
       });
-      signalCompanion("alert", 1500);
     } finally {
       setCreating(false);
     }
@@ -432,13 +426,11 @@ function UsersTab() {
       });
       setResetFor(null);
       setResetPassword("");
-      signalCompanion("success", 1500);
     } catch (err) {
       setFeedback({
         kind: "error",
         message: err instanceof Error ? err.message : "Could not reset password.",
       });
-      signalCompanion("alert", 1500);
     } finally {
       setResetting(false);
     }
@@ -656,7 +648,6 @@ function UsersTab() {
                                   .then(() => undefined)
                               );
                             },
-                            reaction: "success",
                             disabled: controlsDisabled,
                           },
                           {
@@ -671,7 +662,6 @@ function UsersTab() {
                               setResetPassword("");
                               setFeedback(null);
                             },
-                            reaction: "think",
                             disabled: busy || platformBlocked,
                           },
                           {
@@ -869,11 +859,9 @@ function AccessRequestsTab() {
 
   const decide = async (id: string, status: "approved" | "rejected") => {
     setActioning(id);
-    signalCompanion("think", 1100);
     try {
       await adminApi.decideAccessRequest(id, status);
       await load();
-      signalCompanion(status === "approved" ? "success" : "alert", 1500);
     } catch { /* ignore */ }
     finally { setActioning(null); }
   };
@@ -923,7 +911,6 @@ function AccessRequestsTab() {
                           tone: "success",
                           onSelect: () => void decide(item.id, "approved"),
                           disabled: actioning === item.id || item.status !== "pending",
-                          reaction: "success",
                         },
                         {
                           key: "reject",
@@ -932,7 +919,6 @@ function AccessRequestsTab() {
                           tone: "danger",
                           onSelect: () => void decide(item.id, "rejected"),
                           disabled: actioning === item.id || item.status !== "pending",
-                          reaction: "alert",
                           separator: true,
                         },
                       ]}

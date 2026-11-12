@@ -28,7 +28,6 @@ import {
 } from "@/lib/api/analytics";
 import { documentsApi } from "@/lib/api/documents";
 import { ActionMenu } from "@/components/ui/ActionMenu";
-import { signalCompanion } from "@/lib/companion";
 import { cn } from "@/lib/utils/cn";
 import { formatBytes } from "@/lib/utils/format";
 import {
@@ -114,24 +113,20 @@ export function DocumentsTab() {
     event.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
-    signalCompanion("read", 1200);
   };
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploadError(null);
     setUploading(true);
-    signalCompanion("write", 1800);
     try {
       for (const file of Array.from(files)) {
         await documentsApi.upload(file);
       }
       setPage(1);
       await load();
-      signalCompanion("success", 1600);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed.");
-      signalCompanion("alert", 1600);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -142,16 +137,13 @@ export function DocumentsTab() {
     if (!confirm("Delete this document? This cannot be undone.")) return;
     setActionError(null);
     setBusyId(id);
-    signalCompanion("think", 1200);
     try {
       await documentsApi.delete(id);
       // If the last row on a page was removed, step back to a valid page.
       if (data && data.items.length === 1 && page > 1) setPage(page - 1);
       else await load();
-      signalCompanion("success", 1400);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Delete failed.");
-      signalCompanion("alert", 1400);
     } finally {
       setBusyId(null);
     }
@@ -160,14 +152,11 @@ export function DocumentsTab() {
   const handleReindex = async (id: string) => {
     setActionError(null);
     setBusyId(id);
-    signalCompanion("think", 1400);
     try {
       await documentsApi.reindex(id);
       await load();
-      signalCompanion("success", 1400);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Reindex failed.");
-      signalCompanion("alert", 1400);
     } finally {
       setBusyId(null);
     }
@@ -362,7 +351,6 @@ export function DocumentsTab() {
                           label: "View details",
                           icon: <Eye className="h-3.5 w-3.5" />,
                           onSelect: () => void openDetail(document.id),
-                          reaction: "read",
                         },
                         {
                           key: "download",
@@ -381,7 +369,6 @@ export function DocumentsTab() {
                               <RefreshCw className="h-3.5 w-3.5" />
                             ),
                           onSelect: () => void handleReindex(document.id),
-                          reaction: "think",
                           disabled:
                             busyId === document.id ||
                             (document.status !== "failed" && document.status !== "ready"),
