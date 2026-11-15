@@ -13,6 +13,7 @@ GET  /api/v1/auth/me
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import CurrentUser
 from app.core.config import settings
 from app.core.exceptions import ConflictError, ValidationError
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.schemas.auth import (
     LoginRequest,
@@ -36,6 +38,8 @@ from app.schemas.auth import (
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+logger = get_logger(__name__)
 
 # The refresh-token cookie fallback body must stay tiny (caps DoS surface).
 _MAX_REFRESH_BODY_BYTES = 4096
@@ -210,18 +214,21 @@ async def initiate_password_reset(
 ) -> None:
     """
     Initiate password reset. Always returns 204 to prevent email enumeration.
-    In production, send the token via email.
+
+    The reset token is NEVER logged: it is a bearer credential, so writing it to
+    a log is account takeover for anyone who can read the log. Outside
+    production only a non-reversible fingerprint is logged, which is enough to
+    correlate a reset with the token a developer was handed.
     """
     service = AuthService(db)
     token = await service.initiate_password_reset(email=body.email)
-    if token:
-        # TODO: send email with reset link containing the token
-        # For development: log the token (never do this in production!)
-        from app.core.logging import get_logger
-
-        logger = get_logger(__name__)
-        if settings.debug:
-            logger.warning("dev_password_reset_token", token=token)
+    if token and not settings.is_production:
+        # TODO: send the token by email (settings.email_enabled); the delivery
+        # channel is the only place the raw token may appear.
+        logger.info(
+            "password_reset_token_issued",
+            token_fingerprint=hashlib.sha256(token.encode()).hexdigest()[:12],
+        )
 
 
 @router.post("/password-reset/complete", status_code=204, response_model=None)

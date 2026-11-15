@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from sqlalchemy import ColumnElement, func, select, text, true
+from sqlalchemy import ColumnElement, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -131,6 +131,23 @@ def _access_scope_condition(
     return Document.access_level == DocumentAccessLevel.ORGANIZATION
 
 
+def _base_conditions(organization_id: uuid.UUID) -> list[ColumnElement[bool]]:
+    """
+    WHERE terms shared by both retrieval branches.
+
+    Built as an explicit list on purpose. SQLAlchemy deliberately makes
+    ``bool(BinaryExpression)`` false, so ``access_condition or true()``
+    silently drops the access predicate and leaks restricted documents.
+    Never combine these predicates with Python ``or``/``and``.
+    """
+    return [
+        DocumentChunk.organization_id == organization_id,
+        Document.organization_id == organization_id,  # redundant, defense-in-depth
+        Document.status == DocumentStatus.READY,
+        Document.is_active == True,  # noqa: E712
+    ]
+
+
 async def _vector_search(
     query_vector: list[float],
     organization_id: uuid.UUID,
@@ -146,6 +163,13 @@ async def _vector_search(
     not a post-filter, so the database enforces tenant isolation.
     """
     access_condition = _access_scope_condition(include_restricted)
+    conditions = _base_conditions(organization_id)
+    # A NULL embedding makes `1 - NULL` NULL: ORDER BY puts it first and
+    # float(None) raises, which would 500 the whole tenant's chat.
+    conditions.append(DocumentChunk.embedding.is_not(None))
+    if access_condition is not None:
+        conditions.append(access_condition)
+
     stmt = (
         select(
             DocumentChunk.id,
@@ -158,13 +182,7 @@ async def _vector_search(
             (1 - DocumentChunk.embedding.cosine_distance(query_vector)).label("score"),
         )
         .join(Document, DocumentChunk.document_id == Document.id)
-        .where(
-            DocumentChunk.organization_id == organization_id,
-            Document.organization_id == organization_id,  # redundant, defense-in-depth
-            Document.status == DocumentStatus.READY,
-            Document.is_active == True,  # noqa: E712
-            access_condition or true(),
-        )
+        .where(*conditions)
         .order_by(text("score DESC"))
         .limit(limit)
     )
@@ -172,6 +190,8 @@ async def _vector_search(
     rows = (await db.execute(stmt)).all()
     results = []
     for row in rows:
+        if row.score is None:  # belt and braces: unembedded chunk
+            continue
         results.append(
             RetrievedPassage(
                 chunk_id=row.id,
@@ -203,6 +223,12 @@ async def _keyword_search(
     directly into a tsquery expression.
     """
     access_condition = _access_scope_condition(include_restricted)
+    conditions = _base_conditions(organization_id)
+    conditions.append(
+        text("document_chunks.content_tsv @@ plainto_tsquery('english', :q)").bindparams(q=query)
+    )
+    if access_condition is not None:
+        conditions.append(access_condition)
 
     stmt = (
         select(
@@ -218,16 +244,7 @@ async def _keyword_search(
             ).label("score"),
         )
         .join(Document, DocumentChunk.document_id == Document.id)
-        .where(
-            DocumentChunk.organization_id == organization_id,
-            Document.organization_id == organization_id,
-            Document.status == DocumentStatus.READY,
-            Document.is_active == True,  # noqa: E712
-            text("document_chunks.content_tsv @@ plainto_tsquery('english', :q)").bindparams(
-                q=query
-            ),
-            access_condition or true(),
-        )
+        .where(*conditions)
         .order_by(text("score DESC"))
         .limit(limit)
     )
@@ -259,6 +276,10 @@ def _reciprocal_rank_fusion(
     where rank is 1-indexed.
 
     Documents missing from a list receive no contribution from that list.
+
+    The inputs are never mutated: each fused passage is a copy carrying the
+    RRF score, so a passage shared by two ranked lists cannot make the
+    result depend on which list happened to be fused first.
     """
     rrf_scores: dict[uuid.UUID, float] = {}
     best_passage: dict[uuid.UUID, RetrievedPassage] = {}
@@ -272,9 +293,4 @@ def _reciprocal_rank_fusion(
                 best_passage[cid] = passage
 
     sorted_ids = sorted(rrf_scores.keys(), key=lambda cid: rrf_scores[cid], reverse=True)
-    result = []
-    for cid in sorted_ids:
-        p = best_passage[cid]
-        p.score = rrf_scores[cid]
-        result.append(p)
-    return result
+    return [replace(best_passage[cid], score=rrf_scores[cid]) for cid in sorted_ids]

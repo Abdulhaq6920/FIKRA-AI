@@ -13,6 +13,7 @@ GET    /api/v1/documents/{doc_id}/download
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import mimetypes
 import uuid
@@ -27,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import CurrentUser, OrgAdminUser
 from app.core.config import settings
 from app.core.exceptions import (
+    ConflictError,
     DocumentNotFoundError,
     FileTooLarge,
     InvalidFileType,
@@ -96,6 +98,11 @@ def _extension_mime(ext: str) -> str:
     }.get(ext, "application/octet-stream")
 
 
+def _sha256_hex(data: bytes) -> str:
+    """Return the hex SHA-256 of *data* (run in a worker thread by callers)."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def _safe_download_filename(name: str) -> str:
     """
     Scrub an uploaded filename for use in the Content-Disposition header.
@@ -160,8 +167,9 @@ async def upload_document(
     else:
         detected_mime = _extension_mime(ext)
 
-    # Compute checksum for deduplication
-    checksum = hashlib.sha256(file_bytes).hexdigest()
+    # Hash off the event loop: SHA-256 over a 50 MB upload is pure CPU and would
+    # otherwise stall /health/live, login and chat for every other request.
+    checksum = await asyncio.to_thread(_sha256_hex, file_bytes)
 
     # Generate a safe storage path — never use the user-supplied filename in the path
     doc_uuid = uuid.uuid4()
@@ -185,44 +193,42 @@ async def upload_document(
         checksum_sha256=checksum,
         status=DocumentStatus.QUEUED,
     )
-    db.add(document)
-    await db.flush()
-
     # Create processing job record
     job = DocumentProcessingJob(
         document_id=doc_uuid,
         organization_id=org_id,
         status=JobStatus.PENDING,
     )
-    db.add(job)
-    await db.commit()
+    try:
+        db.add(document)
+        await db.flush()
+        db.add(job)
+        await db.commit()
+    except Exception:
+        # The file is already on disk: a failed insert must not leave it behind
+        # as an orphan that no row points at.
+        await db.rollback()
+        with contextlib.suppress(Exception):
+            await storage.delete(storage_path)
+        raise
 
     # Dispatch background ingestion task. Kept function-local on purpose:
     # the workers module pulls in the Celery app and the ingestion pipeline
     # (sentence-transformers), which must not load at API import time.
     from app.workers.document_tasks import ingest_document
-    from app.core.logging import get_logger as _gl
 
-    _log = _gl(__name__)
+    # The try covers the *publish* only. Anything after a successful publish
+    # (persisting the task id) must never start a second pipeline: the queued
+    # task and the inline fallback would both DELETE+INSERT this document's
+    # chunks and duplicate every row.
     try:
         task = ingest_document.apply_async(
             args=[str(doc_uuid), str(org_id)],
             queue="ingestion",
         )
-        async with db.begin_nested():
-            job.celery_task_id = task.id
-            await db.flush()
-        _log.info(
-            "document_upload_queued",
-            document_id=str(doc_uuid),
-            org_id=str(org_id),
-            file=original_name,
-            size=len(file_bytes),
-            celery_task=task.id,
-        )
     except Exception as exc:
         # Celery/Redis unavailable — process document inline as background task
-        _log.warning(
+        logger.warning(
             "celery_unavailable_processing_inline",
             document_id=str(doc_uuid),
             error=str(exc)[:200],
@@ -230,6 +236,27 @@ async def upload_document(
         _dispatch_inline_task(
             _process_document_inline(doc_uuid, org_id, str(doc_uuid), storage_path, ext)
         )
+    else:
+        logger.info(
+            "document_upload_queued",
+            document_id=str(doc_uuid),
+            org_id=str(org_id),
+            file=original_name,
+            size=len(file_bytes),
+            celery_task=task.id,
+        )
+        try:
+            job.celery_task_id = task.id
+            await db.commit()
+        except Exception as exc:
+            # The task is already queued and will run; only the traceability
+            # link is missing. Roll back and let the request succeed.
+            await db.rollback()
+            logger.warning(
+                "document_job_task_id_not_persisted",
+                document_id=str(doc_uuid),
+                error=str(exc)[:200],
+            )
 
     return DocumentOut.model_validate(document)
 
@@ -360,17 +387,42 @@ async def reindex_document(
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Re-queue a document for ingestion (admin only)."""
+    """
+    Re-queue a document for ingestion (admin only).
+
+    The document is marked REINDEXING rather than QUEUED so the existing chunks
+    stay in place — and stay retrievable — until the new ones are written. A
+    second request while a run is in flight is rejected with 409 instead of
+    starting a competing pipeline that would DELETE+INSERT the same rows.
+    """
     user, org_id, role = ctx
     doc = await _get_doc_or_404(doc_id, org_id, db)
 
-    doc.status = DocumentStatus.QUEUED
-    await db.flush()
+    in_flight = {
+        DocumentStatus.QUEUED,
+        DocumentStatus.PROCESSING,
+        DocumentStatus.REINDEXING,
+    }
+    if doc.status in in_flight:
+        raise ConflictError(
+            f"Document is already being processed (status: {doc.status.value})."
+        )
+
+    doc.status = DocumentStatus.REINDEXING
+    # One job row per run: the worker reads the newest job, so a fresh row is
+    # required for attempt/status bookkeeping to belong to this run.
+    job = DocumentProcessingJob(
+        document_id=doc_id,
+        organization_id=org_id,
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    # Commit *before* dispatch: the worker must find a visible row, and a
+    # publish failure must not leave a half-written transaction behind.
+    await db.commit()
 
     from app.workers.document_tasks import ingest_document
-    from app.core.logging import get_logger as _gl
 
-    _log = _gl(__name__)
     task_id = None
     try:
         task = ingest_document.apply_async(
@@ -379,7 +431,7 @@ async def reindex_document(
         )
         task_id = task.id
     except Exception as exc:
-        _log.warning(
+        logger.warning(
             "celery_unavailable_reindexing_inline", document_id=str(doc_id), error=str(exc)[:200]
         )
         _dispatch_inline_task(
@@ -387,9 +439,19 @@ async def reindex_document(
                 doc_id, org_id, str(doc_id), doc.storage_path, doc.file_extension
             )
         )
+    else:
+        try:
+            job.celery_task_id = task_id
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            logger.warning(
+                "reindex_job_task_id_not_persisted",
+                document_id=str(doc_id),
+                error=str(exc)[:200],
+            )
 
-    await db.commit()
-    return {"task_id": task_id or "inline", "status": "queued"}
+    return {"task_id": task_id or "inline", "status": DocumentStatus.REINDEXING.value}
 
 
 @router.get("/{doc_id}/status", response_model=ProcessingJobOut)
@@ -511,8 +573,14 @@ async def _process_document_inline(
                 _log.error("inline_ingestion_doc_not_found", document_id=doc_id_str)
                 return
 
-            # Mark as processing
-            doc.status = DocumentStatus.PROCESSING
+            # Mark as processing. A re-index keeps REINDEXING so the document
+            # (and its current chunks) stays visible to retrieval while the new
+            # version is built.
+            doc.status = (
+                DocumentStatus.REINDEXING
+                if doc.status == DocumentStatus.REINDEXING
+                else DocumentStatus.PROCESSING
+            )
             job = await db.scalar(
                 _select(DocumentProcessingJob)
                 .where(
@@ -520,6 +588,7 @@ async def _process_document_inline(
                     DocumentProcessingJob.organization_id == org_id,
                 )
                 .order_by(DocumentProcessingJob.created_at.desc())
+                .limit(1)
             )
             if job:
                 job.status = JobStatus.RUNNING
@@ -530,16 +599,18 @@ async def _process_document_inline(
             storage = get_storage()
             file_bytes = await storage.read(doc.storage_path)
 
-            # Extract text
-            extraction = extract_text(file_bytes, doc.file_extension)
+            # Extraction (PyMuPDF + OCR), chunking (tiktoken) and embedding
+            # (torch) are blocking CPU work. Run them in a worker thread so the
+            # event loop keeps serving /health/live, login and chat.
+            extraction = await asyncio.to_thread(extract_text, file_bytes, doc.file_extension)
 
             # Chunk
-            chunks_data = chunk_text(extraction)
+            chunks_data = await asyncio.to_thread(chunk_text, extraction)
             if not chunks_data:
                 raise ValueError("Extraction produced no text chunks")
 
             # Embed
-            chunks_data = embed_chunks(chunks_data)
+            chunks_data = await asyncio.to_thread(embed_chunks, chunks_data)
 
             # Do not recreate chunks for a document deleted while embedding.
             doc = await db.scalar(
@@ -553,8 +624,12 @@ async def _process_document_inline(
                 _log.info("inline_ingestion_aborted_deleted_document", document_id=doc_id_str)
                 return
 
-            # Delete existing chunks (safe reindex)
-            await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
+            # Delete existing chunks before inserting the new set. Together with
+            # the (pending) UNIQUE(document_id, chunk_index) constraint this
+            # makes a repeated run idempotent instead of duplicating rows.
+            await db.execute(
+                delete(DocumentChunk).where(DocumentChunk.document_id == doc_id)
+            )
 
             # Insert new chunks
             for cd in chunks_data:
@@ -618,6 +693,7 @@ async def _process_document_inline(
                         DocumentProcessingJob.organization_id == org_id,
                     )
                     .order_by(DocumentProcessingJob.created_at.desc())
+                    .limit(1)
                 )
                 if job:
                     job.status = JobStatus.DEAD

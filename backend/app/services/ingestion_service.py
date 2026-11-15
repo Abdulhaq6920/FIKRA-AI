@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,6 +30,21 @@ logger = get_logger(__name__)
 # Chunk size is measured with the embedding model's tokenizer, not characters.
 _MAX_CHUNK_TOKENS = 400
 _CHUNK_OVERLAP_TOKENS = 50
+
+# ---------------------------------------------------------------------------
+# Decompression / resource caps
+# ---------------------------------------------------------------------------
+# Every extractor is bounded: a 50 MB upload must never inflate to gigabytes of
+# RAM inside the API process or the Celery worker. The caps are deliberately
+# generous for real documents and small enough to stay inside the worker's
+# memory budget.
+_MAX_IMAGE_PIXELS = 40_000_000  # Pillow bomb threshold (~40 MP)
+_MAX_PDF_PAGES = 500  # pages parsed, and possibly OCR'd, per PDF
+_MAX_SPREADSHEET_ROWS = 20_000  # rows read per sheet
+_MAX_SPREADSHEET_SHEETS = 50  # sheets read per workbook
+_MAX_ZIP_ENTRIES = 2_000  # entries inside an OOXML/ODF container
+_MAX_ZIP_UNCOMPRESSED_BYTES = 256 * 1024 * 1024  # total inflated size of a container
+_ZIP_BASED_EXTENSIONS = frozenset({"docx", "xlsx", "pptx", "odt", "ods", "odp"})
 
 
 # ---------------------------------------------------------------------------
@@ -89,8 +105,17 @@ def extract_text(file_bytes: bytes, extension: str) -> ExtractionResult:
     Dispatches to the appropriate extractor based on file extension.
     Returns an ExtractionResult with per-page text, structured tables, and
     warnings. `ExtractionResult.kind` tells the chunker which strategy to use.
+
+    Zip-based containers (OOXML/ODF) are size-checked before any parser inflates
+    them: a container that declares more entries or a larger uncompressed total
+    than the caps is refused instead of expanded.
     """
     ext = extension.lower().lstrip(".")
+
+    violation = _archive_bounds_violation(file_bytes, ext)
+    if violation is not None:
+        logger.warning("archive_bounds_exceeded", extension=ext, reason=violation)
+        return ExtractionResult(kind="text", warnings=[violation])
 
     if ext == "pdf":
         result = _extract_pdf(file_bytes)
@@ -116,15 +141,56 @@ def extract_text(file_bytes: bytes, extension: str) -> ExtractionResult:
     return result
 
 
+def _archive_bounds_violation(data: bytes, extension: str) -> str | None:
+    """Return a refusal message when a zip container exceeds the caps, else None.
+
+    The zip central directory reports each entry's uncompressed size, so the
+    check costs one directory read and never inflates the payload itself.
+    """
+    if extension not in _ZIP_BASED_EXTENSIONS:
+        return None
+
+    from zipfile import BadZipFile, ZipFile
+
+    try:
+        with ZipFile(io.BytesIO(data)) as archive:
+            entries = archive.infolist()
+            if len(entries) > _MAX_ZIP_ENTRIES:
+                return (
+                    f"Archive refused: {len(entries)} entries exceeds the "
+                    f"{_MAX_ZIP_ENTRIES}-entry limit"
+                )
+            total = 0
+            for info in entries:
+                total += info.file_size
+                if total > _MAX_ZIP_UNCOMPRESSED_BYTES:
+                    return (
+                        "Archive refused: uncompressed size exceeds the "
+                        f"{_MAX_ZIP_UNCOMPRESSED_BYTES // (1024 * 1024)}MB limit"
+                    )
+    except BadZipFile:
+        # Not a real container: let the format-specific extractor report it.
+        return None
+    return None
+
+
 def _extract_pdf(data: bytes) -> ExtractionResult:
     import fitz  # PyMuPDF
 
     result = ExtractionResult(kind="pdf")
+    doc = None
     try:
         doc = fitz.open(stream=data, filetype="pdf")
         result.page_count = doc.page_count
+        page_limit = min(doc.page_count, _MAX_PDF_PAGES)
+        if doc.page_count > _MAX_PDF_PAGES:
+            # Parsing (and possibly OCR-ing) every page of a huge PDF would
+            # hold the worker for minutes; index the head and say so.
+            result.warnings.append(
+                f"PDF has {doc.page_count} pages; only the first {_MAX_PDF_PAGES} were processed"
+            )
 
-        for page_num in range(doc.page_count):
+        for page_num in range(page_limit):
             page = doc[page_num]
             text = page.get_text("text")
             tables = _extract_pdf_tables(page)
@@ -146,11 +212,16 @@ def _extract_pdf(data: bytes) -> ExtractionResult:
                         tables=tables,
                     )
                 )
-
-        doc.close()
     except Exception as exc:
         logger.warning("pdf_extraction_error", error=str(exc)[:200])
         result.warnings.append(f"PDF extraction error: {type(exc).__name__}")
+    finally:
+        # A failed extraction must not leak the native handle.
+        if doc is not None:
+            try:
+                doc.close()
+            except Exception:  # pragma: no cover - close after a hard failure
+                logger.debug("pdf_close_failed")
 
     result.word_count = sum(len(p.text.split()) for p in result.pages)
     return result
@@ -175,10 +246,11 @@ def _extract_pdf_tables(page: Any) -> list[TableData]:
 
 
 def _ocr_page(page: Any) -> str:
-    """Run Tesseract OCR on a PDF page rendered as an image."""
+    """Run OCR on a PDF page rendered as an image."""
     try:
         from PIL import Image
 
+        _apply_image_limits()
         pix = page.get_pixmap(dpi=150)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         return _ocr_image(img)
@@ -187,13 +259,40 @@ def _ocr_page(page: Any) -> str:
         return ""
 
 
+def _apply_image_limits() -> None:
+    """Cap Pillow's decompression bomb threshold before decoding any image."""
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = _MAX_IMAGE_PIXELS
+
+
+# The RapidOCR engine loads ONNX models (~100 MB); building one per page made a
+# scanned PDF spend most of its time on model construction. One engine is
+# created per process and reused (onnxruntime sessions are thread-safe).
+_ocr_engine: Any = None
+_ocr_engine_lock = threading.Lock()
+
+
+def _get_ocr_engine() -> Any:
+    """Return the process-wide RapidOCR engine, constructing it once."""
+    global _ocr_engine
+    if _ocr_engine is not None:
+        return _ocr_engine
+    with _ocr_engine_lock:
+        if _ocr_engine is None:
+            from rapidocr_onnxruntime import RapidOCR
+
+            _ocr_engine = RapidOCR()
+    return _ocr_engine
+
+
 def _ocr_image(image: Any) -> str:
     """Use RapidOCR first, with Tesseract retained as an installed-runtime fallback."""
     try:
         import numpy as np
-        from rapidocr_onnxruntime import RapidOCR
 
-        result, _elapsed = RapidOCR()(np.array(image.convert("RGB")))
+        _apply_image_limits()
+        result, _elapsed = _get_ocr_engine()(np.array(image.convert("RGB")))
         if result:
             return "\n".join(item[1] for item in result if len(item) > 1 and item[1]).strip()
     except Exception as exc:
@@ -214,6 +313,7 @@ def _extract_image(data: bytes, extension: str) -> ExtractionResult:
     try:
         from PIL import Image, ImageOps
 
+        _apply_image_limits()
         with Image.open(io.BytesIO(data)) as image:
             # Respect phone-camera orientation metadata and improve contrast before OCR.
             normalized = ImageOps.exif_transpose(image)
@@ -372,16 +472,40 @@ def _extract_spreadsheet(data: bytes, extension: str) -> ExtractionResult:
 
         source = io.BytesIO(data)
         if extension in ("csv", "tsv"):
-            frame = pd.read_csv(source, sep="\t" if extension == "tsv" else ",", dtype=str).fillna(
-                ""
-            )
+            frame = pd.read_csv(
+                source,
+                sep="\t" if extension == "tsv" else ",",
+                dtype=str,
+                nrows=_MAX_SPREADSHEET_ROWS,
+            ).fillna("")
+            if len(frame) >= _MAX_SPREADSHEET_ROWS:
+                result.warnings.append(
+                    f"Sheet truncated to the first {_MAX_SPREADSHEET_ROWS} rows"
+                )
             sheets = [("Sheet 1", frame)]
         else:
             workbook = pd.ExcelFile(source)
-            sheets = [
-                (sheet_name, pd.read_excel(workbook, sheet_name=sheet_name, dtype=str).fillna(""))
-                for sheet_name in workbook.sheet_names
-            ]
+            sheet_names = workbook.sheet_names
+            if len(sheet_names) > _MAX_SPREADSHEET_SHEETS:
+                result.warnings.append(
+                    f"Workbook has {len(sheet_names)} sheets; only the first "
+                    f"{_MAX_SPREADSHEET_SHEETS} were processed"
+                )
+                sheet_names = sheet_names[:_MAX_SPREADSHEET_SHEETS]
+            sheets = []
+            for sheet_name in sheet_names:
+                frame = pd.read_excel(
+                    workbook,
+                    sheet_name=sheet_name,
+                    dtype=str,
+                    nrows=_MAX_SPREADSHEET_ROWS,
+                ).fillna("")
+                if len(frame) >= _MAX_SPREADSHEET_ROWS:
+                    result.warnings.append(
+                        f"Sheet '{sheet_name}' truncated to the first "
+                        f"{_MAX_SPREADSHEET_ROWS} rows"
+                    )
+                sheets.append((sheet_name, frame))
 
         for page_number, (sheet_name, frame) in enumerate(sheets, start=1):
             rows = [list(map(str, frame.columns.tolist()))] + frame.astype(str).values.tolist()

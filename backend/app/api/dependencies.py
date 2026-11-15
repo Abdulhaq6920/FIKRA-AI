@@ -7,7 +7,9 @@ These dependencies are used as parameters in route handlers:
         ...
 
 Tenant context (organization_id) comes from the JWT claim,
-never from a browser-supplied header or query parameter.
+never from a browser-supplied header or query parameter. The *role*, however,
+is always read from the organization_memberships row — a token claim must never
+be able to authorize a privileged action.
 
 Security invariant:
 - Every protected endpoint MUST use one of the Depends() functions here.
@@ -88,14 +90,19 @@ async def get_current_user_and_org(
     db: AsyncSession = Depends(get_db),
 ) -> tuple[User, uuid.UUID, str]:
     """
-    Return (user, organization_id, role) from the JWT claims.
+    Return (user, organization_id, role) for the authenticated request.
 
-    The organization_id is validated against the database — it cannot be
-    spoofed by modifying the JWT because the JWT is signed with the secret key.
+    The JWT is only used to *identify* the user and the organization; the role
+    comes from the ``organization_memberships`` row, which is the single source
+    of truth for authorization. The token's ``role`` claim is never trusted: a
+    demotion takes effect on the next request instead of when the access token
+    expires.
+
+    The membership must still exist and be active, so a removed or disabled
+    member is rejected even while holding a valid, unexpired token.
     """
     user_id_str = payload.get("sub", "")
     org_id_str = payload.get("org", "")
-    role_str = payload.get("role", "")
 
     try:
         user_id = uuid.UUID(user_id_str)
@@ -118,7 +125,8 @@ async def get_current_user_and_org(
     if membership is None:
         raise PermissionDeniedError("No active membership in this organization.")
 
-    return user, org_id, role_str
+    # Authorize on the database row, never on the claim.
+    return user, org_id, membership.role.value
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +144,14 @@ async def require_user(
 async def require_org_admin(
     ctx: tuple[User, uuid.UUID, str] = Depends(get_current_user_and_org),
 ) -> tuple[User, uuid.UUID, str]:
-    """Organization admin or platform admin."""
-    user, org_id, role = ctx
-    if role not in (OrgRole.ORG_ADMIN.value, "platform_admin") and not user.is_platform_admin:
+    """
+    Organization admin or platform admin.
+
+    ``role`` is the membership role value (``OrgRole`` is a str enum, so the
+    comparison holds), never the role claim from the token.
+    """
+    user, _org_id, role = ctx
+    if role != OrgRole.ORG_ADMIN and not user.is_platform_admin:
         raise PermissionDeniedError("Organization admin role required.")
     return ctx
 

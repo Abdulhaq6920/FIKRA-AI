@@ -38,6 +38,8 @@ Welcome. This documentation explains every part of the system for developers at 
 
 ## Operations
 
+- [Production Readiness Plan](operations/production-readiness-plan.md) — phased path to GA
+- [Audit Findings Register](operations/audit-findings.md) — every defect found, with severity and file:line
 - [Configuration Reference](operations/configuration-reference.md)
 - [Security Checklist](operations/security-checklist.md)
 - [Troubleshooting](operations/troubleshooting.md)

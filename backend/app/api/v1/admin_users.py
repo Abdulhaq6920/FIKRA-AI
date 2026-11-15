@@ -5,7 +5,8 @@ Guards:
 - cannot change your own role or deactivate yourself;
 - at least one active organization admin must remain;
 - an organization admin cannot modify a platform admin;
-- password changes revoke active refresh sessions.
+- password changes, deactivations and role changes revoke active refresh
+  sessions, so the change takes effect on the next request.
 """
 
 from __future__ import annotations
@@ -269,6 +270,10 @@ async def update_user(
         if membership.role != new_role:
             membership.role = new_role
             changes["role"] = body.role
+            # A role change (promotion or demotion) invalidates every refresh
+            # token the member holds, so the new role is effective immediately
+            # instead of after the access token expires.
+            await _revoke_sessions(db, user.id)
     if body.is_active is not None and membership.is_active != body.is_active:
         membership.is_active = body.is_active
         user.status = UserStatus.ACTIVE if body.is_active else UserStatus.DISABLED

@@ -80,7 +80,11 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # JWT / Auth
     # ------------------------------------------------------------------
-    jwt_secret_key: str = Field(default_factory=lambda: secrets.token_hex(64))
+    # Deliberately a sentinel, not a random per-process value: a random default
+    # boots silently, then every worker mints tokens no other worker can verify
+    # and every restart logs everyone out. Production rejects the sentinel; in
+    # development it is stable across restarts, so no .env edit is required.
+    jwt_secret_key: str = Field(default="CHANGE_ME_SET_JWT_SECRET_KEY_IN_ENV")
     jwt_algorithm: str = Field(default="HS256")
     access_token_expire_minutes: int = Field(default=30, ge=5)
     refresh_token_expire_days: int = Field(default=7, ge=1)
@@ -276,9 +280,29 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
-        """In production, reject placeholder/default secrets."""
+        """
+        In production, refuse to boot on a placeholder or unsafe configuration.
+
+        Every check here is a misconfiguration that has no safe runtime fallback:
+        a weak JWT secret lets anyone mint tokens, DEBUG leaks internals (and
+        used to log password-reset tokens), a wildcard origin defeats the
+        cookie-only auth design, and a placeholder database URL silently points
+        the app at the wrong database.
+        """
         if self.is_production:
-            if self.jwt_secret_key.startswith("CHANGE_ME") or len(self.jwt_secret_key) < 32:
+            if self.debug:
+                raise ValueError("debug must be false in production")
+            if any(origin.strip() == "*" for origin in self.allowed_origins):
+                raise ValueError(
+                    "allowed_origins must list explicit origins in production "
+                    "(a wildcard defeats the credentialed-cookie design)"
+                )
+            if not self.database_url or "CHANGE_ME" in self.database_url:
+                raise ValueError("database_url must be a real connection string in production")
+            if (
+                "change_me" in self.jwt_secret_key.lower()
+                or len(self.jwt_secret_key) < 32
+            ):
                 raise ValueError(
                     "jwt_secret_key must be a real secret of at least 32 "
                     "characters in production"
