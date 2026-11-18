@@ -29,8 +29,15 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { api } from "@/lib/api/client";
 import { adminApi } from "@/lib/api/admin";
 import { ActionMenu } from "@/components/ui/ActionMenu";
-import { DocumentsTab } from "@/features/admin/DocumentsTab";
+import { useToast } from "@/components/ui/Toast";
+import { DocumentTable } from "@/features/documents/DocumentTable";
 import { QuestionsTab } from "@/features/admin/QuestionsTab";
+import {
+  EmptyRow,
+  Pagination,
+  Section,
+  Skeleton,
+} from "@/features/admin/InsightUi";
 import type {
   AdminUser,
   AdminUserRole,
@@ -150,7 +157,7 @@ export default function AdminPage() {
         {activeTab === "Overview" && <OverviewTab onNavigate={setActiveTab} />}
         {activeTab === "Users" && <UsersTab />}
         {activeTab === "Questions" && <QuestionsTab />}
-        {activeTab === "Documents" && <DocumentsTab />}
+        {activeTab === "Documents" && <DocumentTable variant="admin" />}
         {activeTab === "Feedback" && <FeedbackTab />}
         {activeTab === "Access Requests" && <AccessRequestsTab />}
       </div>
@@ -737,13 +744,19 @@ function FeedbackTab() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [actioning, setActioning] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const result = await adminApi.getFeedback(page, 20, statusFilter || undefined);
       setData(result);
-    } catch { /* keep previous */ }
+      setError(null);
+    } catch (cause) {
+      // Keep the previous page visible, but say the refresh failed.
+      setError(errorText(cause, "Could not load feedback."));
+    }
     finally { setLoading(false); }
   }, [page, statusFilter]);
 
@@ -754,7 +767,10 @@ function FeedbackTab() {
     try {
       await adminApi.updateFeedback(id, status);
       await load();
-    } catch { /* ignore */ }
+    } catch (cause) {
+      // A failed decision must not look like it was saved.
+      toast.show(errorText(cause, "Could not update this feedback item."), "error");
+    }
     finally { setActioning(null); }
   };
 
@@ -778,6 +794,12 @@ function FeedbackTab() {
           </button>
         ))}
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-200">
+          <AlertTriangle className="h-3.5 w-3.5" /> {error}
+        </div>
+      )}
 
       {loading ? <Skeleton rows={4} /> : data?.items.length ? (
         <>
@@ -845,13 +867,18 @@ function AccessRequestsTab() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("pending");
   const [actioning, setActioning] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const result = await adminApi.getAccessRequests(page, 20, statusFilter || undefined);
       setData(result);
-    } catch { /* keep previous */ }
+      setError(null);
+    } catch (cause) {
+      setError(errorText(cause, "Could not load access requests."));
+    }
     finally { setLoading(false); }
   }, [page, statusFilter]);
 
@@ -862,7 +889,10 @@ function AccessRequestsTab() {
     try {
       await adminApi.decideAccessRequest(id, status);
       await load();
-    } catch { /* ignore */ }
+    } catch (cause) {
+      // The request is still pending; tell the admin the decision failed.
+      toast.show(errorText(cause, "Could not record this decision."), "error");
+    }
     finally { setActioning(null); }
   };
 
@@ -886,6 +916,12 @@ function AccessRequestsTab() {
           </button>
         ))}
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-200">
+          <AlertTriangle className="h-3.5 w-3.5" /> {error}
+        </div>
+      )}
 
       {loading ? <Skeleton rows={3} /> : data?.items.length ? (
         <>
@@ -937,54 +973,8 @@ function AccessRequestsTab() {
 
 // ─── Shared UI primitives ─────────────────────────────────────────────────
 
-function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-800 text-sm font-medium text-surface-200">
-        <span className="text-surface-400">{icon}</span>
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function EmptyRow({ text }: { text: string }) {
-  return <div className="py-10 text-center text-sm text-surface-500">{text}</div>;
-}
-
-function Skeleton({ rows }: { rows: number }) {
-  return (
-    <div className="space-y-3 p-4">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-10 rounded bg-surface-800 animate-pulse" />
-      ))}
-    </div>
-  );
-}
-
-function Pagination({
-  page, totalPages, total,
-  onPrev, onNext,
-}: {
-  page: number;
-  totalPages: number;
-  total: number;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-surface-800 text-xs text-surface-500">
-      <button disabled={page === 1} onClick={onPrev} className="hover:text-cyan-300 disabled:opacity-30">
-        ← Previous
-      </button>
-      <span>Page {page} of {totalPages} · {total} total</span>
-      <button disabled={page >= totalPages} onClick={onNext} className="hover:text-cyan-300 disabled:opacity-30">
-        Next →
-      </button>
-    </div>
-  );
-}
+// Section, EmptyRow, Skeleton and Pagination live in InsightUi so the admin
+// tabs and the document table render identically.
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {

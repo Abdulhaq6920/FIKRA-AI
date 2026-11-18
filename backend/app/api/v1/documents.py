@@ -17,10 +17,11 @@ import contextlib
 import hashlib
 import mimetypes
 import uuid
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,11 +31,12 @@ from app.core.config import settings
 from app.core.exceptions import (
     ConflictError,
     DocumentNotFoundError,
-    FileTooLarge,
-    InvalidFileType,
+    FileTooLargeError,
+    InvalidFileTypeError,
     PermissionDeniedError,
 )
 from app.core.logging import get_logger
+from app.db.models.conversation import Message
 from app.db.models.document import (
     Document,
     DocumentAccessLevel,
@@ -42,7 +44,6 @@ from app.db.models.document import (
     DocumentStatus,
     JobStatus,
 )
-from app.db.models.conversation import Message
 from app.db.models.user import OrgRole
 from app.db.session import get_db
 from app.schemas.document import DocumentListResponse, DocumentOut, ProcessingJobOut
@@ -55,7 +56,7 @@ from app.storage.local_storage import get_storage
 try:
     import magic as _magic
 except ImportError:  # pragma: no cover - libmagic missing locally
-    _magic = None
+    _magic = None  # type: ignore[assignment]  # optional native dependency
 
 logger = get_logger(__name__)
 
@@ -144,7 +145,7 @@ async def upload_document(
             break
         total_size += len(chunk)
         if total_size > max_bytes:
-            raise FileTooLarge(f"File exceeds {settings.max_upload_size_mb}MB limit.")
+            raise FileTooLargeError(f"File exceeds {settings.max_upload_size_mb}MB limit.")
         chunks.append(chunk)
     file_bytes = b"".join(chunks)
     del chunks
@@ -153,7 +154,7 @@ async def upload_document(
     original_name = file.filename or "unknown"
     ext = Path(original_name).suffix.lstrip(".").lower()
     if ext not in settings.allowed_extensions:
-        raise InvalidFileType(
+        raise InvalidFileTypeError(
             f"File type '.{ext}' is not supported. "
             f"Allowed: {', '.join(settings.allowed_extensions)}"
         )
@@ -389,7 +390,7 @@ async def reindex_document(
     doc_id: uuid.UUID,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """
     Re-queue a document for ingestion (admin only).
 
@@ -511,7 +512,7 @@ async def download_document(
 async def _get_doc_or_404(
     doc_id: uuid.UUID,
     org_id: uuid.UUID,
-    db,
+    db: AsyncSession,
 ) -> Document:
     """Load a document, enforcing tenant ownership."""
     doc = await db.scalar(
@@ -541,9 +542,13 @@ async def _process_document_inline(
     ext: str,
 ) -> None:
     """Run the full ingestion pipeline inline without Celery."""
-    from datetime import datetime, timezone
-    from sqlalchemy import delete, select as _select
+    from datetime import datetime
 
+    from sqlalchemy import delete
+    from sqlalchemy import select as _select
+
+    from app.core.config import settings
+    from app.core.logging import get_logger
     from app.db.models.document import (
         Document,
         DocumentChunk,
@@ -552,11 +557,9 @@ async def _process_document_inline(
         JobStatus,
     )
     from app.db.session import AsyncSessionLocal
-    from app.providers.embeddings import embed_documents, get_model_version
+    from app.providers.embeddings import get_model_version
     from app.services.ingestion_service import chunk_text, embed_chunks, extract_text
     from app.storage.local_storage import get_storage
-    from app.core.config import settings
-    from app.core.logging import get_logger
 
     _log = get_logger(__name__)
     _log.info("inline_ingestion_started", document_id=doc_id_str)
@@ -593,7 +596,7 @@ async def _process_document_inline(
             )
             if job:
                 job.status = JobStatus.RUNNING
-                job.started_at = datetime.now(timezone.utc)
+                job.started_at = datetime.now(UTC)
             await db.commit()
 
             # Read file from storage
@@ -658,7 +661,7 @@ async def _process_document_inline(
 
             if job:
                 job.status = JobStatus.SUCCESS
-                job.completed_at = datetime.now(timezone.utc)
+                job.completed_at = datetime.now(UTC)
 
             await db.commit()
 
@@ -698,7 +701,12 @@ async def _process_document_inline(
                     job.status = JobStatus.DEAD
                     job.error_type = type(exc).__name__
                     job.error_message = str(exc)[:256]
-                    job.completed_at = datetime.now(timezone.utc)
+                    job.completed_at = datetime.now(UTC)
                 await db.commit()
         except Exception:
-            pass
+            # The document is already logged as failed above; if even the
+            # failure bookkeeping cannot be written, say so instead of hiding it.
+            _log.exception(
+                "inline_ingestion_failure_record_failed",
+                document_id=doc_id_str,
+            )

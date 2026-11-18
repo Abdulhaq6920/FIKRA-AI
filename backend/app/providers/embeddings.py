@@ -25,17 +25,17 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _model_lock = threading.Lock()
-_model_instance: "HuggingFaceEmbeddings | None" = None
+_model_instance: HuggingFaceEmbeddings | None = None
 
 
-def _get_model() -> "HuggingFaceEmbeddings":
+def _get_model() -> HuggingFaceEmbeddings:
     """Load LangChain's embedding adapter once and reuse it for retrieval."""
     global _model_instance
     if _model_instance is None:
         with _model_lock:
             if _model_instance is None:
                 try:
-                    from langchain_huggingface import HuggingFaceEmbeddings  # noqa: PLC0415
+                    from langchain_huggingface import HuggingFaceEmbeddings
                 except ImportError as exc:
                     raise RuntimeError(
                         "langchain-huggingface is not installed. "

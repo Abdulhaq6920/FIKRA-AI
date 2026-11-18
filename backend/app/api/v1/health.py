@@ -72,12 +72,13 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         checks["redis"] = f"degraded: {type(exc).__name__}"
 
     required_ok = checks["database"] == "ok" and checks["embedding_model"] == "ok"
-    degraded = any(value != "ok" for value in checks.values())
 
     return JSONResponse(
         status_code=200 if required_ok else 503,
         content={
-            "status": "ready" if required_ok and not degraded else ("ready" if required_ok else "degraded"),
+            # 200 with a degraded optional dependency is still "ready": Redis
+            # down means inline ingestion, not an outage.
+            "status": "ready" if required_ok else "degraded",
             "checks": checks,
         },
     )

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from pgvector.sqlalchemy import Vector
-from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -29,6 +30,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
 from app.db.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.db.models.organization import Organization
 
 _vc = lambda x: [e.value for e in x]  # noqa: E731
 
@@ -93,18 +97,16 @@ class Document(UUIDMixin, TimestampMixin, Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     word_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    extraction_warnings: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    extraction_warnings: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     embedding_model_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    organization: Mapped["Organization"] = relationship(  # noqa: F821
-        "Organization", back_populates="documents"
-    )
-    chunks: Mapped[list["DocumentChunk"]] = relationship(
+    organization: Mapped[Organization] = relationship("Organization", back_populates="documents")
+    chunks: Mapped[list[DocumentChunk]] = relationship(
         "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
     )
-    processing_jobs: Mapped[list["DocumentProcessingJob"]] = relationship(
+    processing_jobs: Mapped[list[DocumentProcessingJob]] = relationship(
         "DocumentProcessingJob", back_populates="document", cascade="all, delete-orphan"
     )
 
@@ -165,7 +167,7 @@ class DocumentChunk(UUIDMixin, TimestampMixin, Base):
         Vector(settings.embedding_dimensions), nullable=False
     )
 
-    document: Mapped["Document"] = relationship("Document", back_populates="chunks")
+    document: Mapped[Document] = relationship("Document", back_populates="chunks")
 
     def __repr__(self) -> str:
         return f"<Chunk id={self.id} doc={self.document_id} idx={self.chunk_index}>"
@@ -209,4 +211,4 @@ class DocumentProcessingJob(UUIDMixin, TimestampMixin, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    document: Mapped["Document"] = relationship("Document", back_populates="processing_jobs")
+    document: Mapped[Document] = relationship("Document", back_populates="processing_jobs")

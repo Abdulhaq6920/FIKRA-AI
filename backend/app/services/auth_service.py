@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +27,6 @@ from app.core.exceptions import (
     AuthenticationError,
     ConflictError,
     InvalidTokenError,
-    NotFoundError,
     PermissionDeniedError,
 )
 from app.core.logging import get_logger
@@ -40,8 +39,8 @@ from app.core.security import (
     needs_rehash,
     verify_password,
 )
-from app.db.models.user import OrgRole, OrganizationMembership, RefreshSession, User, UserStatus
 from app.db.models.organization import Organization
+from app.db.models.user import OrganizationMembership, OrgRole, RefreshSession, User, UserStatus
 
 logger = get_logger(__name__)
 
@@ -167,9 +166,9 @@ class AuthService:
         row = result.first()
 
         # Generic failure — do not distinguish between wrong email vs wrong password
-        _GENERIC = "Invalid credentials."
+        generic_message = "Invalid credentials."
         if row is None:
-            raise AuthenticationError(_GENERIC)
+            raise AuthenticationError(generic_message)
 
         user, membership = row
         if not verify_password(password, user.hashed_password):
@@ -177,7 +176,7 @@ class AuthService:
             # aggregated logs count as a PII sink.
             email_hint = hashlib.sha256(email_normalized.encode()).hexdigest()[:12]
             logger.warning("login_failed_bad_password", email_hash=email_hint)
-            raise AuthenticationError(_GENERIC)
+            raise AuthenticationError(generic_message)
 
         if user.status != UserStatus.ACTIVE:
             raise AuthenticationError("Account is not active.")
@@ -229,8 +228,8 @@ class AuthService:
         expires_at = session.expires_at
         # Ensure timezone-aware comparison
         if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at < datetime.now(timezone.utc):
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at < datetime.now(UTC):
             raise AuthenticationError("Refresh token has expired.")
 
         # Revoke old token
@@ -337,7 +336,7 @@ class AuthService:
         user_agent: str | None = None,
         ip_address: str | None = None,
     ) -> None:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+        expires_at = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
         session = RefreshSession(
             user_id=user_id,
             token_hash=_hash_refresh_token(refresh_token),

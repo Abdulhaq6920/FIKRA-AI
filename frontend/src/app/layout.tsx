@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/features/auth/AuthContext";
 import { ThemeProvider } from "@/features/theme/ThemeProvider";
 import { CurrencyProvider } from "@/features/currency/CurrencyProvider";
+import { ToastProvider } from "@/components/ui/Toast";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -48,7 +49,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.variable} font-sans antialiased bg-surface-950 text-surface-100`}>
         <ThemeProvider>
           <CurrencyProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <ToastProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </ToastProvider>
           </CurrencyProvider>
         </ThemeProvider>
       </body>

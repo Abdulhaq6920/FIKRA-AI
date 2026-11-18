@@ -2,10 +2,14 @@
 
 The live database holds four chunks, so the planner would seq-scan regardless of
 query shape. This script inserts 8 000 synthetic chunks **with realistic
-embedding structure** (unit-norm vectors clustered around 32 topic centres, the
+embedding structure** (unit-norm vectors clustered around 100 topic centres, the
 shape a real embedding space has) inside a transaction, ANALYZEs, runs EXPLAIN
 on the old and new ORDER BY forms, compares recall against an exact scan, and
 rolls back — the data never becomes visible to any other session.
+
+Run from ``backend/``::
+
+    ..\\.venv\\Scripts\\python.exe scripts\\explain_retrieval.py
 
 Uniform-random vectors are deliberately *not* used: in 384 dimensions all
 distances to uniform noise are ~1.0, so k-means produces meaningless lists and
@@ -30,10 +34,10 @@ from sqlalchemy import text
 
 from app.db.session import engine
 
-CLUSTERS = 32
-PER_CLUSTER = 250
+CLUSTERS = 100
+PER_CLUSTER = 80
 DIMS = 384
-SPREAD = 0.08
+SPREAD = 0.25
 SEED = 42
 
 VECTOR_SQL_OLD = """
@@ -84,9 +88,14 @@ def make_corpus() -> tuple[np.ndarray, np.ndarray]:
         block = centre + SPREAD * rng.normal(size=(PER_CLUSTER, DIMS))
         block /= np.linalg.norm(block, axis=1, keepdims=True)
         points.append(block)
-    query = centres[0] + 0.01 * rng.normal(size=DIMS)
+    corpus = np.vstack(points)
+    # Query a known point plus a small perturbation: there is an unambiguous
+    # nearest neighbour, so recall is measurable (querying a cluster centre
+    # makes all 250 members of the cluster near-ties and any 12 of them equally
+    # correct).
+    query = corpus[0] + 0.005 * rng.normal(size=DIMS)
     query /= np.linalg.norm(query)
-    return np.vstack(points), query
+    return corpus, query
 
 
 async def show(conn, label: str, sql: str, params: dict) -> list[str]:
@@ -102,6 +111,19 @@ async def show(conn, label: str, sql: str, params: dict) -> list[str]:
 async def ids(conn, sql: str, params: dict) -> list[str]:
     rows = (await conn.execute(text(f"select id from ({sql}) t"), params)).all()
     return [str(row[0]) for row in rows]
+
+
+async def ids_and_distances(conn, sql: str, params: dict) -> list[tuple[str, float]]:
+    rows = (
+        await conn.execute(
+            text(
+                "select id, embedding <=> cast(:v as vector) as dist "
+                f"from ({sql}) t"
+            ),
+            params,
+        )
+    ).all()
+    return [(str(row[0]), float(row[1])) for row in rows]
 
 
 async def main() -> None:
@@ -125,7 +147,11 @@ async def main() -> None:
                     "doc_id": doc_id,
                     "org_id": org_id,
                     "idx": 100_000 + i,
-                    "content": f"synthetic chunk {i} benefits onboarding payroll",
+                    "content": (
+                        f"synthetic chunk {i} benefits payroll"
+                        if i % 10 == 0
+                        else f"synthetic chunk {i} unrelated filler text"
+                    ),
                     "hash": f"{i:064d}",
                     "embedding": as_literal(row),
                 }
@@ -154,11 +180,21 @@ async def main() -> None:
             await show(conn, "OLD ordering (1 - distance DESC)", VECTOR_SQL_OLD, params)
             await show(conn, "NEW ordering (distance ASC)", VECTOR_SQL_NEW, params)
 
-            for probes in (1, 10):
+            for probes in (1, 10, 100):
                 await conn.execute(text(f"set local ivfflat.probes = {probes}"))
                 found = await ids(conn, VECTOR_SQL_NEW, params)
                 overlap = len(set(truth) & set(found))
-                print(f"recall@12 with ivfflat.probes={probes}: {overlap}/12")
+                nn = truth[0] in set(found)
+                print(
+                    f"ivfflat.probes={probes:>3}: nearest neighbour found={nn}, "
+                    f"recall@12={overlap}/12"
+                )
+
+            # recall@12 is a weak metric on this synthetic corpus: the exact
+            # 2nd..12th neighbours sit at 0.8164/0.8163/... across 8 000 points,
+            # so any 12 of them are equally valid and only the nearest neighbour
+            # is a meaningful hit. probes=100 (exhaustive) recovers all 12, which
+            # confirms the index is correct; probes trades recall for latency.
 
             await show(
                 conn,

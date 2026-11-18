@@ -9,7 +9,7 @@ use Alembic migrations instead.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, MetaData, func, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -25,7 +25,7 @@ _NAMING_CONVENTION = {
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):

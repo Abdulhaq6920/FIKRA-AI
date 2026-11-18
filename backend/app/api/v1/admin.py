@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -25,7 +26,7 @@ async def organization_overview(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-) -> dict:
+) -> dict[str, Any]:
     """Return live, tenant-scoped dashboard metrics and recent members."""
     _user, org_id, _role = ctx
 
@@ -125,7 +126,7 @@ async def list_members(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(default=None, max_length=255),
-) -> dict:
+) -> dict[str, Any]:
     """Paginated, searchable list of organization members."""
     _admin, org_id, _role = ctx
 
@@ -172,7 +173,7 @@ async def list_feedback(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(default=None, pattern="^(open|in_review|solved)$"),
-) -> dict:
+) -> dict[str, Any]:
     _admin, org_id, _role = ctx
     base = (
         select(Feedback, User.full_name, User.email, Message.content)
@@ -213,7 +214,7 @@ async def review_feedback(
     body: FeedbackReviewUpdate,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     admin, org_id, _role = ctx
     item = await db.scalar(
         select(Feedback).where(Feedback.id == feedback_id, Feedback.organization_id == org_id)
@@ -225,7 +226,7 @@ async def review_feedback(
     item.review_status = body.status
     item.admin_note = body.note
     item.reviewed_by = admin.id
-    item.reviewed_at = datetime.now(timezone.utc)
+    item.reviewed_at = datetime.now(UTC)
     db.add(
         Notification(
             organization_id=org_id,
@@ -249,7 +250,7 @@ async def list_access_requests(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(default=None, pattern="^(pending|approved|rejected)$"),
-) -> dict:
+) -> dict[str, Any]:
     _admin, org_id, _role = ctx
     base = (
         select(RoleRequest, User.full_name, User.email)
@@ -286,7 +287,7 @@ async def decide_access_request(
     body: ReviewDecision,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     admin, org_id, _role = ctx
     request = await db.scalar(
         select(RoleRequest).where(

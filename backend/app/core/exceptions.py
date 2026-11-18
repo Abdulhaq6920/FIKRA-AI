@@ -33,13 +33,13 @@ class ValidationError(AppError):
     message = "Request validation failed."
 
 
-class InvalidFileType(AppError):
+class InvalidFileTypeError(AppError):
     status_code = 400
     error_code = "INVALID_FILE_TYPE"
     message = "The uploaded file type is not supported."
 
 
-class FileTooLarge(AppError):
+class FileTooLargeError(AppError):
     status_code = 400
     error_code = "FILE_TOO_LARGE"
     message = "The uploaded file exceeds the maximum allowed size."

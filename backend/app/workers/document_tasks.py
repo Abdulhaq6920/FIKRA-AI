@@ -28,7 +28,9 @@ import asyncio
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from collections.abc import Coroutine
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
@@ -36,6 +38,9 @@ from celery.exceptions import SoftTimeLimitExceeded
 from app.core.logging import get_logger
 from app.core.metrics import observe_ingestion, set_queue_depth
 from app.workers.celery_app import celery_app
+
+if TYPE_CHECKING:
+    from app.core.config import Settings
 
 logger = get_logger(__name__)
 
@@ -45,6 +50,8 @@ logger = get_logger(__name__)
 # file descriptors and asyncpg connections.
 _worker_loop: asyncio.AbstractEventLoop | None = None
 _worker_loop_lock = threading.Lock()
+
+_T = TypeVar("_T")
 
 
 def _get_worker_loop() -> asyncio.AbstractEventLoop:
@@ -56,12 +63,12 @@ def _get_worker_loop() -> asyncio.AbstractEventLoop:
         return _worker_loop
 
 
-class _BaseTask(Task):
+class _BaseTask(Task):  # type: ignore[misc]  # celery ships no type information
     """Base class that runs the async ingestion pipeline on the worker loop."""
 
-    def _run_async(self, coro: object) -> object:
+    def _run_async(self, coro: Coroutine[Any, Any, _T]) -> _T:
         """Run an async coroutine synchronously in the worker process."""
-        return _get_worker_loop().run_until_complete(coro)  # type: ignore[arg-type]
+        return _get_worker_loop().run_until_complete(coro)
 
 
 def _refresh_queue_depth() -> None:
@@ -71,7 +78,7 @@ def _refresh_queue_depth() -> None:
     process and the value is refreshed exactly when queue pressure matters.
     """
     try:
-        from app.core.redis import queue_depths  # noqa: PLC0415
+        from app.core.redis import queue_depths
 
         depths = _get_worker_loop().run_until_complete(queue_depths(("default", "ingestion")))
         for queue, depth in depths.items():
@@ -80,7 +87,7 @@ def _refresh_queue_depth() -> None:
         logger.debug("queue_depth_refresh_failed", error=str(exc))
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[misc]  # celery ships no type information
     bind=True,
     base=_BaseTask,
     name="app.workers.document_tasks.ingest_document",
@@ -88,7 +95,7 @@ def _refresh_queue_depth() -> None:
     default_retry_delay=60,
     acks_late=True,
 )
-def ingest_document(self: _BaseTask, document_id: str, organization_id: str) -> dict:
+def ingest_document(self: _BaseTask, document_id: str, organization_id: str) -> dict[str, Any]:
     """
     Full ingestion pipeline for a single document.
 
@@ -152,14 +159,14 @@ def ingest_document(self: _BaseTask, document_id: str, organization_id: str) -> 
             observe_ingestion("unknown", "dead", time.perf_counter() - started)
             return {"status": "dead", "error": error_msg}
 
-        raise self.retry(exc=exc, countdown=60 * (2**self.request.retries))
+        raise self.retry(exc=exc, countdown=60 * (2**self.request.retries)) from exc
 
 
 async def _run_ingestion(
     document_id: uuid.UUID,
     organization_id: uuid.UUID,
     celery_task_id: str,
-) -> dict:
+) -> dict[str, Any]:
     """Async implementation of the ingestion pipeline."""
     from sqlalchemy import select
 
@@ -207,7 +214,7 @@ async def _run_ingestion(
         if job:
             job.status = JobStatus.RUNNING
             job.celery_task_id = celery_task_id
-            job.started_at = datetime.now(timezone.utc)
+            job.started_at = datetime.now(UTC)
 
         doc.status = DocumentStatus.PROCESSING
         await db.commit()
@@ -279,14 +286,14 @@ async def _run_ingestion(
 
         if job:
             job.status = JobStatus.SUCCESS
-            job.completed_at = datetime.now(timezone.utc)
+            job.completed_at = datetime.now(UTC)
 
         await db.commit()
 
     return {"status": "ready", "chunk_count": len(chunks_data), "extension": doc.file_extension}
 
 
-def settings_import():
+def settings_import() -> Settings:
     from app.core.config import settings
 
     return settings
@@ -327,6 +334,6 @@ async def _mark_failed(
             job.status = JobStatus.DEAD
             job.error_type = error_type
             job.error_message = error_message[:256]
-            job.completed_at = datetime.now(timezone.utc)
+            job.completed_at = datetime.now(UTC)
 
         await db.commit()

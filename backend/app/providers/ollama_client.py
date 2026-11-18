@@ -139,7 +139,7 @@ class OllamaClient:
 
     async def generate_stream(
         self,
-        messages: list[ChatMessage | BaseMessage],
+        messages: Sequence[ChatMessage | BaseMessage],
         *,
         model: str | None = None,
         max_tokens: int | None = None,

@@ -12,7 +12,7 @@ Guards:
 from __future__ import annotations
 
 import uuid
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import and_, func, or_, select, update
@@ -117,7 +117,7 @@ def _audit(
     actor_id: uuid.UUID,
     action: str,
     target: User,
-    details: dict,
+    details: dict[str, Any],
 ) -> None:
     """Record a privileged change. Never store passwords or tokens."""
     db.add(

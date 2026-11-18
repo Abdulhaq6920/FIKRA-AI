@@ -7,11 +7,18 @@ Every resource in the system belongs to exactly one organization.
 from __future__ import annotations
 
 import enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.db.models.audit import AuditLog, UsageRecord
+    from app.db.models.conversation import Conversation
+    from app.db.models.document import Document
+    from app.db.models.user import OrganizationMembership
 
 # Helper: tell SQLAlchemy to store enum .value (lowercase) not .name (uppercase)
 _vc = lambda x: [e.value for e in x]  # noqa: E731
@@ -41,19 +48,19 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     max_storage_mb: Mapped[int] = mapped_column(default=5000, nullable=False)
 
     # Relationships
-    memberships: Mapped[list["OrganizationMembership"]] = relationship(  # noqa: F821
+    memberships: Mapped[list[OrganizationMembership]] = relationship(
         "OrganizationMembership", back_populates="organization", cascade="all, delete-orphan"
     )
-    documents: Mapped[list["Document"]] = relationship(  # noqa: F821
+    documents: Mapped[list[Document]] = relationship(
         "Document", back_populates="organization", cascade="all, delete-orphan"
     )
-    conversations: Mapped[list["Conversation"]] = relationship(  # noqa: F821
+    conversations: Mapped[list[Conversation]] = relationship(
         "Conversation", back_populates="organization", cascade="all, delete-orphan"
     )
-    usage_records: Mapped[list["UsageRecord"]] = relationship(  # noqa: F821
+    usage_records: Mapped[list[UsageRecord]] = relationship(
         "UsageRecord", back_populates="organization", cascade="all, delete-orphan"
     )
-    audit_logs: Mapped[list["AuditLog"]] = relationship(  # noqa: F821
+    audit_logs: Mapped[list[AuditLog]] = relationship(
         "AuditLog", back_populates="organization", cascade="all, delete-orphan"
     )
 

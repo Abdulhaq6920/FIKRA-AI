@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 name = "fikra-backend"
 version = "0.1.0"
 description = "FIKRA AI - Production-Grade Multi-Tenant RAG Chatbot Backend"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     # Web framework
     "fastapi==0.111.0",
@@ -102,16 +102,27 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
-select = ["E", "W", "F", "I", "B", "C4", "UP", "N", "ANN", "S", "T20", "RUF"]
-ignore = ["ANN101", "ANN102", "ANN401", "S101", "S105"]
+target-version = "py312"
 exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "N", "ANN", "S", "T20", "RUF"]
+ignore = [
+    "ANN101", # missing type annotation for self (removed in newer ruff)
+    "ANN102", # missing type annotation for cls
+    "ANN401", # Any in annotations: used deliberately at provider boundaries
+    "S101",   # assert: tests and internal invariants
+    "S105",   # hardcoded password string: S106 covers the call sites we care about
+    # FastAPI's dependency-injection idiom is a call in a default argument
+    # (`user: User = Depends(get_current_user)`), which B008 flags by design.
+    "B008",
+]
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 exclude = ["alembic/versions"]

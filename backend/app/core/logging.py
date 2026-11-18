@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from structlog.types import EventDict, Processor
@@ -52,7 +52,7 @@ _SENSITIVE_KEYS = frozenset(
 _REDACTED = "[REDACTED]"
 
 
-def redact_sensitive(logger: Any, method: str, event_dict: EventDict) -> EventDict:  # noqa: ANN401
+def redact_sensitive(logger: Any, method: str, event_dict: EventDict) -> EventDict:
     """Replace credential-bearing values before anything is rendered."""
     for key in list(event_dict):
         if key.lower() in _SENSITIVE_KEYS:
@@ -61,22 +61,20 @@ def redact_sensitive(logger: Any, method: str, event_dict: EventDict) -> EventDi
         value = event_dict[key]
         if isinstance(value, dict) and any(k.lower() in _SENSITIVE_KEYS for k in value):
             event_dict[key] = {
-                nested_key: (
-                    _REDACTED if nested_key.lower() in _SENSITIVE_KEYS else nested_value
-                )
+                nested_key: (_REDACTED if nested_key.lower() in _SENSITIVE_KEYS else nested_value)
                 for nested_key, nested_value in value.items()
             }
     return event_dict
 
 
-def add_app_info(logger: Any, method: str, event_dict: EventDict) -> EventDict:  # noqa: ANN401
+def add_app_info(logger: Any, method: str, event_dict: EventDict) -> EventDict:
     """Inject application-level metadata into every log event."""
     event_dict.setdefault("app", settings.app_name)
     event_dict.setdefault("env", settings.app_env)
     return event_dict
 
 
-def drop_color_message_key(logger: Any, method: str, event_dict: EventDict) -> EventDict:  # noqa: ANN401
+def drop_color_message_key(logger: Any, method: str, event_dict: EventDict) -> EventDict:
     """Remove uvicorn's color_message field which duplicates 'message'."""
     event_dict.pop("color_message", None)
     return event_dict
@@ -100,12 +98,14 @@ def configure_logging() -> None:
     ]
 
     if settings.log_format == "json":
-        processors: list[Processor] = shared_processors + [
+        processors: list[Processor] = [
+            *shared_processors,
             structlog.processors.dict_tracebacks,
             structlog.processors.JSONRenderer(),
         ]
     else:
-        processors = shared_processors + [
+        processors = [
+            *shared_processors,
             structlog.dev.ConsoleRenderer(colors=True),
         ]
 
@@ -132,4 +132,6 @@ def configure_logging() -> None:
 
 def get_logger(name: str = __name__) -> structlog.BoundLogger:
     """Return a bound structlog logger for the given module name."""
-    return structlog.get_logger(name)
+    # structlog.get_logger is typed as returning Any (the concrete type depends
+    # on the configured wrapper class).
+    return cast("structlog.BoundLogger", structlog.get_logger(name))

@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Mapping, Sequence
+from typing import Any
 
 import groq
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
+from pydantic import SecretStr
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -70,7 +72,7 @@ def _retry_delay(exc: BaseException, attempt: int) -> float:
             return min(max(float(retry_after), 0.5), _RETRY_MAX_SECONDS)
         except (TypeError, ValueError):
             pass
-    return min(_RETRY_BASE_SECONDS * (2**attempt), _RETRY_MAX_SECONDS)
+    return min(_RETRY_BASE_SECONDS * (2.0**attempt), _RETRY_MAX_SECONDS)
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -131,7 +133,7 @@ class GroqClient:
         # this wrapper retains the application's error and usage contracts.
         self._llm = ChatGroq(
             model=settings.groq_primary_model,
-            api_key=settings.groq_api_key,
+            api_key=SecretStr(settings.groq_api_key),
             timeout=settings.groq_timeout_seconds,
             max_retries=0,
             temperature=settings.groq_temperature,
@@ -194,7 +196,7 @@ class GroqClient:
                     continue
 
                 latency_ms = int((time.perf_counter() - start) * 1000)
-                usage = response.usage_metadata or {}
+                usage: Mapping[str, Any] = response.usage_metadata or {}
                 result = GenerationResult(
                     content=str(response.content or ""),
                     finish_reason=response.response_metadata.get("finish_reason", "stop"),

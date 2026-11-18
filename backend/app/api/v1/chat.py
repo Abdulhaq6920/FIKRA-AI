@@ -19,6 +19,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -45,7 +46,7 @@ from app.db.models.conversation import (
     Message,
     MessageRole,
 )
-from app.db.models.user import OrganizationMembership, OrgRole
+from app.db.models.user import OrganizationMembership, OrgRole, User
 from app.db.session import get_db
 from app.providers.llm import LLMClient
 from app.schemas.chat import (
@@ -461,7 +462,7 @@ async def submit_feedback_by_message(
     body: FeedbackRequest,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Submit feedback on an assistant message via per-message URL."""
     # Reuse the same body schema but override message_id from the path
     overridden = FeedbackRequest(
@@ -477,7 +478,7 @@ async def submit_feedback(
     body: FeedbackRequest,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Submit feedback on an assistant message."""
     return await _do_submit_feedback(body, ctx, db)
 
@@ -567,9 +568,9 @@ async def delete_favorite_question(
 
 async def _do_submit_feedback(
     body: FeedbackRequest,
-    ctx,
+    ctx: tuple[User, uuid.UUID, str],
     db: AsyncSession,
-) -> dict:
+) -> dict[str, str]:
     user, org_id, role = ctx
 
     # Verify the message belongs to this org and user
@@ -583,16 +584,41 @@ async def _do_submit_feedback(
     if msg is None:
         raise PermissionDeniedError("Message not found or access denied.")
 
-    fb = Feedback(
-        message_id=body.message_id,
-        user_id=user.id,
-        organization_id=org_id,
-        feedback_type=FeedbackType(body.feedback_type),
-        comment=body.comment,
+    # One verdict per user per message (uq_feedback_message_user). The schema has
+    # always documented "a second thumbs-up updates it", but the handler only
+    # ever inserted: a re-submit hit the unique constraint and surfaced as a 500.
+    # Upsert instead, and send the admin alert only when the verdict actually
+    # becomes negative, so a repeated thumbs-down does not spam the queue.
+    fb = await db.scalar(
+        select(Feedback).where(
+            Feedback.message_id == body.message_id,
+            Feedback.user_id == user.id,
+        )
     )
-    db.add(fb)
+    became_negative = body.feedback_type == "thumbs_down" and (
+        fb is None or fb.feedback_type != FeedbackType.THUMBS_DOWN
+    )
+    if fb is None:
+        fb = Feedback(
+            message_id=body.message_id,
+            user_id=user.id,
+            organization_id=org_id,
+            feedback_type=FeedbackType(body.feedback_type),
+            comment=body.comment,
+        )
+        db.add(fb)
+    else:
+        fb.feedback_type = FeedbackType(body.feedback_type)
+        fb.comment = body.comment
+        # A changed verdict re-enters review: the previous admin decision was
+        # made against a different rating.
+        fb.review_status = "open"
+        fb.admin_note = None
+        fb.reviewed_by = None
+        fb.reviewed_at = None
+
     # Alert only admins in the same organization about actionable negative feedback.
-    if body.feedback_type == "thumbs_down":
+    if became_negative:
         admin_ids = (
             (
                 await db.execute(
@@ -625,7 +651,7 @@ async def _get_conv_or_404(
     conv_id: uuid.UUID,
     user_id: uuid.UUID,
     org_id: uuid.UUID,
-    db,
+    db: AsyncSession,
 ) -> Conversation:
     conv = await db.scalar(
         select(Conversation).where(

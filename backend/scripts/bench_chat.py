@@ -1,6 +1,8 @@
 """Measure /chat/ask latency distribution and per-stage cost.
 
-Usage: python bench_chat.py <label> [n]
+Run from ``backend/`` (the API must be running)::
+
+    ..\\.venv\\Scripts\\python.exe scripts\\bench_chat.py <label> [n]
 
 Logs in, then issues *n* asks (each in a fresh conversation so conversation
 history does not grow and skew the numbers), records the server-reported

@@ -10,12 +10,17 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.db.models.organization import Organization
+    from app.db.models.user import User
 
 _vc = lambda x: [e.value for e in x]  # noqa: E731
 
@@ -55,10 +60,10 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    organization: Mapped[Organization] = relationship(  # noqa: F821
+    organization: Mapped[Organization] = relationship(
         "Organization", back_populates="conversations"
     )
-    owner: Mapped[User] = relationship("User", back_populates="conversations")  # noqa: F821
+    owner: Mapped[User] = relationship("User", back_populates="conversations")
     messages: Mapped[list[Message]] = relationship(
         "Message",
         back_populates="conversation",
@@ -106,7 +111,7 @@ class Message(UUIDMixin, TimestampMixin, Base):
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    citations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    citations: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
 
     conversation: Mapped[Conversation] = relationship("Conversation", back_populates="messages")
     feedback: Mapped[list[Feedback]] = relationship(
@@ -231,6 +236,4 @@ class Feedback(UUIDMixin, TimestampMixin, Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     message: Mapped[Message] = relationship("Message", back_populates="feedback")
-    user: Mapped[User] = relationship(  # noqa: F821
-        "User", back_populates="feedback", foreign_keys=[user_id]
-    )
+    user: Mapped[User] = relationship("User", back_populates="feedback", foreign_keys=[user_id])

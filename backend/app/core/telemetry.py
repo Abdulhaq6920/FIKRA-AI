@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import settings
@@ -42,7 +42,7 @@ def _get_tracer() -> Any | None:
         return None
     if _tracer is None:
         try:
-            from opentelemetry import trace  # noqa: PLC0415
+            from opentelemetry import trace
 
             _tracer = trace.get_tracer(settings.app_name)
         except Exception as exc:  # pragma: no cover - optional dependency
@@ -80,10 +80,10 @@ def stage_span(stage: str, **attributes: Any) -> Iterator[None]:
     finally:
         observe_rag_stage(stage, time.perf_counter() - start)
         if span_cm is not None:
-            try:
+            # A broken exporter must never mask the exception that unwound the
+            # span, so failures here are intentionally swallowed.
+            with suppress(Exception):  # pragma: no cover
                 span_cm.__exit__(None, None, None)
-            except Exception:  # pragma: no cover
-                pass
 
 
 def setup_telemetry(app: FastAPI) -> None:
@@ -96,14 +96,14 @@ def setup_telemetry(app: FastAPI) -> None:
         return
 
     try:
-        from opentelemetry import trace  # noqa: PLC0415
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # noqa: PLC0415
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
             OTLPSpanExporter,
         )
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor  # noqa: PLC0415
-        from opentelemetry.sdk.resources import Resource  # noqa: PLC0415
-        from opentelemetry.sdk.trace import TracerProvider  # noqa: PLC0415
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor  # noqa: PLC0415
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         resource = Resource.create(
             {
@@ -115,16 +115,14 @@ def setup_telemetry(app: FastAPI) -> None:
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
         trace.set_tracer_provider(provider)
 
-        FastAPIInstrumentor.instrument_app(
-            app, excluded_urls="/metrics,/api/v1/health/.*"
-        )
+        FastAPIInstrumentor.instrument_app(app, excluded_urls="/metrics,/api/v1/health/.*")
 
         try:
-            from opentelemetry.instrumentation.sqlalchemy import (  # noqa: PLC0415
+            from opentelemetry.instrumentation.sqlalchemy import (
                 SQLAlchemyInstrumentor,
             )
 
-            from app.db.session import engine  # noqa: PLC0415
+            from app.db.session import engine
 
             SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
         except Exception as exc:  # pragma: no cover - optional

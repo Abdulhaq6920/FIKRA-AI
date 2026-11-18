@@ -9,7 +9,7 @@ RERANKER_ENABLED=true and the first retrieval request arrives.
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -20,16 +20,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _reranker_lock = threading.Lock()
-_reranker_instance: "CrossEncoder | None" = None
+_reranker_instance: CrossEncoder | None = None
 
 
-def _get_reranker() -> "CrossEncoder":
+def _get_reranker() -> CrossEncoder:
     global _reranker_instance
     if _reranker_instance is None:
         with _reranker_lock:
             if _reranker_instance is None:
                 try:
-                    from sentence_transformers import CrossEncoder  # noqa: PLC0415
+                    from sentence_transformers import CrossEncoder
                 except ImportError as exc:
                     raise RuntimeError(
                         "sentence-transformers is not installed. "
@@ -74,8 +74,9 @@ def rerank(
         return [(i, 0.0) for i in range(len(passages))]
 
     reranker = _get_reranker()
-    pairs = [(query, p) for p in passages]
-    scores: list[float] = reranker.predict(pairs).tolist()
+    # The cross-encoder API takes a list of [query, passage] pairs, not tuples.
+    raw_scores = reranker.predict([[query, p] for p in passages])
+    scores: list[float] = [float(score) for score in cast("Any", raw_scores)]
 
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
     if top_n is not None:

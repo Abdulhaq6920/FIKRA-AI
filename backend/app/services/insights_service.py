@@ -8,7 +8,7 @@ filters on the authenticated user ID.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Text, and_, case, cast, desc, exists, func, or_, select, text, true
@@ -215,7 +215,7 @@ async def daily_activity(
     days: int = 14,
 ) -> list[DailyPoint]:
     """Questions asked and tokens consumed per day, zero-filled."""
-    end = datetime.now(timezone.utc)
+    end = datetime.now(UTC)
     start = (end - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
     filters = [
@@ -494,13 +494,13 @@ async def _source_maps(
 
     chunks: dict[uuid.UUID, DocumentChunk] = {}
     if chunk_ids:
-        rows = await db.execute(
+        chunk_rows = await db.execute(
             select(DocumentChunk).where(
                 DocumentChunk.organization_id == organization_id,
                 DocumentChunk.id.in_(chunk_ids),
             )
         )
-        chunks = {chunk.id: chunk for chunk in rows.scalars().all()}
+        chunks = {chunk.id: chunk for chunk in chunk_rows.scalars().all()}
 
     return documents, chunks
 

@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from datetime import datetime
-
 from app.db.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.db.models.conversation import Conversation, Feedback
+    from app.db.models.organization import Organization
 
 # Store enum .value (lowercase string) not .name (uppercase)
 _vc = lambda x: [e.value for e in x]  # noqa: E731
@@ -54,16 +58,16 @@ class User(UUIDMixin, TimestampMixin, Base):
     password_reset_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     # Relationships
-    memberships: Mapped[list["OrganizationMembership"]] = relationship(
+    memberships: Mapped[list[OrganizationMembership]] = relationship(
         "OrganizationMembership", back_populates="user", cascade="all, delete-orphan"
     )
-    conversations: Mapped[list["Conversation"]] = relationship(  # noqa: F821
+    conversations: Mapped[list[Conversation]] = relationship(
         "Conversation", back_populates="owner", cascade="all, delete-orphan"
     )
-    refresh_sessions: Mapped[list["RefreshSession"]] = relationship(
+    refresh_sessions: Mapped[list[RefreshSession]] = relationship(
         "RefreshSession", back_populates="user", cascade="all, delete-orphan"
     )
-    feedback: Mapped[list["Feedback"]] = relationship(  # noqa: F821
+    feedback: Mapped[list[Feedback]] = relationship(
         "Feedback",
         back_populates="user",
         cascade="all, delete-orphan",
@@ -96,10 +100,8 @@ class OrganizationMembership(UUIDMixin, TimestampMixin, Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    user: Mapped["User"] = relationship("User", back_populates="memberships")
-    organization: Mapped["Organization"] = relationship(  # noqa: F821
-        "Organization", back_populates="memberships"
-    )
+    user: Mapped[User] = relationship("User", back_populates="memberships")
+    organization: Mapped[Organization] = relationship("Organization", back_populates="memberships")
 
     def __repr__(self) -> str:
         return f"<Membership user={self.user_id} org={self.organization_id} role={self.role}>"
@@ -117,4 +119,4 @@ class RefreshSession(UUIDMixin, TimestampMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    user: Mapped["User"] = relationship("User", back_populates="refresh_sessions")
+    user: Mapped[User] = relationship("User", back_populates="refresh_sessions")

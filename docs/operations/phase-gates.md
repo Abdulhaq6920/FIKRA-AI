@@ -341,11 +341,245 @@ $ ..\.venv\Scripts\python.exe -m pytest tests/unit tests/tenant_isolation -q --o
 
 ---
 
-## Open items for the next gate (G1.4)
+## G1.4 - Retrieval correctness and latency - **PASS**
 
-1. **Stage timings before/after** — p50 ≤ 4 s, p95 ≤ 8 s on this machine.
-2. **Relevance gate in both retrieval branches** — a low-score vector-only result must not reach
-   the prompt while a keyword-only result bypasses the same gate.
-3. **Index usability** — `EXPLAIN` must show the ivfflat vector index and the GIN index rather
-   than a sequential scan plus sort.
+| Exit criterion | Result |
+|---|---|
+| p50 <= 4 s, p95 <= 8 s | pass — p50 924 ms, p95 1262 ms (was 1088 / 3545) |
+| Relevance gate on **both** retrieval branches | pass — reranked and fusion-only paths both gated; live irrelevant question returns 0 citations |
+| Index usability | pass — `EXPLAIN` at 8 004 rows: ivfflat index scan 0.203 ms vs 12.6 ms seq-scan+sort; keyword branch uses `ix_chunks_content_tsv` (GIN) |
+| No duplicate-verdict 500 | pass — feedback is now an upsert (P1-L21, found in the log during this gate) |
+
+### 1. Latency, before and after
+
+20 asks, each in a fresh conversation so history does not skew the numbers. "Server" is the
+`latency_ms` the API reports; "wall" includes transport.
+
+```
+BEFORE  server ms  p50=1088  p95=3545  min=682  max=7603  mean=1572
+AFTER   server ms  p50=924   p95=1262  min=531  max=2044  mean=891
+AFTER   wall   ms  p50=961   p95=1302                    mean=934
+```
+
+The mean and p95 were dominated by one 7.6 s outlier in the before run (CPU contention on the
+reranker, not a query-shape effect). p50 is the honest like-for-like number: **1088 -> 924 ms**.
+
+Per-stage mean over the 20 requests (`rag_stage_duration_seconds` deltas):
+
+```
+stage            before      after
+rerank            823 ms     283 ms
+retrieve          986 ms     386 ms
+llm_generate      577 ms     488 ms
+embed_query       149 ms      77 ms
+vector_search     7.7 ms    21.9 ms
+keyword_search    6.5 ms     4.1 ms
+prompt_build        -        14.9 ms
+load_context        -         2.5 ms
+fusion              -         0.0 ms
+```
+
+`vector_search` rising from 7.7 to 21.9 ms is expected and correct: `ivfflat.probes` is now 10
+instead of pgvector's default 1, so the query visits ten lists instead of one. On this 4-chunk
+database the planner ignores the index entirely (a seq scan is cheaper), so the live number is
+dominated by planner noise — the index evidence is the 8 004-row `EXPLAIN` below, not this row.
+
+### 2. Index usability at a realistic corpus size
+
+The live database holds four chunks, so the planner would seq-scan regardless of query shape.
+`backend/scripts/explain_retrieval.py` inserts 8 004 synthetic chunks **with realistic embedding structure**
+(unit-norm vectors clustered around 100 topic centres) inside a transaction, `ANALYZE`s, runs
+`EXPLAIN (ANALYZE, BUFFERS)`, and rolls back. Uniform-random vectors were deliberately not used:
+in 384 dimensions every distance to uniform noise is ~1.0, k-means produces meaningless lists, and
+the index returns nothing — a property of the synthetic data that would have looked like a query
+bug.
+
+```
+OLD  ORDER BY 1 - (embedding <=> v) DESC
+  ->  Sort  (Sort Key: (('1'::double precision - (c.embedding <=> '…'::vector)))
+        Sort Method: top-N heapsort
+  ->  Bitmap Heap Scan on document_chunks  rows=8004
+  Execution Time: 12.577 ms        Buffers: shared hit=4027
+
+NEW  ORDER BY embedding <=> v
+  ->  Index Scan using ix_chunks_embedding_ivfflat on document_chunks  rows=12
+        Index Searches: 1
+  Execution Time: 0.203 ms         Buffers: shared hit=78
+
+KEYWORD  content_tsv @@ plainto_tsquery('english', :q)
+  ->  Bitmap Index Scan on ix_chunks_content_tsv  rows=801
+  Execution Time: 10.744 ms
+```
+
+`ORDER BY 1 - distance DESC` cannot be served by a `vector_cosine_ops` index — it is an ordering
+over a *derived* expression — so it always sorted the whole tenant corpus. Ordering by the distance
+expression itself is index-usable and mathematically identical.
+
+Recall at 8 004 rows, exact scan as ground truth:
+
+```
+ivfflat.probes=  1: nearest neighbour found=True, recall@12=2/12
+ivfflat.probes= 10: nearest neighbour found=True, recall@12=3/12
+ivfflat.probes=100: nearest neighbour found=True, recall@12=12/12
+```
+
+`recall@12` is a weak metric on this corpus and is reported only for completeness: the exact 2nd
+to 12th neighbours sit at 0.8164 / 0.8163 / … across 8 000 points, so any 12 of them are equally
+valid near-ties. What matters — the true nearest neighbour — is found at every setting, and
+`probes=100` (exhaustive) reproduces the exact result set.
+
+### 3. The relevance gate
+
+Three score scales meet here, so each branch is compared against the threshold that matches its
+own scale instead of one shared number:
+
+| Branch | Score | Threshold | Setting |
+|---|---|---|---|
+| reranked | cross-encoder score, sigmoid-activated 0..1 | 0.5 | `min_rerank_score` |
+| fused, vector hit | cosine similarity | 0.3 | `min_relevance_score` |
+| fused, keyword-only | `ts_rank_cd` (unbounded) | 0.01 | `min_keyword_score` |
+
+Measured on the real corpus: a relevant question scored **0.999** through the reranker and an
+unrelated one **0.00003**; a relevant `ts_rank_cd` was **0.1**; an unrelated question's best vector
+similarity was **0.387**, i.e. *above* the 0.3 similarity floor. That last number is why the
+similarity gate alone never removed noise once the reranker was enabled — the reranked branch
+returned every passage unconditionally.
+
+Live result, same question set, after the fix:
+
+```
+When does benefits enrolment close?  -> citations=1  latency=914 ms
+    "Benefits enrolment closes **on the fifteenth day after the employee's start date**."
+What is the capital of Peru?          -> citations=0  latency=1021 ms
+    "I don't have that information in the documents you provided."
+retrieval_candidates_count{stage="gated_out"} 22.0
+retrieval_candidates_sum{stage="gated_out"}   67.0
+```
+
+The unrelated question now reaches the model with **no context**, and the model refuses instead of
+answering from noise. The `gated_out` series proves the filter is doing work rather than the
+answer happening to be empty.
+
+### 4. `ivfflat.probes` is a connection setting, not a query setting
+
+`settings.vector_index_probes` (default 10) is applied in `db/session.py` through asyncpg
+`server_settings`, so every pooled connection inherits it:
+
+```python
+if settings.database_url.startswith("postgresql+asyncpg"):
+    _connect_args["server_settings"] = {
+        "ivfflat.probes": str(settings.vector_index_probes),
+    }
+```
+
+It is guarded on the driver because `server_settings` is asyncpg-only, and a SQLite URL (used by
+some local tooling) must not receive it.
+
+### 5. Duplicate feedback was a 500 (found while reading this gate's log)
+
+```
+POST /api/v1/chat/messages/{id}/feedback   (same message, same user, 2nd time)
+500 {"error":{"code":"INTERNAL_ERROR",…}}
+asyncpg.exceptions.UniqueViolationError: duplicate key value violates unique constraint
+    "uq_feedback_message_user"
+```
+
+The handler only ever inserted, while `uq_feedback_message_user` enforces one verdict per user per
+message and the model comment already said "a second thumbs-up updates it". It is now an upsert:
+the verdict and comment are replaced, `review_status` returns to `open` (the previous admin decision
+was made against a different rating), and the admin alert fires only when the verdict *becomes*
+negative.
+
+```
+thumbs_down #1: 201   thumbs_down #2: 201   thumbs_down #3: 201
+changed verdict: 201
+stored: type=thumbs_up status=open comment='changed my mind'  rows_for_pair=1
+duplicate (message_id,user_id) groups: 0
+```
+
+### Tests
+
+```
+backend/tests/unit/test_retrieval.py   18 passed   (TestRelevanceGate: 6 new cases, incl. a
+                                                    retrieve() reranked-branch test that fails
+                                                    before the gate existed)
+backend/tests/unit/test_hardening.py   15 passed
+pytest tests/unit tests/tenant_isolation   98 passed
+```
+
+---
+
+# G2.1 — CI blocking on lint, types, migrations, tests and build
+
+**Date:** 2026-11-18 · **Status:** pass (local) · **Remote run:** pending first push
+
+## What was missing
+
+There was no `.github/workflows` directory: the 98 tests, ruff and mypy only ran when a human
+remembered to run them. The gate requires those checks on every push and requires them to *fail
+the build*, so the checks themselves had to be green before the workflow could be trusted.
+
+## Type and lint baseline made green (fixed, not baselined away)
+
+`mypy` strict reported 61 errors across 30 files. Each was fixed rather than excluded:
+
+| Category | Fix |
+|---|---|
+| SQLAlchemy relationship forward refs (12 sites) | `TYPE_CHECKING` imports in `organization.py`, `user.py`, `audit.py`, `document.py`, `conversation.py`; the `# noqa: F821` band-aids removed |
+| Bare `dict` / `list` in signatures (24 sites) | parameterised (`dict[str, Any]`, `Mapped[list[Any] \| None]`) |
+| Untyped library boundaries | `cast` at `structlog.get_logger`, `redis.llen`, `jwt.decode`, `reranker.predict`, `pytesseract.image_to_string` |
+| `ChatGroq(api_key=...)` | `SecretStr(settings.groq_api_key)` |
+| Pool metrics on non-pooled engines | `isinstance(pool, QueuePool)` guard in `metrics.refresh_db_pool_metrics` |
+| `route_template(scope)` | typed `Mapping[str, Any]` |
+| Celery `Task` subclass + decorator | generic `_BaseTask._run_async(coro: Coroutine[Any, Any, _T]) -> _T`; `# type: ignore[misc]` on the untyped decorator only |
+| `parse_origins` returning `Any` | explicit `origins: list[str]` declaration |
+
+Lint fixes in the same pass: `token_type="bearer"  # noqa: S106`; `InvalidFileTypeError` /
+`FileTooLargeError` renames; `ClassVar[set[str]]` for the probe skip list; `contextlib.suppress`
+in `telemetry.stage_span`; `defusedxml.ElementTree` for OOXML (untrusted archive); unicode-escape
+citation table; `raise … from exc`; `[*shared_processors, …]` instead of `+`; a real
+`_log.exception` where `documents.py` swallowed a failure; `settings_import() -> Settings`
+instead of a bare helper. `B008` is ignored in `pyproject.toml` — it is FastAPI's DI idiom, not a
+defect.
+
+## Results
+
+```
+backend$  ruff check app/                 All checks passed!
+backend$  ruff format --check app/        62 files already formatted
+backend$  mypy app/                       Success: no issues found in 62 source files
+backend$  pytest tests/unit tests/tenant_isolation -q --override-ini=addopts=
+                                          98 passed, 3 warnings in 2.93s
+backend$  python -c "import app.main"     app imports ok
+frontend$ npm.cmd run type-check          clean (tsc --noEmit)
+```
+
+## Workflow added
+
+`.github/workflows/ci.yml` — two blocking jobs:
+
+- **backend** — `pgvector/pgvector:pg16` + `redis:7-alpine` services; CPU-only torch installed
+  first so pip does not pull the multi-gigabyte CUDA wheel; `ruff check`, `ruff format --check`,
+  `mypy`, `alembic upgrade head`, `alembic check` (catches the model/migration drift that hid
+  P0-4), unit + tenant-isolation tests, integration tests.
+- **frontend** — Node 20, `npm ci --legacy-peer-deps`, `npm run type-check`, `npm run build`.
+
+`HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` are set because unit tests mock the providers and
+the integration suite never runs ingestion, so no model weights are downloaded on CI.
+
+The YAML parses, and both job/step lists were read back from the parsed document locally. The
+first real Actions run happens on the first push to `origin` (`main`); nothing was pushed as part
+of this gate, so the remote half stays open until then.
+
+---
+
+## Open items for the next gate (G2.2 — frontend)
+
+1. **Dead code and duplication** — P1-U14/U15/U16 (dead `AnalyticsTab.tsx`, four pagination
+   implementations, two document tables).
+2. **Missing route boundaries** — P0-8 (`error.tsx` / `loading.tsx` / `not-found.tsx`).
+3. **Error/empty conflation** — P1-U5 (a failed fetch renders "No documents yet").
+4. **UI lies on failed mutations** — P1-U8 (swallowed `catch`, optimistic state not reverted).
+5. **Remote CI run** — confirm the workflow passes on GitHub after the next push.
+
 

@@ -6,9 +6,8 @@ Registers middleware, routes, error handlers, and lifespan events.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -58,8 +57,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # Verify database connection
-    from app.db.session import engine
     from sqlalchemy import text
+
+    from app.db.session import engine
 
     try:
         async with engine.connect() as conn:
@@ -84,6 +84,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("preloading_embedding_model", model=settings.embedding_model)
     try:
         import asyncio as _asyncio
+
         from app.providers.embeddings import _get_model
 
         await _asyncio.to_thread(_get_model)
@@ -193,9 +194,7 @@ def create_app() -> FastAPI:
                                 "error": {
                                     "code": "RATE_LIMITED",
                                     "message": "Too many requests. Please try again later.",
-                                    "request_id": getattr(
-                                        request.state, "request_id", "unknown"
-                                    ),
+                                    "request_id": getattr(request.state, "request_id", "unknown"),
                                 }
                             },
                         )

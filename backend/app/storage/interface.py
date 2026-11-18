@@ -9,7 +9,6 @@ A future S3 implementation can be swapped in without changing any service code.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 
 
 class StorageBackend(ABC):

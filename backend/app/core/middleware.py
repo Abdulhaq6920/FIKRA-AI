@@ -32,7 +32,8 @@ from __future__ import annotations
 import re
 import time
 import uuid
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import ClassVar
 
 import structlog
 from fastapi import Request, Response
@@ -87,7 +88,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     # Probes and the scrape endpoint are high-frequency and low-information.
     # Paths here are the real, fully-prefixed paths the client requests.
-    _SKIP_PATHS = {
+    _SKIP_PATHS: ClassVar[set[str]] = {
         "/api/v1/health/live",
         "/api/v1/health/ready",
         "/api/v1/health/startup",

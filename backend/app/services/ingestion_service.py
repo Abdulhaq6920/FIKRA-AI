@@ -252,7 +252,7 @@ def _ocr_page(page: Any) -> str:
 
         _apply_image_limits()
         pix = page.get_pixmap(dpi=150)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         return _ocr_image(img)
     except Exception as exc:
         logger.debug("ocr_failed", error=str(exc)[:100])
@@ -301,7 +301,8 @@ def _ocr_image(image: Any) -> str:
     try:
         import pytesseract
 
-        return pytesseract.image_to_string(image)
+        text: str = pytesseract.image_to_string(image)
+        return text
     except Exception as exc:
         logger.debug("tesseract_ocr_failed", error=str(exc)[:100])
         return ""
@@ -351,8 +352,9 @@ def _extract_docx(data: bytes) -> ExtractionResult:
         # local installations where optional parser wheels have not been
         # installed by extracting paragraph text from the OOXML document.
         try:
-            from xml.etree import ElementTree
             from zipfile import ZipFile
+
+            from defusedxml import ElementTree
 
             with ZipFile(io.BytesIO(data)) as archive:
                 document_xml = archive.read("word/document.xml")
@@ -479,9 +481,7 @@ def _extract_spreadsheet(data: bytes, extension: str) -> ExtractionResult:
                 nrows=_MAX_SPREADSHEET_ROWS,
             ).fillna("")
             if len(frame) >= _MAX_SPREADSHEET_ROWS:
-                result.warnings.append(
-                    f"Sheet truncated to the first {_MAX_SPREADSHEET_ROWS} rows"
-                )
+                result.warnings.append(f"Sheet truncated to the first {_MAX_SPREADSHEET_ROWS} rows")
             sheets = [("Sheet 1", frame)]
         else:
             workbook = pd.ExcelFile(source)
@@ -508,7 +508,7 @@ def _extract_spreadsheet(data: bytes, extension: str) -> ExtractionResult:
                 sheets.append((sheet_name, frame))
 
         for page_number, (sheet_name, frame) in enumerate(sheets, start=1):
-            rows = [list(map(str, frame.columns.tolist()))] + frame.astype(str).values.tolist()
+            rows = [list(map(str, frame.columns.tolist())), *frame.astype(str).values.tolist()]
             table_text = _table_to_markdown(rows)
             if table_text:
                 content = f"Spreadsheet sheet: {sheet_name}\n\n{table_text}"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -23,7 +24,7 @@ async def list_notifications(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-) -> dict:
+) -> dict[str, Any]:
     user, org_id, _role = ctx
     base = select(Notification).where(
         Notification.organization_id == org_id,

@@ -12,7 +12,7 @@ import secrets
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, field_validator, model_validator
+from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -97,6 +97,7 @@ class Settings(BaseSettings):
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_origins(cls, v: str | list[str]) -> list[str]:
+        origins: list[str]
         if isinstance(v, str):
             v = v.strip()
             if v.startswith("["):
@@ -139,6 +140,10 @@ class Settings(BaseSettings):
     # boundary: measured on this corpus, a relevant question scored 0.999 and an
     # unrelated one 0.00003.
     min_rerank_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Inverted lists visited by an ivfflat ANN query (pgvector default is 1,
+    # which under-searches the index). 10 of the 100 lists is the usual
+    # recall/latency trade-off for a corpus of this size.
+    vector_index_probes: int = Field(default=10, ge=1, le=1000)
     # Candidate pool passed to fusion/reranking before the prompt is built.
     rag_retrieval_candidates: int = Field(default=12, ge=1, le=100)
 
@@ -296,7 +301,7 @@ class Settings(BaseSettings):
         )
 
     @model_validator(mode="after")
-    def validate_production_secrets(self) -> "Settings":
+    def validate_production_secrets(self) -> Settings:
         """
         In production, refuse to boot on a placeholder or unsafe configuration.
 
@@ -316,10 +321,7 @@ class Settings(BaseSettings):
                 )
             if not self.database_url or "CHANGE_ME" in self.database_url:
                 raise ValueError("database_url must be a real connection string in production")
-            if (
-                "change_me" in self.jwt_secret_key.lower()
-                or len(self.jwt_secret_key) < 32
-            ):
+            if "change_me" in self.jwt_secret_key.lower() or len(self.jwt_secret_key) < 32:
                 raise ValueError(
                     "jwt_secret_key must be a real secret of at least 32 "
                     "characters in production"

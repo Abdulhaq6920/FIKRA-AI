@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -56,7 +56,7 @@ _ALGORITHM = settings.jwt_algorithm
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def create_access_token(
@@ -118,7 +118,7 @@ def decode_token(token: str, *, expected_type: str = "access") -> dict[str, Any]
         InvalidTokenError  — signature invalid, malformed, wrong type
     """
     try:
-        payload = jwt.decode(
+        payload: dict[str, Any] = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[_ALGORITHM],

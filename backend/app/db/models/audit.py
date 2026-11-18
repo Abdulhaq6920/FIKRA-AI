@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import enum
 import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.db.models.organization import Organization
 
 _vc = lambda x: [e.value for e in x]  # noqa: E731
 
@@ -52,13 +56,13 @@ class AuditLog(UUIDMixin, TimestampMixin, Base):
     resource_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Safe summary of what changed — no secrets, no passwords
-    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    organization: Mapped["Organization | None"] = relationship(  # noqa: F821
+    organization: Mapped[Organization | None] = relationship(
         "Organization", back_populates="audit_logs"
     )
 
@@ -102,7 +106,7 @@ class UsageRecord(UUIDMixin, TimestampMixin, Base):
     retrieval_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    organization: Mapped["Organization"] = relationship(  # noqa: F821
+    organization: Mapped[Organization] = relationship(
         "Organization", back_populates="usage_records"
     )
 

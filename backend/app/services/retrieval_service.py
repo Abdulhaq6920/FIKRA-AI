@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, replace
+from typing import Any
 
 from sqlalchemy import ColumnElement, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,8 +71,8 @@ async def retrieve(
     member is not allowed to read.
     """
     # Lazy import so app starts without sentence-transformers installed
-    from app.providers.embeddings import embed_query  # noqa: PLC0415
-    from app.providers.reranker import rerank  # noqa: PLC0415
+    from app.providers.embeddings import embed_query
+    from app.providers.reranker import rerank
 
     k = top_k or settings.retrieval_top_k
     reranker_n = settings.reranker_top_n
@@ -290,7 +291,7 @@ async def _keyword_search(
     directly into a tsquery expression.
     """
     access_condition = _access_scope_condition(include_restricted)
-    conditions = _base_conditions(organization_id)
+    conditions: list[Any] = list(_base_conditions(organization_id))
     conditions.append(
         text("document_chunks.content_tsv @@ plainto_tsquery('english', :q)").bindparams(q=query)
     )

@@ -50,16 +50,18 @@ logger = get_logger(__name__)
 # markers requested by the prompt. Normalised before citation parsing.
 _CITATION_NORMALIZATION = str.maketrans(
     {
-        "【": "[",
-        "】": "]",
-        "〔": "[",
-        "〕": "]",
-        "［": "[",
-        "］": "]",
-        "﹝": "[",
-        "﹞": "]",
-        "❲": "[",
-        "❳": "]",
+        # CJK and fullwidth bracket variants, written as escapes so the source
+        # stays unambiguous about which codepoint is meant.
+        "\u3010": "[",
+        "\u3011": "]",
+        "\u3018": "[",
+        "\u3019": "]",
+        "\uff3b": "[",
+        "\uff3d": "]",
+        "\ufe5d": "[",
+        "\ufe5e": "]",
+        "\u2772": "[",
+        "\u2773": "]",
         "\u202f": " ",  # narrow no-break space
         "\u00a0": " ",  # no-break space
     }

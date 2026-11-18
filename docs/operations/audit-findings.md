@@ -272,6 +272,7 @@ which confirms there is no server-side guard.
 | P1-L18 | `organization.py:56-58` vs `audit.py:37-42` | `Organization.audit_logs` uses `cascade="all, delete-orphan"` while the FK is `ON DELETE SET NULL` → deleting an org via the ORM deletes its **audit log**, contradicting "audit logs are never deleted". | `cascade="save-update"`, `passive_deletes=True`. |
 | P1-L19 | `providers/groq_client.py:271-277` | The concurrency semaphore is held for the **entire stream**, with no acquire timeout → the (max+1)-th chat hangs indefinitely; retries re-enter the semaphore and amplify 429 storms. | `asyncio.wait_for(acquire, timeout)` → 503 + `Retry-After`; release after first token. |
 | P1-L20 | `providers/ollama_client.py:91` | New `httpx.AsyncClient` per call, no retries, semaphore held for the whole stream. | One module-level client closed in `lifespan`; same retry policy as Groq. |
+| P1-L21 | `chat.py:586-620` | Re-submitting feedback for the same message **500s**: the handler always inserts, but `uq_feedback_message_user` allows one verdict per user per message — so a user who changes their rating, or whose client retries, gets `INTERNAL_ERROR`. The model comment already documented "a second thumbs-up updates it". | Upsert on `(message_id, user_id)`; reset review state on a changed verdict; alert admins only when the verdict becomes negative. **Fixed in G1.4.** |
 
 ### UI / UX
 

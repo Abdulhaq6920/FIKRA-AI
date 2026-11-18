@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser
-from app.core.exceptions import ConflictError, PermissionDeniedError
+from app.core.exceptions import ConflictError
 from app.db.models.audit import Notification, RoleRequest, RoleRequestStatus
-from app.db.models.user import OrgRole, OrganizationMembership
+from app.db.models.user import OrganizationMembership, OrgRole
 from app.db.session import get_db
 from app.schemas.workflow import RoleRequestCreate
 
@@ -21,7 +23,7 @@ async def request_org_admin_access(
     body: RoleRequestCreate,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     user, org_id, role = ctx
     if user.is_platform_admin or role == OrgRole.ORG_ADMIN.value:
         raise ConflictError("You already have administrator access.")

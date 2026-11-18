@@ -13,6 +13,9 @@ Cardinality rules (deliberate, do not relax):
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
@@ -21,6 +24,7 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
+from sqlalchemy.pool import QueuePool
 
 REGISTRY = CollectorRegistry(auto_describe=False)
 
@@ -166,7 +170,7 @@ AUTH_FAILURES_TOTAL = Counter(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def route_template(scope: dict) -> str:
+def route_template(scope: Mapping[str, Any]) -> str:
     """Return the matched route template, or ``unmatched`` for 404s."""
     route = scope.get("route")
     path = getattr(route, "path", None)
@@ -246,14 +250,13 @@ def record_auth_failure(reason: str) -> None:
 
 def refresh_db_pool_metrics() -> None:
     """Publish connection-pool saturation before a scrape."""
-    from app.db.session import engine  # noqa: PLC0415 — avoids an import cycle
+    from app.db.session import engine  # — avoids an import cycle
 
     pool = engine.pool
-    try:
-        DB_POOL_IN_USE.set(pool.checkedout())
-        DB_POOL_SIZE.set(pool.size() + pool.overflow())
-    except (AttributeError, NotImplementedError):  # pragma: no cover - non-pooled engines
+    if not isinstance(pool, QueuePool):  # pragma: no cover - non-pooled engines
         return
+    DB_POOL_IN_USE.set(pool.checkedout())
+    DB_POOL_SIZE.set(pool.size() + pool.overflow())
 
 
 def render_latest() -> tuple[bytes, str]:

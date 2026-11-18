@@ -20,9 +20,9 @@ Security invariant:
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import Cookie, Depends, Header, Request
+from fastapi import Cookie, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,6 @@ from app.core.exceptions import (
     AuthenticationError,
     InvalidTokenError,
     PermissionDeniedError,
-    TokenExpiredError,
 )
 from app.core.security import decode_token
 from app.db.models.user import OrganizationMembership, OrgRole, User, UserStatus
@@ -47,7 +46,7 @@ _bearer = HTTPBearer(auto_error=False)
 async def _get_token_payload(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     access_token: str | None = Cookie(default=None),
-) -> dict:
+) -> dict[str, Any]:
     """
     Extract and validate the JWT from either:
     - Authorization: Bearer <token> header, OR
@@ -69,7 +68,7 @@ async def _get_token_payload(
 
 
 async def get_current_user(
-    payload: dict = Depends(_get_token_payload),
+    payload: dict[str, Any] = Depends(_get_token_payload),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Return the authenticated User from the database."""
@@ -87,7 +86,7 @@ async def get_current_user(
 
 async def get_current_user_and_org(
     request: Request,
-    payload: dict = Depends(_get_token_payload),
+    payload: dict[str, Any] = Depends(_get_token_payload),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[User, uuid.UUID, str]:
     """
