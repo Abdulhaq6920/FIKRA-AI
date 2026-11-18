@@ -53,6 +53,11 @@ def _get_model() -> "HuggingFaceEmbeddings":
     return _model_instance
 
 
+def is_model_loaded() -> bool:
+    """True once the embedding model has been loaded into this process."""
+    return _model_instance is not None
+
+
 def get_model_version() -> str:
     """Return a stable version identifier for the current embedding model."""
     return hashlib.sha256(settings.embedding_model.encode()).hexdigest()[:16]

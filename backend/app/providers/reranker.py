@@ -46,6 +46,18 @@ def _get_reranker() -> "CrossEncoder":
     return _reranker_instance
 
 
+def preload_reranker() -> None:
+    """Load the cross-encoder ahead of the first request.
+
+    The model is a few hundred MB and takes seconds to load. Doing that inside
+    the first ``/chat/ask`` added that cost to a user's latency (measured: +3.3 s
+    on the first answer). Startup is the right place for it, and it is skipped
+    entirely when reranking is disabled.
+    """
+    if settings.reranker_enabled:
+        _get_reranker()
+
+
 def rerank(
     query: str,
     passages: list[str],

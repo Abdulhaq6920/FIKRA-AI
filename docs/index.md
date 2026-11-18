@@ -39,6 +39,7 @@ Welcome. This documentation explains every part of the system for developers at 
 ## Operations
 
 - [Production Readiness Plan](operations/production-readiness-plan.md) — phased path to GA
+- [Release Checklist](operations/release-checklist.md) — the gates this release was verified against, with evidence and open items
 - [Audit Findings Register](operations/audit-findings.md) — every defect found, with severity and file:line
 - [Configuration Reference](operations/configuration-reference.md)
 - [Security Checklist](operations/security-checklist.md)

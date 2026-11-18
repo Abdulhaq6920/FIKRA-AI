@@ -24,6 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.metrics import observe_retrieval_candidates, observe_retrieval_top_score
+from app.core.telemetry import stage_span
 from app.db.models.document import Document, DocumentAccessLevel, DocumentChunk, DocumentStatus
 
 logger = get_logger(__name__)
@@ -45,6 +47,9 @@ class RetrievedPassage:
     # Cosine similarity from the vector search (None for keyword-only hits).
     # Kept separately because RRF overwrites `score` with a small fusion value.
     similarity: float | None = None
+    # Raw ts_rank_cd from the keyword branch (None for vector-only hits), kept
+    # for the same reason: after fusion `score` no longer carries it.
+    keyword_score: float | None = None
 
 
 async def retrieve(
@@ -74,52 +79,107 @@ async def retrieve(
     # Step 1: Embed the query
     # Local embedding and reranking run on CPU. Offload them so an active
     # request does not block the async server from sending other responses.
-    query_vector = await asyncio.to_thread(embed_query, query)
+    with stage_span("embed_query"):
+        query_vector = await asyncio.to_thread(embed_query, query)
 
     # Step 2: Vector search
-    vector_results = await _vector_search(
-        query_vector=query_vector,
-        organization_id=organization_id,
-        db=db,
-        limit=k,
-        include_restricted=include_restricted,
-    )
+    with stage_span("vector_search", top_k=k):
+        vector_results = await _vector_search(
+            query_vector=query_vector,
+            organization_id=organization_id,
+            db=db,
+            limit=k,
+            include_restricted=include_restricted,
+        )
+    observe_retrieval_candidates("vector", len(vector_results))
 
     # Step 3: Full-text keyword search
-    keyword_results = await _keyword_search(
-        query=query,
-        organization_id=organization_id,
-        db=db,
-        limit=k,
-        include_restricted=include_restricted,
-    )
+    with stage_span("keyword_search", top_k=k):
+        keyword_results = await _keyword_search(
+            query=query,
+            organization_id=organization_id,
+            db=db,
+            limit=k,
+            include_restricted=include_restricted,
+        )
+    observe_retrieval_candidates("keyword", len(keyword_results))
 
     # Step 4: RRF fusion
-    fused = _reciprocal_rank_fusion(
-        ranked_lists=[vector_results, keyword_results],
-        k=_RRF_K,
-    )
+    with stage_span("fusion"):
+        fused = _reciprocal_rank_fusion(
+            ranked_lists=[vector_results, keyword_results],
+            k=_RRF_K,
+        )
+    observe_retrieval_candidates("fused", len(fused))
 
     # Step 5: Optional reranking
     if settings.reranker_enabled and fused:
         passages_for_rerank = fused[: min(k, 20)]  # Don't rerank more than 20
         texts = [r.content for r in passages_for_rerank]
-        ranked_indices = await asyncio.to_thread(rerank, query, texts, top_n=reranker_n)
+        with stage_span("rerank", candidates=len(texts)):
+            ranked_indices = await asyncio.to_thread(rerank, query, texts, top_n=reranker_n)
         reranked = []
         for orig_idx, score in ranked_indices:
             p = passages_for_rerank[orig_idx]
             p.score = score
             p.retrieval_method = "reranked"
             reranked.append(p)
-        return reranked
+        observe_retrieval_candidates("reranked", len(reranked))
 
-    # Filter by minimum relevance. RRF scores are rank-based (bounded well below
-    # 1.0), so the threshold is applied to the vector similarity instead;
-    # keyword-only hits have no similarity and are kept.
-    filtered = [
-        p for p in fused[:k] if p.similarity is None or p.similarity >= settings.min_relevance_score
-    ]
+        # The relevance gate must run here too. This branch used to return every
+        # reranked passage, so an unrelated question still fed the prompt (and
+        # the model answered from noise). The cross-encoder score is the
+        # authoritative relevance signal once reranking has run.
+        filtered = [p for p in reranked if _passes_relevance_gate(p, reranked=True)]
+        observe_retrieval_candidates("gated_out", len(reranked) - len(filtered))
+        observe_retrieval_candidates("returned", len(filtered))
+        if filtered:
+            observe_retrieval_top_score(max(p.score for p in filtered))
+        return filtered
+
+    # Same gate for the fusion-only path. It is per-branch: a passage passes if
+    # *either* signal clears its own threshold, because cosine similarity and
+    # ts_rank_cd live on incomparable scales and RRF has already replaced
+    # `score` with a rank-based value. Previously keyword-only hits were kept
+    # unconditionally (`similarity is None or ...`), so the lexical branch had
+    # no gate at all.
+    filtered = [p for p in fused[:k] if _passes_relevance_gate(p, reranked=False)]
+    observe_retrieval_candidates("gated_out", len(fused[:k]) - len(filtered))
+    observe_retrieval_candidates("returned", len(filtered))
+    best_similarity = [p.similarity for p in filtered if p.similarity is not None]
+    if best_similarity:
+        observe_retrieval_top_score(max(best_similarity))
     return filtered
+
+
+def _passes_relevance_gate(passage: RetrievedPassage, *, reranked: bool) -> bool:
+    """Decide whether a candidate is relevant enough to reach the prompt.
+
+    Three different score scales are involved, so each branch is compared
+    against the threshold that matches its scale rather than a single number:
+
+    * reranked — the cross-encoder score (sigmoid, 0..1) vs ``min_rerank_score``;
+    * fused — cosine similarity vs ``min_relevance_score``, or, for
+      keyword-only hits, ts_rank_cd vs ``min_keyword_score``. A passage present
+      in both lists passes if either signal clears its own threshold.
+
+    A passage with neither signal (neither branch produced a comparable score)
+    is kept: dropping it would silently discard results for a scorer this code
+    does not know about.
+    """
+    if reranked:
+        return passage.score >= settings.min_rerank_score
+
+    if passage.similarity is None and passage.keyword_score is None:
+        return True
+
+    vector_ok = (
+        passage.similarity is not None and passage.similarity >= settings.min_relevance_score
+    )
+    keyword_ok = (
+        passage.keyword_score is not None and passage.keyword_score >= settings.min_keyword_score
+    )
+    return vector_ok or keyword_ok
 
 
 def _access_scope_condition(
@@ -170,6 +230,8 @@ async def _vector_search(
     if access_condition is not None:
         conditions.append(access_condition)
 
+    distance = DocumentChunk.embedding.cosine_distance(query_vector)
+
     stmt = (
         select(
             DocumentChunk.id,
@@ -179,11 +241,16 @@ async def _vector_search(
             DocumentChunk.section_heading,
             Document.title,
             # cosine distance (lower = more similar); convert to similarity score
-            (1 - DocumentChunk.embedding.cosine_distance(query_vector)).label("score"),
+            (1 - distance).label("score"),
         )
         .join(Document, DocumentChunk.document_id == Document.id)
         .where(*conditions)
-        .order_by(text("score DESC"))
+        # Order by the *distance expression* ascending, not by `score DESC`.
+        # pgvector indexes (ivfflat/hnsw) support ORDER BY distance with a
+        # LIMIT; they cannot serve an ORDER BY over the derived expression
+        # `1 - distance`, so the previous form forced a sequential scan plus a
+        # sort of the whole tenant corpus. The two orderings are equivalent.
+        .order_by(distance)
         .limit(limit)
     )
 
@@ -260,6 +327,7 @@ async def _keyword_search(
             section_heading=row.section_heading,
             score=float(row.score),
             retrieval_method="keyword",
+            keyword_score=float(row.score),
         )
         for row in rows
     ]

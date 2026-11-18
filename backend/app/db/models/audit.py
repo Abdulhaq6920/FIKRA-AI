@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -111,6 +111,15 @@ class Notification(UUIDMixin, TimestampMixin, Base):
     """Tenant-scoped in-app notification; never exposes cross-org data."""
 
     __tablename__ = "notifications"
+    __table_args__ = (
+        # Notification bell: unread-first listing for one recipient.
+        Index(
+            "ix_notifications_recipient_read_created",
+            "recipient_user_id",
+            "is_read",
+            "created_at",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

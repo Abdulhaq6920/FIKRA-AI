@@ -35,6 +35,7 @@ from app.core.exceptions import (
     PermissionDeniedError,
 )
 from app.core.logging import get_logger
+from app.core.metrics import record_rag_outcome
 from app.db.models.audit import Notification
 from app.db.models.conversation import (
     Conversation,
@@ -205,13 +206,21 @@ async def ask(
     user, org_id, role = ctx
 
     rag = RAGService(db=db, llm=llm)
-    result = await rag.answer(
-        question=body.question,
-        conversation_id=body.conversation_id,
-        user_id=user.id,
-        organization_id=org_id,
-        include_restricted=role == OrgRole.ORG_ADMIN,
-    )
+    try:
+        result = await rag.answer(
+            question=body.question,
+            conversation_id=body.conversation_id,
+            user_id=user.id,
+            organization_id=org_id,
+            include_restricted=role == OrgRole.ORG_ADMIN,
+        )
+    except AppError:
+        record_rag_outcome("app_error")
+        raise
+    except Exception:
+        record_rag_outcome("error")
+        raise
+    record_rag_outcome("success" if result.citations else "no_citations")
 
     # Persist user message
     user_msg = Message(
@@ -414,15 +423,20 @@ async def ask_stream(
                     }
                 }
                 yield f"data: {json.dumps(meta_event)}\n\n"
+                record_rag_outcome("success" if citations_data else "no_citations")
+            elif client_disconnected:
+                record_rag_outcome("cancelled")
         except AppError as exc:
             # Typed application errors carry a stable code and a user-safe
             # message (e.g. the provider rate limit being reached).
+            record_rag_outcome("app_error")
             yield (
                 "data: " + json.dumps({"error": exc.error_code, "message": exc.message}) + "\n\n"
             )
         except Exception as exc:
             # Unexpected failures stay opaque to the client — the exception
             # class name alone fingerprints internals; log details instead.
+            record_rag_outcome("error")
             logger.exception("chat_stream_unexpected_error", error=str(exc)[:200])
             generic = {"error": "internal_error", "message": "Something went wrong."}
             yield f"data: {json.dumps(generic)}\n\n"

@@ -11,13 +11,16 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.core.hardening import CSRFOriginMiddleware, RequestSizeLimitMiddleware
 from app.core.logging import configure_logging, get_logger
+from app.core.metrics import record_rate_limited, render_latest
 from app.core.middleware import (
     CorrelationIDMiddleware,
     RequestLoggingMiddleware,
@@ -25,6 +28,7 @@ from app.core.middleware import (
     app_exception_handler,
 )
 from app.core.rate_limit import RateSpec, limiter, parse_rate
+from app.core.telemetry import setup_telemetry
 
 # Initialize logging first, before anything else
 configure_logging()
@@ -88,6 +92,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("embedding_model_preload_failed", error=str(exc))
         # Non-fatal — model will load lazily on first request
 
+    # Pre-load the reranker for the same reason: otherwise the first chat pays
+    # its multi-second load cost. Non-fatal when reranking is disabled.
+    if settings.reranker_enabled:
+        logger.info("preloading_reranker_model", model=settings.reranker_model)
+        try:
+            import asyncio as _asyncio
+
+            from app.providers.reranker import preload_reranker
+
+            await _asyncio.to_thread(preload_reranker)
+            logger.info("reranker_model_ready")
+        except Exception as exc:
+            logger.warning("reranker_model_preload_failed", error=str(exc))
+
     yield
 
     logger.info("application_shutting_down")
@@ -110,24 +128,22 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS — restrict in production to known origins
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.allowed_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
-        expose_headers=["X-Request-ID"],
-    )
-
-    # Custom middleware (order: outermost first)
-    app.add_middleware(CorrelationIDMiddleware)
-    app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(SecurityHeadersMiddleware)
-
+    # Middleware ordering matters and is easy to get backwards: Starlette
+    # applies middleware in *reverse* registration order, so the last one added
+    # is the outermost. Registration below is therefore innermost-first:
+    #
+    #   rate limit → CSRF → body size → security headers → access log
+    #              → correlation ID → CORS
+    #
+    # which executes as CORS → correlation → access log → security headers →
+    # body size → CSRF → rate limit → route. This guarantees that a rejection
+    # (413/403/429) is still logged, counted in Prometheus, carries the request
+    # ID and gets security/CORS headers, and that the access log can read the
+    # request ID the correlation layer stored.
+    #
     # Rate limiting on abuse-prone endpoints (brute force, LLM cost abuse,
-    # disk-fill via uploads). Runs as middleware and answers 429 with the
-    # same JSON error envelope as AppError responses.
+    # disk-fill via uploads). Answers 429 with the same JSON error envelope as
+    # AppError responses.
     if settings.rate_limit_enabled:
         rate_policies: tuple[tuple[str, tuple[str, ...], RateSpec], ...] = (
             (
@@ -138,8 +154,18 @@ def create_app() -> FastAPI:
             ("/api/v1/auth/login", ("POST",), parse_rate(settings.rate_limit_login)),
             ("/api/v1/auth/register", ("POST",), parse_rate(settings.rate_limit_login)),
             ("/api/v1/auth/refresh", ("POST",), parse_rate(settings.rate_limit_login)),
+            # Unauthenticated write: an access request creates rows and notifies
+            # admins, so it is throttled like a login attempt.
+            ("/api/v1/access-requests", ("POST",), parse_rate(settings.rate_limit_login)),
             ("/api/v1/chat/ask", ("POST",), parse_rate(settings.rate_limit_chat)),
+            ("/api/v1/chat/conversations", ("POST",), parse_rate(settings.rate_limit_chat)),
+            ("/api/v1/chat/feedback", ("POST",), parse_rate(settings.rate_limit_chat)),
+            ("/api/v1/chat/messages/", ("POST",), parse_rate(settings.rate_limit_chat)),
+            ("/api/v1/chat/favorites", ("POST",), parse_rate(settings.rate_limit_chat)),
+            # Upload and reindex both consume disk and CPU; upload is listed
+            # first because the loop stops at the first matching prefix.
             ("/api/v1/documents/upload", ("POST",), parse_rate(settings.rate_limit_upload)),
+            ("/api/v1/documents/", ("POST",), parse_rate(settings.rate_limit_upload)),
         )
 
         @app.middleware("http")
@@ -159,6 +185,7 @@ def create_app() -> FastAPI:
                             client_ip=client_ip,
                             limit=f"{spec.max_events}/{spec.period_seconds}s",
                         )
+                        record_rate_limited(prefix)
                         return JSONResponse(
                             status_code=429,
                             headers={"Retry-After": str(retry_after)},
@@ -166,19 +193,85 @@ def create_app() -> FastAPI:
                                 "error": {
                                     "code": "RATE_LIMITED",
                                     "message": "Too many requests. Please try again later.",
-                                    "request_id": request.headers.get("X-Request-ID", "unknown"),
+                                    "request_id": getattr(
+                                        request.state, "request_id", "unknown"
+                                    ),
                                 }
                             },
                         )
                     break
             return await call_next(request)
 
+    # Body-size and CSRF guards. Registered before the security/logging layers
+    # so they run after them, and after the rate limiter so they run before it:
+    # a 413/403 is logged, metered and carries the request ID, and an oversized
+    # body is refused before the rate limiter does any work.
+    app.add_middleware(CSRFOriginMiddleware)
+    app.add_middleware(RequestSizeLimitMiddleware)
+
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(CorrelationIDMiddleware)
+
+    # CORS — restrict in production to known origins. Registered last so it is
+    # the outermost layer: preflights and error responses keep their headers.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
+    )
+
     # Exception handler for all AppError subclasses
     app.add_exception_handler(AppError, app_exception_handler)
     app.add_exception_handler(Exception, app_exception_handler)
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Return the shared error envelope for 422s instead of FastAPI's default.
+
+        The default body (``{"detail": [...]}``) breaks clients that only know
+        the ``error`` envelope, and it echoes the raw input value back.
+        """
+        errors = [
+            {
+                "field": ".".join(str(part) for part in err.get("loc", ()) if part != "body"),
+                "message": err.get("msg", "Invalid value."),
+                "type": err.get("type", "value_error"),
+            }
+            for err in exc.errors()
+        ]
+        logger.info("request_validation_failed", errors=len(errors))
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Request validation failed.",
+                    "request_id": getattr(request.state, "request_id", "unknown"),
+                    "details": errors,
+                }
+            },
+        )
+
+    # Prometheus exposition. Deliberately outside /api/v1 and outside auth so a
+    # scraper needs no credentials; it must be network-restricted in production.
+    if settings.metrics_enabled:
+
+        @app.get("/metrics", include_in_schema=False)
+        async def metrics() -> Response:
+            payload, content_type = render_latest()
+            return Response(content=payload, media_type=content_type)
+
     # Routes
     app.include_router(api_router)
+
+    # Optional OTLP tracing (no-op unless OTEL_ENABLED=true).
+    setup_telemetry(app)
 
     return app
 

@@ -185,10 +185,10 @@ npm.cmd run type-check
 
 | Gate | Status | Date | Evidence |
 |---|---|---|---|
-| G1.0 | pending | — | — |
-| G1.1 | pending | — | — |
-| G1.2 | pending | — | — |
-| G1.3 | pending | — | — |
+| G1.0 | pass | 2026-11-18 | `docs/operations/phase-gates.md` §G1.0 — 77 tests green, live answer with 1 citation (sim 0.886), 4 chunks ingested |
+| G1.1 | pass | 2026-11-18 | §G1.1 — `alembic check` clean, `0004_schema_integrity` applied, `content_tsv`/GIN/ivfflat in live queries |
+| G1.2 | pass | 2026-11-18 | §G1.2 — 21 metric families, 9 RAG stages, request-ID echo, user_id/org_id on admin routes, 0 secrets |
+| G1.3 | pass | 2026-11-18 | §G1.3 — 413 in 8 ms with no body sent, CSRF 403 on foreign Origin/Referer, 429 on extended routes, production guard refuses 3 unsafe configs, 92 tests |
 | G1.4 | pending | — | — |
 | G2.1 | pending | — | — |
 | G2.2 | pending | — | — |

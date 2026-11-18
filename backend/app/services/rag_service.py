@@ -19,6 +19,7 @@ Security:
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -33,11 +34,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.exceptions import ConversationNotFoundError
 from app.core.logging import get_logger
+from app.core.metrics import (
+    observe_llm_ttft,
+    record_llm_cost,
+    record_llm_tokens,
+)
+from app.core.telemetry import stage_span
 from app.db.models.conversation import Conversation, Message, MessageRole
 from app.providers.llm import LLMClient
 from app.services.retrieval_service import RetrievedPassage, retrieve
 
 logger = get_logger(__name__)
+
+# Bracket and space variants a model may use in place of the ASCII citation
+# markers requested by the prompt. Normalised before citation parsing.
+_CITATION_NORMALIZATION = str.maketrans(
+    {
+        "【": "[",
+        "】": "]",
+        "〔": "[",
+        "〕": "]",
+        "［": "[",
+        "］": "]",
+        "﹝": "[",
+        "﹞": "]",
+        "❲": "[",
+        "❳": "]",
+        "\u202f": " ",  # narrow no-break space
+        "\u00a0": " ",  # no-break space
+    }
+)
 
 _SYSTEM_PROMPT = """You are FIKRA AI, a knowledgeable assistant that answers \
 questions using the provided document excerpts.
@@ -127,6 +153,18 @@ def _count_tokens(text: str) -> int:
         return max(1, len(text) // 4)
 
 
+def _estimate_cost_usd(input_tokens: int, output_tokens: int) -> float:
+    """Approximate provider spend for one completion, in USD.
+
+    Uses the configured per-million prices; the numbers are estimates for
+    dashboards and budgets, not billing records.
+    """
+    return (
+        input_tokens * settings.groq_input_cost_per_million_usd
+        + output_tokens * settings.groq_output_cost_per_million_usd
+    ) / 1_000_000
+
+
 class RAGService:
     """
     Full RAG question-answering pipeline.
@@ -164,35 +202,49 @@ class RAGService:
         start_total = time.perf_counter()
 
         # Verify conversation ownership
-        await self._load_conversation(conversation_id, user_id, organization_id)
+        with stage_span("load_context"):
+            await self._load_conversation(conversation_id, user_id, organization_id)
 
-        # Load recent message context
-        recent_messages = await self._load_recent_messages(conversation_id, organization_id)
+            # Load recent message context
+            recent_messages = await self._load_recent_messages(conversation_id, organization_id)
 
         # Retrieve relevant passages (tenant-scoped)
         t_retrieval = time.perf_counter()
-        passages = await retrieve(
-            query=question,
-            organization_id=organization_id,
-            db=self._db,
-            top_k=settings.rag_retrieval_candidates,
-            include_restricted=include_restricted,
-        )
+        with stage_span("retrieve", top_k=settings.rag_retrieval_candidates):
+            passages = await retrieve(
+                query=question,
+                organization_id=organization_id,
+                db=self._db,
+                top_k=settings.rag_retrieval_candidates,
+                include_restricted=include_restricted,
+            )
         retrieval_ms = int((time.perf_counter() - t_retrieval) * 1000)
 
         # Build prompt context
-        context_text, source_map = _build_context(passages)
-        chat_messages = _build_chat_messages(
-            question=question,
-            recent_messages=recent_messages,
-            context_text=context_text,
-        )
+        with stage_span("prompt_build", passages=len(passages)):
+            context_text, source_map = _build_context(passages)
+            chat_messages = _build_chat_messages(
+                question=question,
+                recent_messages=recent_messages,
+                context_text=context_text,
+            )
 
         # Generate answer
-        result = await self._llm.generate(
-            messages=chat_messages,
-            max_tokens=settings.rag_answer_max_tokens,
-            temperature=settings.active_llm_temperature,
+        with stage_span("llm_generate", model=settings.active_llm_model):
+            result = await self._llm.generate(
+                messages=chat_messages,
+                max_tokens=settings.rag_answer_max_tokens,
+                temperature=settings.active_llm_temperature,
+            )
+
+        record_llm_tokens(
+            result.usage.model or settings.active_llm_model,
+            result.usage.input_tokens,
+            result.usage.output_tokens,
+        )
+        record_llm_cost(
+            result.usage.model or settings.active_llm_model,
+            _estimate_cost_usd(result.usage.input_tokens, result.usage.output_tokens),
         )
 
         total_ms = int((time.perf_counter() - start_total) * 1000)
@@ -228,42 +280,59 @@ class RAGService:
         metrics so the caller can persist them for analytics.
         """
         start_total = time.perf_counter()
-        await self._load_conversation(conversation_id, user_id, organization_id)
-        recent_messages = await self._load_recent_messages(conversation_id, organization_id)
+        with stage_span("load_context"):
+            await self._load_conversation(conversation_id, user_id, organization_id)
+            recent_messages = await self._load_recent_messages(conversation_id, organization_id)
 
         t_retrieval = time.perf_counter()
-        passages = await retrieve(
-            query=question,
-            organization_id=organization_id,
-            db=self._db,
-            top_k=settings.rag_retrieval_candidates,
-            include_restricted=include_restricted,
-        )
+        with stage_span("retrieve", top_k=settings.rag_retrieval_candidates):
+            passages = await retrieve(
+                query=question,
+                organization_id=organization_id,
+                db=self._db,
+                top_k=settings.rag_retrieval_candidates,
+                include_restricted=include_restricted,
+            )
         retrieval_ms = int((time.perf_counter() - t_retrieval) * 1000)
 
-        context_text, source_map = _build_context(passages)
-        chat_messages = _build_chat_messages(
-            question=question,
-            recent_messages=recent_messages,
-            context_text=context_text,
-        )
-        input_text = "\n".join(str(message.content) for message in chat_messages)
+        with stage_span("prompt_build", passages=len(passages)):
+            context_text, source_map = _build_context(passages)
+            chat_messages = _build_chat_messages(
+                question=question,
+                recent_messages=recent_messages,
+                context_text=context_text,
+            )
+            input_text = "\n".join(str(message.content) for message in chat_messages)
 
+        model = settings.active_llm_model
         answer_parts: list[str] = []
-        async for chunk in self._llm.generate_stream(
-            messages=chat_messages,
-            max_tokens=settings.rag_answer_max_tokens,
-        ):
-            answer_parts.append(chunk)
-            yield chunk
+        start_generation = time.perf_counter()
+        first_token_seconds: float | None = None
+        with stage_span("llm_generate", model=model, streaming=True):
+            async for chunk in self._llm.generate_stream(
+                messages=chat_messages,
+                max_tokens=settings.rag_answer_max_tokens,
+            ):
+                if first_token_seconds is None:
+                    # TTFT is the number users actually feel: retrieval may be
+                    # slow, but the answer is "stuck" until this moment.
+                    first_token_seconds = time.perf_counter() - start_generation
+                    observe_llm_ttft(model, first_token_seconds)
+                answer_parts.append(chunk)
+                yield chunk
 
         answer = "".join(answer_parts)
+        input_tokens = _count_tokens(input_text)
+        output_tokens = _count_tokens(answer)
+        record_llm_tokens(model, input_tokens, output_tokens)
+        record_llm_cost(model, _estimate_cost_usd(input_tokens, output_tokens))
+
         self.last_stream_result = RAGResult(
             answer=answer,
             citations=_extract_citations(answer, source_map),
-            model_used=settings.active_llm_model,
-            input_tokens=_count_tokens(input_text),
-            output_tokens=_count_tokens(answer),
+            model_used=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             latency_ms=int((time.perf_counter() - start_total) * 1000),
             retrieval_latency_ms=retrieval_ms,
             retrieved_count=len(passages),
@@ -475,10 +544,17 @@ def _extract_citations(
     We search the answer text for [Source N] patterns and construct
     Citation objects from server-side metadata — not from model-generated content.
     The model cannot invent document IDs or titles through this approach.
-    """
-    import re
 
-    cited_numbers = {int(m) for m in re.findall(r"\[Source\s+(\d+)\]", answer)}
+    Models routinely replace the ASCII markers the prompt asks for with
+    typographically similar characters: full-width brackets (``【Source 1】``),
+    other bracket shapes, and narrow/no-break spaces. Matching only the literal
+    ASCII form silently dropped every citation in those answers, so the answer
+    body showed ``【Source 1】`` while the API returned ``citations: []``. The
+    text is normalised first so the citation contract survives the model's
+    punctuation choices.
+    """
+    normalized = answer.translate(_CITATION_NORMALIZATION)
+    cited_numbers = {int(m) for m in re.findall(r"\[\s*source\s+(\d+)\s*\]", normalized, re.I)}
 
     citations = []
     for num in sorted(cited_numbers):

@@ -28,6 +28,16 @@ class MessageRole(str, enum.Enum):
 
 class Conversation(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        # Serves "my active conversations, newest first" from one index.
+        Index(
+            "ix_conversations_owner_active_updated",
+            "organization_id",
+            "user_id",
+            "is_active",
+            "updated_at",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -65,6 +75,10 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
 
 class Message(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        # Thread pagination: filter by conversation, order by time.
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+    )
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -178,6 +192,12 @@ class FeedbackType(str, enum.Enum):
 
 class Feedback(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "feedback"
+    __table_args__ = (
+        # One verdict per user per message; a second thumbs-up updates it.
+        UniqueConstraint("message_id", "user_id", name="uq_feedback_message_user"),
+        # Admin feedback queue: tenant + review status, newest first.
+        Index("ix_feedback_org_status_created", "organization_id", "review_status", "created_at"),
+    )
 
     message_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

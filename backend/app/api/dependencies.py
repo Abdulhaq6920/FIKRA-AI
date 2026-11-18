@@ -22,7 +22,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import Cookie, Depends, Header
+from fastapi import Cookie, Depends, Header, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +86,7 @@ async def get_current_user(
 
 
 async def get_current_user_and_org(
+    request: Request,
     payload: dict = Depends(_get_token_payload),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[User, uuid.UUID, str]:
@@ -100,6 +101,11 @@ async def get_current_user_and_org(
 
     The membership must still exist and be active, so a removed or disabled
     member is rejected even while holding a valid, unexpired token.
+
+    The identity is stamped onto ``request.state`` here — the one dependency
+    every protected route passes through — so the access log and metrics can
+    attribute *any* authenticated request. Stamping it only in ``require_user``
+    left admin-only routes (documents, admin dashboard) logging ``user_id: null``.
     """
     user_id_str = payload.get("sub", "")
     org_id_str = payload.get("org", "")
@@ -125,6 +131,12 @@ async def get_current_user_and_org(
     if membership is None:
         raise PermissionDeniedError("No active membership in this organization.")
 
+    # Stamp identity for the access log and HTTP metrics. Done before the role
+    # check so a 403 is still attributable to a real user.
+    request.state.user_id = str(user.id)
+    request.state.org_id = str(org_id)
+    request.state.role = membership.role.value
+
     # Authorize on the database row, never on the claim.
     return user, org_id, membership.role.value
 
@@ -137,7 +149,11 @@ async def get_current_user_and_org(
 async def require_user(
     ctx: tuple[User, uuid.UUID, str] = Depends(get_current_user_and_org),
 ) -> tuple[User, uuid.UUID, str]:
-    """Any authenticated, active user with a valid membership."""
+    """Any authenticated, active user with a valid membership.
+
+    Identity is stamped onto ``request.state`` by ``get_current_user_and_org``,
+    so the access log can attribute this request.
+    """
     return ctx
 
 

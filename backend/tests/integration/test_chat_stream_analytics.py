@@ -42,7 +42,9 @@ DOCUMENT_ID = str(uuid.uuid4())
 class _FakeRAGService:
     """Stand-in for RAGService that streams a fixed, cited answer."""
 
-    def __init__(self, db: AsyncSession, groq: object) -> None:
+    def __init__(self, db: AsyncSession, llm: object) -> None:
+        # Mirrors the real RAGService(db, llm) signature; the stream endpoint
+        # constructs it positionally, so keep the parameter names aligned.
         self.last_stream_result: RAGResult | None = None
 
     async def answer_stream(

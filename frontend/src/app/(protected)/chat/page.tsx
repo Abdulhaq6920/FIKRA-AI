@@ -140,7 +140,7 @@ export default function ChatPage() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   // ── Favourite questions (per user, hideable) ────────────────────────────
-  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(true);
   const [favoriteQuestions, setFavoriteQuestions] = useState<FavoriteQuestion[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(true);
   const favoriteSet = useMemo(
@@ -835,6 +835,8 @@ export default function ChatPage() {
           {!activeConvId && !loadingMsgs && messages.length === 0 && (
             <EmptyState
               name={user?.full_name}
+              favorites={favoritesOpen ? favoriteQuestions : []}
+              onRemoveFavorite={(id) => void removeFavorite(id)}
               onPick={(prompt) => {
                 setInput(prompt);
                 requestAnimationFrame(() => {
@@ -904,7 +906,7 @@ export default function ChatPage() {
       <div className="relative z-20 flex-shrink-0 px-3 pb-3 sm:px-6 sm:pb-5">
         <div className="mx-auto w-full max-w-3xl">
           <AnimatePresence initial={false}>
-            {favoritesOpen && (
+            {favoritesOpen && messages.length > 0 && (
               <FavoritesPanel
                 key="favorites-panel"
                 questions={favoriteQuestions}
@@ -1436,10 +1438,14 @@ const STARTER_PROMPTS = [
 
 function EmptyState({
   name,
+  favorites,
   onPick,
+  onRemoveFavorite,
 }: {
   name?: string;
+  favorites: FavoriteQuestion[];
   onPick: (prompt: string) => void;
+  onRemoveFavorite: (id: string) => void;
 }) {
   return (
     <div className="relative flex min-h-[58vh] w-full items-center justify-center py-6 sm:py-10">
@@ -1454,13 +1460,64 @@ function EmptyState({
           I’m ready to explore your organisation’s knowledge. Ask anything to
           begin a focused conversation.
         </p>
+
+        {/* The same per-user shortcuts as the composer panel, surfaced in the
+            middle of a fresh conversation where they are most useful. */}
+        {favorites.length > 0 && (
+          <section
+            aria-label="Favourite questions"
+            className="mt-5 rounded-2xl border border-brand-400/25 bg-brand-500/[0.07] p-3 text-left"
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-200/85">
+                <Star className="h-3 w-3 text-brand-300" aria-hidden="true" />
+                Your favourite questions
+              </p>
+              <span className="rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[9px] font-bold text-brand-200">
+                {favorites.length}
+              </span>
+            </div>
+            <div className="flex max-h-32 flex-wrap items-start gap-1.5 overflow-y-auto pr-1">
+              {favorites.map((entry) => (
+                <span
+                  key={entry.id}
+                  className="glass-chip inline-flex max-w-full items-center rounded-full py-1 pl-3 pr-1"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onPick(entry.question)}
+                    title={entry.question}
+                    className="max-w-[16rem] truncate text-left text-[11.5px] text-surface-300 transition-colors hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 sm:max-w-[19rem]"
+                  >
+                    {entry.question}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveFavorite(entry.id)}
+                    aria-label={`Remove favourite: ${entry.question}`}
+                    title="Remove favourite"
+                    className="ml-1 rounded-full p-0.5 text-surface-500 transition-colors hover:bg-red-400/10 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400/40"
+                  >
+                    <X className="h-2.5 w-2.5" aria-hidden="true" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* One click fills the composer with a proven starting question — it is
             not sent automatically, so the user can review or edit it first. */}
         <div
           className="mt-6 flex w-full flex-wrap justify-center gap-2"
           aria-label="Starter questions"
         >
-          {STARTER_PROMPTS.map((prompt) => (
+          {STARTER_PROMPTS.filter(
+            (prompt) =>
+              !favorites.some(
+                (entry) => normalizeQuestion(entry.question) === normalizeQuestion(prompt)
+              )
+          ).map((prompt) => (
             <button
               key={prompt}
               type="button"

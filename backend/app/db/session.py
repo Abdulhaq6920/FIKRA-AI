@@ -42,7 +42,9 @@ if settings.database_ssl:
 # Engine
 # ---------------------------------------------------------------------------
 _engine_kwargs: dict[str, Any] = {
-    "echo": settings.debug,
+    # Statement logging is opt-in (SQL_ECHO=true). Tying it to DEBUG flooded the
+    # log pipeline with every query plus its bound parameters in development.
+    "echo": settings.sql_echo,
     "pool_size": settings.database_pool_size,
     "max_overflow": settings.database_max_overflow,
     "pool_timeout": settings.database_pool_timeout,

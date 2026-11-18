@@ -262,6 +262,9 @@ async def upload_document(
 
 
 @router.get("", response_model=DocumentListResponse)
+# Alias so a trailing-slash request (common from external clients) is answered
+# directly instead of a 307 whose absolute Location escapes a reverse proxy.
+@router.get("/", response_model=DocumentListResponse, include_in_schema=False)
 async def list_documents(
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
@@ -404,9 +407,7 @@ async def reindex_document(
         DocumentStatus.REINDEXING,
     }
     if doc.status in in_flight:
-        raise ConflictError(
-            f"Document is already being processed (status: {doc.status.value})."
-        )
+        raise ConflictError(f"Document is already being processed (status: {doc.status.value}).")
 
     doc.status = DocumentStatus.REINDEXING
     # One job row per run: the worker reads the newest job, so a fresh row is
@@ -627,9 +628,7 @@ async def _process_document_inline(
             # Delete existing chunks before inserting the new set. Together with
             # the (pending) UNIQUE(document_id, chunk_index) constraint this
             # makes a repeated run idempotent instead of duplicating rows.
-            await db.execute(
-                delete(DocumentChunk).where(DocumentChunk.document_id == doc_id)
-            )
+            await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
 
             # Insert new chunks
             for cd in chunks_data:

@@ -6,7 +6,14 @@ import uuid
 
 import pytest
 
-from app.services.retrieval_service import RetrievedPassage, _reciprocal_rank_fusion
+from app.core.config import settings
+from app.services import retrieval_service
+from app.services.retrieval_service import (
+    RetrievedPassage,
+    _passes_relevance_gate,
+    _reciprocal_rank_fusion,
+    retrieve,
+)
 from app.services.rag_service import Citation, _extract_citations, _build_context
 
 
@@ -64,6 +71,85 @@ class TestRRF:
         assert len(result) == 1
 
 
+class TestRelevanceGate:
+    """The gate must drop noise on every branch, on the right score scale.
+
+    Regression: the reranked branch returned every reranked passage and the
+    fusion branch kept keyword-only hits unconditionally, so an unrelated
+    question still filled the prompt.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _thresholds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "min_relevance_score", 0.3)
+        monkeypatch.setattr(settings, "min_keyword_score", 0.01)
+        monkeypatch.setattr(settings, "min_rerank_score", 0.5)
+
+    def test_reranked_below_threshold_is_dropped(self) -> None:
+        assert not _passes_relevance_gate(_make_passage(1, score=0.05), reranked=True)
+        assert _passes_relevance_gate(_make_passage(1, score=0.95), reranked=True)
+
+    def test_vector_similarity_below_threshold_is_dropped(self) -> None:
+        passage = _make_passage(1)
+        passage.similarity = 0.1
+        assert not _passes_relevance_gate(passage, reranked=False)
+
+    def test_keyword_only_hit_is_now_gated(self) -> None:
+        passage = _make_passage(1)
+        passage.retrieval_method = "keyword"
+        passage.keyword_score = 0.001
+        assert not _passes_relevance_gate(passage, reranked=False)
+
+        passage.keyword_score = 0.1
+        assert _passes_relevance_gate(passage, reranked=False)
+
+    def test_either_signal_can_pass_a_fused_passage(self) -> None:
+        passage = _make_passage(1)
+        passage.similarity = 0.05  # weak vector hit
+        passage.keyword_score = 0.1  # strong lexical hit
+        assert _passes_relevance_gate(passage, reranked=False)
+
+    def test_passage_without_comparable_score_is_kept(self) -> None:
+        assert _passes_relevance_gate(_make_passage(1), reranked=False)
+
+    async def test_retrieve_applies_the_gate_after_reranking(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        passage = _make_passage(1)
+        passage.similarity = 0.9
+        monkeypatch.setattr(retrieval_service, "_vector_search", _fake_vector_search(passage))
+        monkeypatch.setattr(retrieval_service, "_keyword_search", _fake_keyword_search([]))
+        monkeypatch.setattr(
+            "app.providers.embeddings.embed_query", lambda _q: [0.0] * 384
+        )
+
+        monkeypatch.setattr(
+            "app.providers.reranker.rerank", lambda _q, _texts, top_n: [(0, 0.05)]
+        )
+        assert await retrieve("question", uuid.uuid4(), None) == []  # type: ignore[arg-type]
+
+        monkeypatch.setattr(
+            "app.providers.reranker.rerank", lambda _q, _texts, top_n: [(0, 0.97)]
+        )
+        result = await retrieve("question", uuid.uuid4(), None)  # type: ignore[arg-type]
+        assert [p.chunk_id for p in result] == [passage.chunk_id]
+        assert result[0].retrieval_method == "reranked"
+
+
+def _fake_vector_search(passage: RetrievedPassage):
+    async def _inner(**_kwargs: object) -> list[RetrievedPassage]:
+        return [passage]
+
+    return _inner
+
+
+def _fake_keyword_search(passages: list[RetrievedPassage]):
+    async def _inner(**_kwargs: object) -> list[RetrievedPassage]:
+        return passages
+
+    return _inner
+
+
 class TestCitationExtraction:
     def _make_source_map(self) -> dict[int, RetrievedPassage]:
         return {
@@ -97,6 +183,21 @@ class TestCitationExtraction:
         answer = "I cannot find relevant information."
         citations = _extract_citations(answer, {})
         assert citations == []
+
+    def test_extracts_fullwidth_brackets_and_narrow_space(self):
+        """Regression: models emit 【Source 1】 with U+202F instead of [Source 1].
+
+        The literal-ASCII regex used to return an empty list here, so the API
+        reported no citations while the answer visibly cited a source.
+        """
+        answer = "Benefits close on day 15\u3010Source\u202f1\u3011."
+        citations = _extract_citations(answer, self._make_source_map())
+        assert len(citations) == 1
+        assert citations[0].source_number == 1
+
+    def test_extracts_case_insensitive_marker(self):
+        citations = _extract_citations("See [source 2].", self._make_source_map())
+        assert [c.source_number for c in citations] == [2]
 
     def test_citation_contains_server_side_metadata(self):
         """Citations must use server-side data, not model-generated data."""

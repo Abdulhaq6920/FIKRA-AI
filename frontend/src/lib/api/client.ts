@@ -102,8 +102,13 @@ async function request<T>(
  * spurious "session expired" logout. Parallel 401s therefore await one call.
  */
 let refreshInFlight: Promise<boolean> | null = null;
+/** After a failed refresh, skip retrying for a moment so logged-out visitors
+ *  do not hammer the rate-limited auth endpoint on every probe. */
+let refreshCooldownUntil = 0;
+const REFRESH_COOLDOWN_MS = 5_000;
 
 function tryRefreshToken(): Promise<boolean> {
+  if (Date.now() < refreshCooldownUntil) return Promise.resolve(false);
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
@@ -113,8 +118,10 @@ function tryRefreshToken(): Promise<boolean> {
         });
         // Only treat an HTTP 2xx as refresh success; a 401/false previously
         // let callers loop me→refresh→me forever while logged out.
+        if (!res.ok) refreshCooldownUntil = Date.now() + REFRESH_COOLDOWN_MS;
         return res.ok;
       } catch {
+        refreshCooldownUntil = Date.now() + REFRESH_COOLDOWN_MS;
         return false;
       } finally {
         refreshInFlight = null;

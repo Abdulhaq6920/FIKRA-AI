@@ -132,6 +132,13 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=20, ge=1, le=100)
     reranker_top_n: int = Field(default=5, ge=1, le=20)
     min_relevance_score: float = Field(default=0.3, ge=0.0, le=1.0)
+    # Lexical noise floor for keyword-only hits (ts_rank_cd is unbounded and on a
+    # different scale from cosine similarity, so it needs its own threshold).
+    min_keyword_score: float = Field(default=0.01, ge=0.0)
+    # Cross-encoder output is sigmoid-activated (0..1). 0.5 is the decision
+    # boundary: measured on this corpus, a relevant question scored 0.999 and an
+    # unrelated one 0.00003.
+    min_rerank_score: float = Field(default=0.5, ge=0.0, le=1.0)
     # Candidate pool passed to fusion/reranking before the prompt is built.
     rag_retrieval_candidates: int = Field(default=12, ge=1, le=100)
 
@@ -232,10 +239,20 @@ class Settings(BaseSettings):
     public_signup_org_ids: str = Field(default="00000000-0000-0000-0000-000000000001")
 
     # ------------------------------------------------------------------
-    # Logging
+    # Logging / observability
     # ------------------------------------------------------------------
     log_level: str = Field(default="INFO")
     log_format: Literal["json", "console"] = Field(default="json")
+    # SQL echo is a debugging aid, not a property of DEBUG: leaving it tied to
+    # `debug` prints every statement in any environment that turns DEBUG on.
+    sql_echo: bool = Field(default=False)
+    # Requests slower than this are logged at WARNING so they are greppable
+    # without a metrics stack.
+    slow_request_ms: int = Field(default=5000, ge=0)
+    # Prometheus exposition is always on; OTel span export is opt-in because it
+    # needs an exporter package and a collector endpoint.
+    metrics_enabled: bool = Field(default=True)
+    otel_enabled: bool = Field(default=False)
 
     # ------------------------------------------------------------------
     # Email (optional)

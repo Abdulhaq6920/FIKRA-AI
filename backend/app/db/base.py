@@ -11,9 +11,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, func, text
+from sqlalchemy import DateTime, MetaData, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# Alembic compares index names on every `alembic check`; pin the pattern so new
+# indexes are stable and autogenerate cannot invent a different naming scheme.
+# Only the ``ix`` template is pinned — primary-key/foreign-key/unique constraint
+# names are set explicitly where they matter, so they are left untouched.
+_NAMING_CONVENTION = {
+    "ix": "ix_%(table_name)s_%(column_0_name)s",
+}
 
 
 def _utcnow() -> datetime:
@@ -23,7 +31,7 @@ def _utcnow() -> datetime:
 class Base(DeclarativeBase):
     """Shared declarative base for all ORM models."""
 
-    pass
+    metadata = MetaData(naming_convention=_NAMING_CONVENTION)
 
 
 class UUIDMixin:

@@ -25,6 +25,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from starlette.requests import Request
 
 from app.api.dependencies import get_current_user_and_org, require_org_admin
 from app.core.exceptions import AuthenticationError, PermissionDeniedError
@@ -35,6 +36,11 @@ from app.services.retrieval_service import RetrievedPassage, _reciprocal_rank_fu
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
+def _request() -> Request:
+    """Minimal ASGI request: the dependency only writes to ``request.state``."""
+    return Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+
+
 def _user(*, status: UserStatus = UserStatus.ACTIVE, is_platform_admin: bool = False) -> User:
     return User(
         id=uuid.uuid4(),
@@ -110,6 +116,7 @@ class TestRoleComesFromTheDatabase:
         membership = _membership(user_id=user.id, organization_id=org_id, role=OrgRole.ORG_ADMIN)
 
         _returned_user, returned_org, role = await get_current_user_and_org(
+            request=_request(),
             payload=payload,
             db=_StubSession(user=user, membership=membership),  # type: ignore[arg-type]
         )
@@ -126,6 +133,7 @@ class TestRoleComesFromTheDatabase:
         membership = _membership(user_id=user.id, organization_id=org_id, role=OrgRole.MEMBER)
 
         ctx = await get_current_user_and_org(
+            request=_request(),
             payload=payload,
             db=_StubSession(user=user, membership=membership),  # type: ignore[arg-type]
         )
@@ -140,6 +148,7 @@ class TestRoleComesFromTheDatabase:
         membership = _membership(user_id=user.id, organization_id=org_id, role=OrgRole.ORG_ADMIN)
 
         ctx = await get_current_user_and_org(
+            request=_request(),
             payload=payload,
             db=_StubSession(user=user, membership=membership),  # type: ignore[arg-type]
         )
@@ -152,6 +161,7 @@ class TestRoleComesFromTheDatabase:
 
         with pytest.raises(PermissionDeniedError):
             await get_current_user_and_org(
+                request=_request(),
                 payload=payload,
                 db=_StubSession(user=user, membership=None),  # type: ignore[arg-type]
             )
@@ -164,7 +174,7 @@ class TestRoleComesFromTheDatabase:
         db = _StubSession(user=user, membership=membership)
 
         with pytest.raises(AuthenticationError):
-            await get_current_user_and_org(payload=payload, db=db)  # type: ignore[arg-type]
+            await get_current_user_and_org(request=_request(), payload=payload, db=db)  # type: ignore[arg-type]
         assert db.scalar_calls == 0
 
 

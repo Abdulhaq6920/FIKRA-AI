@@ -29,3 +29,16 @@ async def ping_redis() -> None:
         await client.ping()
     finally:
         await client.aclose()
+
+
+async def queue_depths(queues: tuple[str, ...]) -> dict[str, int]:
+    """Return the pending-message count for each Celery queue.
+
+    A missing key means an empty queue, which Redis reports as 0. Errors are
+    the caller's to handle; this helper never swallows them.
+    """
+    client = _client()
+    try:
+        return {queue: int(await client.llen(queue)) for queue in queues}
+    finally:
+        await client.aclose()
