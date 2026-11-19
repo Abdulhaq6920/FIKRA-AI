@@ -191,6 +191,6 @@ npm.cmd run type-check
 | G1.3 | pass | 2026-11-18 | §G1.3 — 413 in 8 ms with no body sent, CSRF 403 on foreign Origin/Referer, 429 on extended routes, production guard refuses 3 unsafe configs, 92 tests |
 | G1.4 | pass | 2026-11-18 | §G1.4 — p50 1088→924 ms, p95 3545→1262 ms; gate on both branches (irrelevant question → 0 citations, 67 passages gated out); `EXPLAIN` 8 004 rows: ivfflat 0.203 ms vs 12.6 ms sort, GIN for keyword; feedback upsert fixes a 500; 98 tests |
 | G2.1 | pass (local) | 2026-11-18 | §G2.1 — ruff/format/mypy strict clean on 62 files, 98 tests, frontend type-check clean; `.github/workflows/ci.yml` added (backend: lint+types+`alembic check`+tests; frontend: type-check+build); YAML validated, remote run pending first push |
-| G2.2 | pending | — | — |
+| G2.2 | pass (local) | 2026-11-18 | §G2.2 — dead document/analytics tabs deleted, one `DocumentTable` (library+admin), route boundaries added, error/empty split + Retry, toast-backed honest mutations, live `/health/ready` status card, member-safe upload menu; frontend type-check + build green, Playwright 15/15, browser gate 15/15; config port fixed 3000, channel env added |
 | G3.1 | pending | — | — |
 | G3.2 | pending | — | — |

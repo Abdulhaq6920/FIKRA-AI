@@ -46,6 +46,7 @@ import type {
   PagedResponse,
 } from "@/lib/api/admin";
 import { cn } from "@/lib/utils/cn";
+import { errorText } from "@/lib/utils/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 

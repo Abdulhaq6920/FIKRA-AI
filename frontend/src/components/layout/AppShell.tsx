@@ -40,6 +40,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { chatApi } from "@/lib/api/chat";
+import { errorText } from "@/lib/utils/errors";
+import { useToast } from "@/components/ui/Toast";
 import { AmbientMotion } from "@/components/ui/AmbientMotion";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
@@ -103,6 +105,7 @@ export function AppShell({
   const searchParams = useSearchParams();
   const { user, logout } = useAuth();
   const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
+  const toast = useToast();
 
   const isOnChat = pathname.startsWith("/chat");
   const selectedConversationId = isOnChat
@@ -147,13 +150,19 @@ export function AppShell({
     } else {
       try {
         const conv = await chatApi.createConversation();
+        // State changes only after the server confirms the thread exists.
         setConvTotal((prev) => prev + 1);
         setConvPage(1);
         setConversations((prev) => [conv, ...prev]);
         router.push(`/chat?conversation=${conv.id}`);
-      } catch {}
+      } catch (cause) {
+        toast.show(
+          errorText(cause, "Could not start a new conversation."),
+          "error"
+        );
+      }
     }
-  }, [onNewConversation, router]);
+  }, [onNewConversation, router, toast]);
 
   // Ctrl/Cmd+K starts a new chat from the keyboard while the chat page is open.
   useEffect(() => {
@@ -197,7 +206,13 @@ export function AppShell({
 
   const performDelete = useCallback(async (id: string) => {
     const wasActive = id === (selectedConversationId ?? activeConversationId);
-    await chatApi.deleteConversation(id).catch(() => {});
+    try {
+      await chatApi.deleteConversation(id);
+    } catch (cause) {
+      // The thread still exists on the server, so the sidebar must keep it.
+      toast.show(errorText(cause, "Could not delete this conversation."), "error");
+      return;
+    }
     setConversations((prev) => prev.filter((c) => c.id !== id));
     setConvTotal((prev) => Math.max(0, prev - 1));
     setStreamingIds((prev) => {
@@ -214,7 +229,7 @@ export function AppShell({
       // Dropping the query param resets the page to a new, empty session.
       router.replace("/chat");
     }
-  }, [selectedConversationId, activeConversationId, router]);
+  }, [selectedConversationId, activeConversationId, router, toast]);
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -223,12 +238,17 @@ export function AppShell({
   };
 
   const handleRename = async (id: string) => {
-    if (!editTitle.trim()) { setEditingId(null); return; }
-    try {
-      const updated = await chatApi.renameConversation(id, editTitle.trim());
-      setConversations((prev) => prev.map((c) => c.id === id ? updated : c));
-    } catch {}
+    const title = editTitle.trim();
     setEditingId(null);
+    if (!title) return;
+    try {
+      const updated = await chatApi.renameConversation(id, title);
+      // Only adopt the new title once it is stored; a failed rename leaves the
+      // old title visible instead of showing a change that never happened.
+      setConversations((prev) => prev.map((c) => c.id === id ? updated : c));
+    } catch (cause) {
+      toast.show(errorText(cause, "Could not rename this conversation."), "error");
+    }
   };
 
   const sidebarContent = (isMobile = false) => (

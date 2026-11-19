@@ -41,6 +41,7 @@ import { ActionMenu, type ActionMenuItem } from "@/components/ui/ActionMenu";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatBytes, relativeTime } from "@/lib/utils/format";
+import { errorText } from "@/lib/utils/errors";
 import {
   EmptyRow,
   formatDateTime,
@@ -106,10 +107,6 @@ interface DocumentDetail extends DocumentRow {
   checksum_sha256?: string;
   jobs?: DocumentJob[];
   chunks?: DocumentChunkPreview[];
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 export function DocumentTable({
@@ -179,7 +176,7 @@ export function DocumentTable({
         if (!quiet) {
           setRows([]);
           setTotal(0);
-          setError(errorMessage(cause, "Could not load documents."));
+          setError(errorText(cause, "Could not load documents."));
         }
       } finally {
         if (request === listRequest.current) setLoading(false);
@@ -234,7 +231,7 @@ export function DocumentTable({
       if (page === 1) await load();
       else setPage(1);
     } catch (cause) {
-      const message = errorMessage(cause, "Upload failed.");
+      const message = errorText(cause, "Upload failed.");
       setUploadError(message);
       toast.show(message, "error");
     } finally {
@@ -254,7 +251,7 @@ export function DocumentTable({
       else await load();
     } catch (cause) {
       // Nothing was removed locally, so the list still tells the truth.
-      toast.show(errorMessage(cause, "Delete failed."), "error");
+      toast.show(errorText(cause, "Delete failed."), "error");
     } finally {
       setBusyId(null);
     }
@@ -267,7 +264,7 @@ export function DocumentTable({
       toast.show("Reindex queued.", "success");
       await load();
     } catch (cause) {
-      toast.show(errorMessage(cause, "Reindex failed."), "error");
+      toast.show(errorText(cause, "Reindex failed."), "error");
     } finally {
       setBusyId(null);
     }
@@ -299,7 +296,7 @@ export function DocumentTable({
       if (request === detailRequest.current) setDetail(result);
     } catch (cause) {
       if (request === detailRequest.current) {
-        setDetailError(errorMessage(cause, "Could not load document."));
+        setDetailError(errorText(cause, "Could not load document."));
       }
     } finally {
       if (request === detailRequest.current) setDetailLoading(false);

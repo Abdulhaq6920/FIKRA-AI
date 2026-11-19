@@ -573,13 +573,62 @@ of this gate, so the remote half stays open until then.
 
 ---
 
-## Open items for the next gate (G2.2 — frontend)
+# G2.2 — Frontend consolidation, error surfaces, honest mutations, live status
 
-1. **Dead code and duplication** — P1-U14/U15/U16 (dead `AnalyticsTab.tsx`, four pagination
-   implementations, two document tables).
-2. **Missing route boundaries** — P0-8 (`error.tsx` / `loading.tsx` / `not-found.tsx`).
-3. **Error/empty conflation** — P1-U5 (a failed fetch renders "No documents yet").
-4. **UI lies on failed mutations** — P1-U8 (swallowed `catch`, optimistic state not reverted).
-5. **Remote CI run** — confirm the workflow passes on GitHub after the next push.
+**Date:** 2026-11-18 · **Status:** pass (local) · **CI remote run:** pending first push
+
+## What was done
+
+1. **One document table** — new `features/documents/DocumentTable.tsx` with
+   `variant="library" | "admin"`. The library page (`app/(protected)/documents/page.tsx`)
+   became a thin read-only shell; the admin tab renders the same component with the
+   upload / search / status-filter / delete / reindex controls. One row renderer, one
+   status map, one detail modal, one pagination control. Dead `DocumentsTab.tsx` and
+   `AnalyticsTab.tsx` deleted (P1-U14/U15/U16).
+2. **Route boundaries** — added `app/error.tsx`, `app/global-error.tsx`, `app/not-found.tsx`
+   and `app/loading.tsx` (P0-8). A render error now gets a retry/leave surface instead of a
+   white screen, unknown routes get the branded 404, and navigations get a loading fallback.
+3. **Error/empty conflation** — the document table keeps `error` apart from `empty` and renders
+   an error panel with a Retry button; chat keeps `messagesError` with a Retry that re-runs
+   the fetch via a reload key instead of clearing the thread (P1-U5).
+4. **Honest mutations** — new `components/ui/Toast.tsx` (`ToastProvider` / `useToast`, success |
+   error | info) mounted in the root layout; admin document mutations (upload, delete,
+   reindex, feedback decisions, access-request decisions) and conversation mutations
+   (rename, delete, new conversation) toast on failure and only mutate local state after the
+   server confirmed (P1-U8).
+5. **Live system status** — the settings "System status" card now polls
+   `GET /api/v1/health/ready` (public, parsed directly because 503 is a valid body) and maps
+   `ready | degraded | offline` to the UI (P1-U18).
+6. **Member-safe upload entry** — the chat attach menu only offers "Upload documents" to org
+   admins / platform admins; members get "Browse knowledge base" only (P1-U17).
+
+## Results
+
+```
+frontend$ npm.cmd run type-check          clean (tsc --noEmit)
+frontend$ npm.cmd run build                Compiled successfully; 13 routes, 87.4 kB first-load shared
+frontend$ $env:PLAYWRIGHT_CHANNEL="chrome"; npm.cmd test
+                                         15 passed (2.0m)   [tests/e2e.spec.ts]
+frontend$ node .verify-ui.mjs             (throwaway gate script, since deleted) 15/15 passed
+                                          library rows=1 · admin rows=1 · settings live "Healthy"
+                                          · custom 404 rendered · no page errors · no console errors
+```
+
+E2E fix in passing: `playwright.config.ts` pointed at port **3001** while `npm run dev` serves
+**3000**, and the default Playwright browser was not installed on this machine (had to run with
+`PLAYWRIGHT_CHANNEL=chrome` against the system Chrome). Both now hold.
+
+---
+
+## Open items for the next gate (G3.1 — deploy / scale)
+
+1. **Remote CI run** — the G2.1 workflow has not seen a real push yet; after this push it must
+   go green (backend lint/type/migrate/tests, frontend type-check/build).
+2. **P1-U10** — `window.confirm` / `window.prompt` unification onto the new toast/modal system
+   is still open (the toast now *reports* these failures; the native dialogs themselves remain).
+3. **P1-U9** — conversation-row accessibility (screen-reader labels on the chat sidebar rows) is
+   still open.
+4. **G3.1** — production image build/run, separate migration job, backup restore rehearsal,
+   load test at 3× peak.
 
 

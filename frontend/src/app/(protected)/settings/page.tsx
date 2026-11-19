@@ -1,11 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { motion } from "framer-motion";
-import { User, Mail, Shield, LogOut, Palette, ShieldCheck, Activity } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  LogOut,
+  Mail,
+  Palette,
+  Shield,
+  ShieldCheck,
+  User,
+  XCircle,
+} from "lucide-react";
 import { ThemePicker } from "@/features/theme/ThemePicker";
 import { api } from "@/lib/api/client";
+import { errorText } from "@/lib/utils/errors";
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
@@ -108,23 +121,7 @@ export default function SettingsPage() {
             <h2 className="text-sm font-medium text-surface-200">System status</h2>
           </div>
           <div className="p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
-              <div className="flex items-center gap-3">
-                <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-emerald-200">System online</p>
-                  <p className="text-xs text-surface-400">
-                    Chat, retrieval and document indexing services are operational.
-                  </p>
-                </div>
-              </div>
-              <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
-                Healthy
-              </span>
-            </div>
+            <SystemStatusCard />
           </div>
         </motion.div>
 
@@ -163,6 +160,134 @@ export default function SettingsPage() {
           </div>
         </motion.div>
       </div>
+    </div>
+  );
+}
+
+type HealthState = "checking" | "ready" | "degraded" | "offline";
+
+interface HealthPayload {
+  status?: string;
+  checks?: Record<string, string>;
+}
+
+const HEALTH_POLL_MS = 30_000;
+
+/**
+ * Live readiness card.
+ *
+ * This used to be three hard-coded lines claiming "System online / Healthy"
+ * regardless of the backend's actual state — an outage looked identical to a
+ * healthy deployment. It now reads `/health/ready` (public, no auth) and maps
+ * the real answer to one of four states. 503 is a valid answer with a JSON
+ * body, so the request bypasses the typed client (which would discard the
+ * body and, for a 401, try to refresh a session) and parses it directly.
+ */
+function SystemStatusCard() {
+  const [state, setState] = useState<HealthState>("checking");
+  const [checks, setChecks] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const check = useCallback(async (signal: AbortSignal) => {
+    try {
+      const response = await fetch("/api/v1/health/ready", {
+        credentials: "include",
+        signal,
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => ({}))) as HealthPayload;
+      if (signal.aborted) return;
+      setChecks(payload.checks ?? {});
+      setError(null);
+      // 200 means every *required* dependency is up; the body can still list
+      // an optional dependency as degraded, which is worth showing.
+      const anyDegraded = Object.values(payload.checks ?? {}).some((value) =>
+        value.startsWith("degraded")
+      );
+      setState(response.ok ? (anyDegraded ? "degraded" : "ready") : "degraded");
+    } catch (cause) {
+      if (signal.aborted) return;
+      setState("offline");
+      setError(errorText(cause, "The health endpoint could not be reached."));
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void check(controller.signal);
+    const interval = window.setInterval(() => void check(controller.signal), HEALTH_POLL_MS);
+    const onFocus = () => void check(controller.signal);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [check]);
+
+  const presentation: Record<
+    HealthState,
+    { label: string; detail: string; badge: string; icon: React.ReactNode }
+  > = {
+    checking: {
+      label: "Checking system status…",
+      detail: "Contacting the health endpoint.",
+      badge: "border-surface-700 bg-surface-800 text-surface-300",
+      icon: <Loader2 className="h-4 w-4 animate-spin text-surface-400" />,
+    },
+    ready: {
+      label: "System online",
+      detail: "Chat, retrieval and document indexing services are operational.",
+      badge: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
+      icon: <CheckCircle2 className="h-4 w-4 text-emerald-300" />,
+    },
+    degraded: {
+      label: "System degraded",
+      detail: "Some services are unavailable. Chat may be slower or documents may queue.",
+      badge: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+      icon: <AlertTriangle className="h-4 w-4 text-amber-300" />,
+    },
+    offline: {
+      label: "System unavailable",
+      detail: "The backend could not be reached. Answers and uploads will fail.",
+      badge: "border-red-400/25 bg-red-400/10 text-red-300",
+      icon: <XCircle className="h-4 w-4 text-red-300" />,
+    },
+  };
+
+  const view = presentation[state];
+  const unhealthyChecks = Object.entries(checks).filter(
+    ([, value]) => value !== "ok"
+  );
+
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-800 bg-surface-950/40 p-3"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5">{view.icon}</span>
+        <div>
+          <p className="text-sm font-medium text-surface-100">{view.label}</p>
+          <p className="text-xs text-surface-400">{view.detail}</p>
+          {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
+          {unhealthyChecks.length > 0 && (
+            <ul className="mt-1 space-y-0.5 text-[11px] text-surface-400">
+              {unhealthyChecks.map(([name, value]) => (
+                <li key={name}>
+                  <span className="text-surface-300">{name}</span>: {value}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+      <span
+        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${view.badge}`}
+      >
+        {state === "checking" ? "Checking" : state === "ready" ? "Healthy" : state === "degraded" ? "Degraded" : "Offline"}
+      </span>
     </div>
   );
 }

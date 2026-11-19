@@ -26,7 +26,7 @@ test.describe("Authentication", () => {
     await page.goto("/login");
     await page.waitForSelector('input[id="email"]', { timeout: 15000 });
 
-    await expect(page.locator("text=FIKRA AI")).toBeVisible();
+    await expect(page.locator("#auth-heading")).toBeVisible();
     await expect(page.locator('input[id="email"]')).toBeVisible();
     await expect(page.locator('input[id="password"]')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
@@ -168,21 +168,35 @@ test.describe("Documents Page", () => {
 test.describe("Navigation & Layout", () => {
   test("sidebar navigation works", async ({ page }) => {
     await loginViaUI(page);
+    // Admins land on /admin; the document library is an Admin tab, not a
+    // sidebar entry, so navigation coverage here focuses on the links that
+    // remain for an admin and reaches /documents through the admin tab.
+    if (page.url().includes("/admin")) {
+      await page.goto("/chat");
+    }
 
-    // Navigate to Documents
-    await page.locator("a[href='/documents']").first().click();
-    await page.waitForTimeout(2000);
-    expect(page.url()).toContain("/documents");
+    // Navigate to Analytics
+    await page.locator("a[href='/analytics']").first().click();
+    await page.waitForTimeout(2500);
+    expect(page.url()).toContain("/analytics");
 
     // Navigate to Settings
     await page.locator("a[href='/settings']").first().click();
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2500);
     expect(page.url()).toContain("/settings");
 
-    // Navigate to Chat
+    // Navigate back to Chat
     await page.locator("a[href='/chat']").first().click();
     await page.waitForTimeout(2000);
     expect(page.url()).toContain("/chat");
+
+    // Navigate to Admin and into its Documents tab.
+    await page.locator("a[href='/admin']").first().click();
+    await page.waitForTimeout(2500);
+    expect(page.url()).toContain("/admin");
+    await page.goto("/admin?tab=Documents");
+    await page.waitForTimeout(3000);
+    await expect(page.getByRole("button", { name: /Upload document/ })).toBeVisible();
   });
 
   test("sign out works", async ({ page }) => {

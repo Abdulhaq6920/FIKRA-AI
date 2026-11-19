@@ -34,6 +34,7 @@ import { chatApi } from "@/lib/api/chat";
 import { ApiRequestError } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
 import { truncate } from "@/lib/utils/format";
+import { errorText } from "@/lib/utils/errors";
 import type { Message, Citation, FavoriteQuestion } from "@/types";
 import { useAuth } from "@/features/auth/AuthContext";
 import { MarkdownContent } from "@/features/chat/MarkdownContent";
@@ -107,6 +108,12 @@ export default function ChatPage() {
   const [sessionErrors, setSessionErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  // A failed message fetch must not look like an empty conversation. Keeping
+  // the failure in its own state lets the thread render an error with Retry
+  // instead of a blank pane (or the welcome screen).
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  // Bumped by Retry; the fetch effect depends on it so the request re-runs.
+  const [messagesReloadKey, setMessagesReloadKey] = useState(0);
   // Question that produced the last failed answer, so an error offers a
   // one-click retry instead of forcing the user to retype it.
   const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
@@ -345,6 +352,7 @@ export default function ChatPage() {
     setMsgTotal(0);
     setMsgPage(1);
     setGeneralError(null);
+    setMessagesError(null);
   }, [searchParams]);
 
   const setSessionError = useCallback((conversationId: string, message: string | null) => {
@@ -368,6 +376,7 @@ export default function ChatPage() {
     const fetchStartedAt = Date.now();
     let cancelled = false;
     setLoadingMsgs(true);
+    setMessagesError(null);
     chatApi
       .getMessages(targetId, 1, MSG_PAGE_SIZE)
       .then((res) => {
@@ -389,15 +398,20 @@ export default function ChatPage() {
         setMsgTotal(res.total);
         setMsgPage(Math.max(1, res.page));
       })
-      .catch(() => {
-        if (!cancelled) setMessages([]);
+      .catch((cause: unknown) => {
+        // Leave `messages` untouched: whatever was already rendered is still
+        // the truth. The error panel below explains the failure and offers a
+        // Retry instead of pretending the conversation has no messages.
+        if (!cancelled) {
+          setMessagesError(errorText(cause, "Could not load this conversation."));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingMsgs(false);
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConvId]);
+  }, [activeConvId, messagesReloadKey]);
 
   // Older history pages prepend above the current window; the scroll anchor
   // is preserved so the view does not jump while reading a long thread.
@@ -722,9 +736,20 @@ export default function ChatPage() {
           ? window.prompt("What should we improve about this answer?")?.trim()
           : undefined;
       if (type === "thumbs_down" && !comment) return;
-      await chatApi.submitFeedback(messageId, type, comment).catch(() => {});
+      try {
+        await chatApi.submitFeedback(messageId, type, comment);
+        showToast(
+          type === "thumbs_up"
+            ? "Thanks — your rating was recorded."
+            : "Thanks — your feedback was recorded."
+        );
+      } catch (cause) {
+        // Silence here looked like a successful rating: nothing changed on
+        // screen and the user assumed it had been saved.
+        showToast(errorText(cause, "Could not record your feedback."));
+      }
     },
-    []
+    [showToast]
   );
 
   return (
@@ -851,7 +876,22 @@ export default function ChatPage() {
 
           {loadingMsgs && <MessagesSkeleton />}
 
-          {!loadingMsgs && activeConvId && messages.length < msgTotal && (
+          {!loadingMsgs && activeConvId && messagesError && (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <div className="glass-surface max-w-xl rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {messagesError}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMessagesReloadKey((key) => key + 1)}
+                className="rounded-full border border-red-400/40 bg-red-500/10 px-4 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!loadingMsgs && !messagesError && activeConvId && messages.length < msgTotal && (
             <div className="flex justify-center">
               <button
                 type="button"
@@ -940,15 +980,19 @@ export default function ChatPage() {
                   >
                     Browse knowledge base
                   </MenuButton>
-                  <MenuButton
-                    icon={<Upload className="h-3.5 w-3.5" aria-hidden="true" />}
-                    onClick={() => {
-                      setAttachOpen(false);
-                      router.push("/admin?tab=Documents");
-                    }}
-                  >
-                    Upload documents
-                  </MenuButton>
+                  {/* Members cannot upload; the Admin → Documents tab would
+                      only show them a permission wall. */}
+                  {(user?.is_platform_admin || user?.organization_role === "org_admin") && (
+                    <MenuButton
+                      icon={<Upload className="h-3.5 w-3.5" aria-hidden="true" />}
+                      onClick={() => {
+                        setAttachOpen(false);
+                        router.push("/admin?tab=Documents");
+                      }}
+                    >
+                      Upload documents
+                    </MenuButton>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
