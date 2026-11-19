@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── Dependency layer (cached unless pyproject.toml changes) ──────────────
 COPY pyproject.toml .
 RUN uv venv .venv && \
+    uv pip install --python .venv/bin/python torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu && \
     uv pip install --python .venv/bin/python -e ".[dev]"
 
 ENV PATH="/app/.venv/bin:$PATH"
