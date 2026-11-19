@@ -279,7 +279,6 @@ jobs:
         run: alembic upgrade head
 
       - name: Seed initial org + admin user (admin@fikra.ai / Admin1234!)
-        working-directory: backend
         run: python scripts/create_initial_org.py
 
       - name: Setup Node
