@@ -21,6 +21,7 @@ They do NOT include sensitive configuration details.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -30,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.workers.celery_app import celery_app
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -49,7 +51,8 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     Returns 200 when the required dependencies are ready, 503 otherwise.
 
     Required: PostgreSQL, embedding model loaded.
-    Reported but non-fatal: Redis (degrades to inline ingestion), Celery worker.
+    Reported but non-fatal: Redis (degrades to inline ingestion), Celery worker
+    (degraded — the app falls back to inline ingestion when a worker is absent).
     """
     checks: dict[str, str] = {}
 
@@ -70,6 +73,16 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         checks["redis"] = "ok"
     except Exception as exc:
         checks["redis"] = f"degraded: {type(exc).__name__}"
+
+    # Celery worker heartbeat: ping() returns {hostname: {"ok": "pong"}} per
+    # responsive worker, or {} when none are reachable. Run in a thread because
+    # inspect() is a blocking Redis call. Non-fatal: inline ingestion covers.
+    try:
+        inspector = celery_app.control.inspect(timeout=2)
+        ping = await asyncio.to_thread(inspector.ping)
+        checks["celery"] = "ok" if ping else "degraded: no workers reachable"
+    except Exception as exc:
+        checks["celery"] = f"degraded: {type(exc).__name__}"
 
     required_ok = checks["database"] == "ok" and checks["embedding_model"] == "ok"
 

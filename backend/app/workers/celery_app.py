@@ -9,6 +9,8 @@ To start: celery -A app.workers.celery_app worker --loglevel=info
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from celery import Celery
 
 from app.core.config import settings
@@ -17,7 +19,7 @@ celery_app = Celery(
     "fikra",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.workers.document_tasks"],
+    include=["app.workers.document_tasks", "app.workers.maintenance_tasks"],
 )
 
 celery_app.conf.update(
@@ -50,5 +52,15 @@ celery_app.conf.update(
     task_default_queue="default",
     task_routes={
         "app.workers.document_tasks.*": {"queue": "ingestion"},
+        "app.workers.maintenance_tasks.*": {"queue": "default"},
+    },
+    # Beat: run the ingestion reconciler every 5 minutes so documents stuck in
+    # PROCESSING after a worker crash are self-healed to FAILED instead of being
+    # lost forever.
+    beat_schedule={
+        "reconcile-stuck-documents": {
+            "task": "app.workers.maintenance_tasks.reconcile_stuck_documents",
+            "schedule": timedelta(minutes=5),
+        },
     },
 )
