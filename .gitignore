@@ -66,6 +66,9 @@ pgvector-pg18.zip
 # ── Agent-only guidance (never shipped) ───────────────────────────────────
 .opencode/
 
+# Local agent / scratch evidence directories
+.testmuai/
+
 # Local reference material / docs with embedded credentials
 3.docx
 *.docx
