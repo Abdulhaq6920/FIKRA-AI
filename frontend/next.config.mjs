@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  // Standalone output enables running the production image with `node server.js`
+  // without a full node_modules install (smaller, faster, more secure).
+  output: "standalone",
+
   // API proxy — all /api/* requests go to the FastAPI backend
   async rewrites() {
     return [

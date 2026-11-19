@@ -8,9 +8,12 @@
 #   fikra-worker   — Celery document-ingestion worker (Docker)
 #   fikra-redis    — Redis broker + cache (free managed instance)
 #
-# Before deploying, set these secret env vars in the Render dashboard
-# (do NOT put real values here — this file is committed to GitHub):
-#   GROQ_API_KEY, SECRET_KEY, JWT_SECRET_KEY, DATABASE_URL
+# Before deploying, set these required secret env vars in the Render dashboard
+# (do NOT put real values here — this file is committed to GitHub).
+# Required on both backend and worker:
+#   DATABASE_URL, SECRET_KEY, JWT_SECRET_KEY, GROQ_API_KEY
+# The Redis service connection strings (REDIS_URL, CELERY_BROKER_URL,
+# CELERY_RESULT_BACKEND) are auto-filled from the fikra-redis service below.
 #
 # Free tier notes:
 #   - Web services sleep after 15 min of inactivity; first request takes ~30s
@@ -123,6 +126,8 @@ services:
       - key: DATABASE_MAX_OVERFLOW
         value: "2"
       - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
         sync: false
       - key: GROQ_API_KEY
         sync: false

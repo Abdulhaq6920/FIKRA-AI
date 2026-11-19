@@ -1,8 +1,8 @@
-# FIKRA AI — Phase Gate Evidence Log
+﻿# FIKRA AI â€” Phase Gate Evidence Log
 
-Protocol (from `agent-orchestration.md` §4): a gate passes only when every exit criterion holds
+Protocol (from `agent-orchestration.md` Â§4): a gate passes only when every exit criterion holds
 against the **live running system**, not against intent. Each entry records the date, the command,
-and the raw result. Gates are appended, never rewritten — a later failure is a new entry.
+and the raw result. Gates are appended, never rewritten â€” a later failure is a new entry.
 
 Environment for every entry below:
 
@@ -19,19 +19,19 @@ Environment for every entry below:
 
 ---
 
-## G1.0 — Security floor — **PASS**
+## G1.0 â€” Security floor â€” **PASS**
 
 | Exit criterion | Result |
 |---|---|
-| P0-1 restricted documents excluded from retrieval | pass — `tests/tenant_isolation/test_access_level.py`, `tests/unit/test_retrieval_access.py` |
-| P0-2 role read from DB membership, not JWT claim | pass — `TestRoleComesFromTheDatabase` (5 cases) |
-| P0-3 no password-reset token in logs | pass — log scan, below |
-| P0-6 `NULL` embedding cannot crash chat | pass — query filters `embedding IS NOT NULL`; column is now `NOT NULL` (G1.1) |
-| P0-7 ingestion cannot freeze the API | pass — CPU work off the event loop (`asyncio.to_thread`), worker loop reuse |
-| Regression test fails before / passes after | pass — tests added with each fix in `24744fd` |
-| Role demotion effective on next request | pass — membership row is authoritative |
+| P0-1 restricted documents excluded from retrieval | pass â€” `tests/tenant_isolation/test_access_level.py`, `tests/unit/test_retrieval_access.py` |
+| P0-2 role read from DB membership, not JWT claim | pass â€” `TestRoleComesFromTheDatabase` (5 cases) |
+| P0-3 no password-reset token in logs | pass â€” log scan, below |
+| P0-6 `NULL` embedding cannot crash chat | pass â€” query filters `embedding IS NOT NULL`; column is now `NOT NULL` (G1.1) |
+| P0-7 ingestion cannot freeze the API | pass â€” CPU work off the event loop (`asyncio.to_thread`), worker loop reuse |
+| Regression test fails before / passes after | pass â€” tests added with each fix in `24744fd` |
+| Role demotion effective on next request | pass â€” membership row is authoritative |
 | `pytest tests/unit tests/tenant_isolation` green | **77 passed** |
-| Live chat answers with citations | pass — 1 citation, similarity 0.886 |
+| Live chat answers with citations | pass â€” 1 citation, similarity 0.886 |
 
 ```
 $ ..\.venv\Scripts\python.exe -m pytest tests/unit tests/tenant_isolation -q --override-ini=addopts=
@@ -67,13 +67,13 @@ secret-like matches: 0
 
 ---
 
-## G1.1 — Schema integrity — **PASS**
+## G1.1 â€” Schema integrity â€” **PASS**
 
 | Exit criterion | Result |
 |---|---|
-| `alembic check` reports no drops/renames | pass — "No new upgrade operations detected." |
-| `alembic upgrade head` matches live schema | pass — `0004_schema_integrity` applied; `alembic check` clean afterwards |
-| `content_tsv` + GIN + vector index present | pass — used by the live keyword/vector queries (see plan output below) |
+| `alembic check` reports no drops/renames | pass â€” "No new upgrade operations detected." |
+| `alembic upgrade head` matches live schema | pass â€” `0004_schema_integrity` applied; `alembic check` clean afterwards |
+| `content_tsv` + GIN + vector index present | pass â€” used by the live keyword/vector queries (see plan output below) |
 
 ```
 $ ..\.venv\Scripts\alembic.exe check
@@ -94,21 +94,21 @@ ORDER BY score DESC LIMIT $6
 ```
 
 Applied in `alembic/versions/0004_schema_integrity.py`: 21 index renames to the naming
-convention, 4 unique-constraint→unique-index conversions, 7 new indexes, feedback dedupe,
+convention, 4 unique-constraintâ†’unique-index conversions, 7 new indexes, feedback dedupe,
 3 unique constraints, `embedding SET NOT NULL`, and a working `downgrade()`.
 
 ---
 
-## G1.2 — Observability — **PASS**
+## G1.2 â€” Observability â€” **PASS**
 
 | Exit criterion | Result |
 |---|---|
-| `/metrics` returns all metric families | pass — 21 `# TYPE` families |
-| One chat request produces `rag_stage_duration_seconds` for every stage | pass — 9 stages incl. `rerank` |
+| `/metrics` returns all metric families | pass â€” 21 `# TYPE` families |
+| One chat request produces `rag_stage_duration_seconds` for every stage | pass â€” 9 stages incl. `rerank` |
 | Response `X-Request-ID` == log `request_id` == span id | pass (span id is the same value when OTel is enabled) |
-| Access log carries `user_id` / `org_id` | pass — including admin-only routes |
-| No secret in any log line | pass — 0 matches |
-| 429 responses are logged, metered and carry the request ID | pass — middleware executes inside the log/metric layer |
+| Access log carries `user_id` / `org_id` | pass â€” including admin-only routes |
+| No secret in any log line | pass â€” 0 matches |
+| 429 responses are logged, metered and carry the request ID | pass â€” middleware executes inside the log/metric layer |
 
 Metric families exposed:
 
@@ -177,19 +177,19 @@ $ POST /api/v1/auth/login  {"email":"not-an-email","password":"x"}
 ```
 
 No `RuntimeError: No response returned.` in the log after the middleware reorder. Execution order is
-now `CORS → CorrelationID → RequestLogging → SecurityHeaders → rate limit → route`, so a 429 is
+now `CORS â†’ CorrelationID â†’ RequestLogging â†’ SecurityHeaders â†’ rate limit â†’ route`, so a 429 is
 logged, metered, carries the request ID and security/CORS headers.
 
 ---
 
-## Defects found and fixed while running the G1.0–G1.2 gates
+## Defects found and fixed while running the G1.0â€“G1.2 gates
 
 These were not in the original register; they were found by executing the gates against the live
 system and are fixed with regression coverage.
 
-### CITATION-1 (P1, correctness) — citations silently dropped for full-width markers
+### CITATION-1 (P1, correctness) â€” citations silently dropped for full-width markers
 
-The model answered with `【Source 1】` (U+3010/U+3011) and a narrow no-break space (U+202F) instead
+The model answered with `ã€Source 1ã€‘` (U+3010/U+3011) and a narrow no-break space (U+202F) instead
 of the ASCII `[Source 1]` the prompt requests. `_extract_citations` matched only the literal ASCII
 form, so the answer body cited a source while the API returned `citations: []`.
 
@@ -199,14 +199,14 @@ form, so the answer body cited a source while the API returned `citations: []`.
 * Regression: `tests/unit/test_retrieval.py::test_extracts_fullwidth_brackets_and_narrow_space`,
   `test_extracts_case_insensitive_marker`.
 
-### OBS-1 (P2, observability) — admin routes logged `user_id: null`
+### OBS-1 (P2, observability) â€” admin routes logged `user_id: null`
 
 `request.state` was stamped only in `require_user`, so every `OrgAdminUser`/`PlatformAdminUser`
 route (documents, admin dashboard, upload) logged an anonymous caller. Identity stamping moved to
 `get_current_user_and_org`, the single dependency all protected routes pass through, and now also
 records `role`.
 
-### LAT-1 (P1, latency) — reranker cold-load added ~3.3 s to the first chat
+### LAT-1 (P1, latency) â€” reranker cold-load added ~3.3 s to the first chat
 
 `BAAI/bge-reranker-base` loaded lazily inside the first `/chat/ask` (measured: 5 527 ms total,
 1 752 ms of which was the LLM). It is now preloaded during lifespan in a thread, non-fatally:
@@ -220,22 +220,22 @@ First chat after the change: 2 385 ms.
 
 ---
 
-## G1.3 — API hardening — **PASS**
+## G1.3 â€” API hardening â€” **PASS**
 
 | Exit criterion | Result |
 |---|---|
-| 413 before routing on oversized upload | pass — raw socket, body never sent, answered in 8.2 ms |
-| 422 (not 500) on bad path params | pass — authenticated `GET .../not-a-uuid/messages` → 422 `path.conv_id` |
-| Validation errors use the standard envelope without echoing input | pass — `VALIDATION_ERROR` + `field`/`message`/`type`, no submitted value |
-| CSRF origin check rejects a foreign `Origin` | pass — 403 `CSRF_ORIGIN_REJECTED`; legit origin, Bearer-only, safe methods and non-browser clients still pass |
-| Rate limits cover the extended route list | pass — 31st `POST /chat/messages/{id}/feedback` → 429 + `Retry-After` |
-| Production config rejects weak secrets / `DEBUG=true` / wildcard origins | pass — three subprocess boots refused |
+| 413 before routing on oversized upload | pass â€” raw socket, body never sent, answered in 8.2 ms |
+| 422 (not 500) on bad path params | pass â€” authenticated `GET .../not-a-uuid/messages` â†’ 422 `path.conv_id` |
+| Validation errors use the standard envelope without echoing input | pass â€” `VALIDATION_ERROR` + `field`/`message`/`type`, no submitted value |
+| CSRF origin check rejects a foreign `Origin` | pass â€” 403 `CSRF_ORIGIN_REJECTED`; legit origin, Bearer-only, safe methods and non-browser clients still pass |
+| Rate limits cover the extended route list | pass â€” 31st `POST /chat/messages/{id}/feedback` â†’ 429 + `Retry-After` |
+| Production config rejects weak secrets / `DEBUG=true` / wildcard origins | pass â€” three subprocess boots refused |
 
 Middleware stack after this gate (registration is innermost-first):
 
 ```
-register: rate limit → CSRF → body size → security headers → access log → correlation → CORS
-execute:  CORS → correlation → access log → security headers → body size → CSRF → rate limit → route
+register: rate limit â†’ CSRF â†’ body size â†’ security headers â†’ access log â†’ correlation â†’ CORS
+execute:  CORS â†’ correlation â†’ access log â†’ security headers â†’ body size â†’ CSRF â†’ rate limit â†’ route
 ```
 
 so every rejection below is logged, counted, and carries the request ID and security headers.
@@ -266,21 +266,21 @@ alone; a chunked request without the header is still bounded by the handler's st
 Cookie-authenticated mutations only (a Bearer token is never attached by a browser):
 
 ```
-POST /api/v1/chat/conversations  Origin: https://evil.example        → 403 CSRF_ORIGIN_REJECTED
-POST /api/v1/chat/conversations  Referer: https://evil.example/a.html → 403 CSRF_ORIGIN_REJECTED
-POST /api/v1/chat/conversations  Origin: http://localhost:3000        → 201
-POST /api/v1/chat/conversations  Origin: HTTP://LOCALHOST:3000        → 201  (case-insensitive)
-POST /api/v1/chat/conversations  Authorization: Bearer … + evil Origin → 201 (exempt)
-GET  /api/v1/chat/conversations  Origin: https://evil.example         → 200  (safe method)
+POST /api/v1/chat/conversations  Origin: https://evil.example        â†’ 403 CSRF_ORIGIN_REJECTED
+POST /api/v1/chat/conversations  Referer: https://evil.example/a.html â†’ 403 CSRF_ORIGIN_REJECTED
+POST /api/v1/chat/conversations  Origin: http://localhost:3000        â†’ 201
+POST /api/v1/chat/conversations  Origin: HTTP://LOCALHOST:3000        â†’ 201  (case-insensitive)
+POST /api/v1/chat/conversations  Authorization: Bearer â€¦ + evil Origin â†’ 201 (exempt)
+GET  /api/v1/chat/conversations  Origin: https://evil.example         â†’ 200  (safe method)
 ```
 
-The real UI path is unaffected — everything the browser does goes through the Next.js proxy with
+The real UI path is unaffected â€” everything the browser does goes through the Next.js proxy with
 `Origin: http://localhost:3000`:
 
 ```
-POST http://localhost:3000/api/v1/auth/login        → 200 (token issued)
-GET  http://localhost:3000/api/v1/notifications     → 200 (cookie-authenticated)
-POST http://localhost:3000/api/v1/chat/conversations → 201 (mutation passes the check)
+POST http://localhost:3000/api/v1/auth/login        â†’ 200 (token issued)
+GET  http://localhost:3000/api/v1/notifications     â†’ 200 (cookie-authenticated)
+POST http://localhost:3000/api/v1/chat/conversations â†’ 201 (mutation passes the check)
 ```
 
 ### Extended rate limits
@@ -298,7 +298,7 @@ x-request-id: 81620c7d-26c4-4ca2-ae43-3d35ca1a1bc7
 {"error":{"code":"RATE_LIMITED","message":"Too many requests. Please try again later.",
  "request_id":"81620c7d-..."}}
 
-{"path":"/api/v1/chat/messages/…","limit":"30/60.0s","event":"rate_limit_hit",
+{"path":"/api/v1/chat/messages/â€¦","limit":"30/60.0s","event":"rate_limit_hit",
  "request_id":"81620c7d-...","level":"warning"}
 rate_limit_blocked_total{scope="/api/v1/chat/messages/"} 3.0
 ```
@@ -309,14 +309,14 @@ rate_limit_blocked_total{scope="/api/v1/chat/messages/"} 3.0
 start serving. Three separate interpreter boots with `APP_ENV=production`:
 
 ```
-DEBUG=true          → Value error, debug must be false in production
-JWT_SECRET_KEY=short → Value error, jwt_secret_key must be a real secret of at least 32 characters in production
-ALLOWED_ORIGINS=["*"] → Value error, allowed_origins must list explicit origins in production
+DEBUG=true          â†’ Value error, debug must be false in production
+JWT_SECRET_KEY=short â†’ Value error, jwt_secret_key must be a real secret of at least 32 characters in production
+ALLOWED_ORIGINS=["*"] â†’ Value error, allowed_origins must list explicit origins in production
 ```
 
 ### 422 on a bad path parameter
 
-Previously masked by authentication (401 for anonymous callers, which is the correct posture — no
+Previously masked by authentication (401 for anonymous callers, which is the correct posture â€” no
 validation detail leaks to an unauthenticated caller). For an authenticated caller the standard
 envelope is returned:
 
@@ -324,7 +324,7 @@ envelope is returned:
 GET /api/v1/chat/conversations/not-a-uuid/messages   (Bearer token)
 422 {"error":{"code":"VALIDATION_ERROR","message":"Request validation failed.",
      "request_id":"d13bf132-...","details":[
-       {"field":"path.conv_id","message":"Input should be a valid UUID …","type":"uuid_parsing"}]}}
+       {"field":"path.conv_id","message":"Input should be a valid UUID â€¦","type":"uuid_parsing"}]}}
 ```
 
 ### Tests
@@ -345,10 +345,10 @@ $ ..\.venv\Scripts\python.exe -m pytest tests/unit tests/tenant_isolation -q --o
 
 | Exit criterion | Result |
 |---|---|
-| p50 <= 4 s, p95 <= 8 s | pass — p50 924 ms, p95 1262 ms (was 1088 / 3545) |
-| Relevance gate on **both** retrieval branches | pass — reranked and fusion-only paths both gated; live irrelevant question returns 0 citations |
-| Index usability | pass — `EXPLAIN` at 8 004 rows: ivfflat index scan 0.203 ms vs 12.6 ms seq-scan+sort; keyword branch uses `ix_chunks_content_tsv` (GIN) |
-| No duplicate-verdict 500 | pass — feedback is now an upsert (P1-L21, found in the log during this gate) |
+| p50 <= 4 s, p95 <= 8 s | pass â€” p50 924 ms, p95 1262 ms (was 1088 / 3545) |
+| Relevance gate on **both** retrieval branches | pass â€” reranked and fusion-only paths both gated; live irrelevant question returns 0 citations |
+| Index usability | pass â€” `EXPLAIN` at 8 004 rows: ivfflat index scan 0.203 ms vs 12.6 ms seq-scan+sort; keyword branch uses `ix_chunks_content_tsv` (GIN) |
+| No duplicate-verdict 500 | pass â€” feedback is now an upsert (P1-L21, found in the log during this gate) |
 
 ### 1. Latency, before and after
 
@@ -382,7 +382,7 @@ fusion              -         0.0 ms
 `vector_search` rising from 7.7 to 21.9 ms is expected and correct: `ivfflat.probes` is now 10
 instead of pgvector's default 1, so the query visits ten lists instead of one. On this 4-chunk
 database the planner ignores the index entirely (a seq scan is cheaper), so the live number is
-dominated by planner noise — the index evidence is the 8 004-row `EXPLAIN` below, not this row.
+dominated by planner noise â€” the index evidence is the 8 004-row `EXPLAIN` below, not this row.
 
 ### 2. Index usability at a realistic corpus size
 
@@ -391,12 +391,12 @@ The live database holds four chunks, so the planner would seq-scan regardless of
 (unit-norm vectors clustered around 100 topic centres) inside a transaction, `ANALYZE`s, runs
 `EXPLAIN (ANALYZE, BUFFERS)`, and rolls back. Uniform-random vectors were deliberately not used:
 in 384 dimensions every distance to uniform noise is ~1.0, k-means produces meaningless lists, and
-the index returns nothing — a property of the synthetic data that would have looked like a query
+the index returns nothing â€” a property of the synthetic data that would have looked like a query
 bug.
 
 ```
 OLD  ORDER BY 1 - (embedding <=> v) DESC
-  ->  Sort  (Sort Key: (('1'::double precision - (c.embedding <=> '…'::vector)))
+  ->  Sort  (Sort Key: (('1'::double precision - (c.embedding <=> 'â€¦'::vector)))
         Sort Method: top-N heapsort
   ->  Bitmap Heap Scan on document_chunks  rows=8004
   Execution Time: 12.577 ms        Buffers: shared hit=4027
@@ -411,8 +411,8 @@ KEYWORD  content_tsv @@ plainto_tsquery('english', :q)
   Execution Time: 10.744 ms
 ```
 
-`ORDER BY 1 - distance DESC` cannot be served by a `vector_cosine_ops` index — it is an ordering
-over a *derived* expression — so it always sorted the whole tenant corpus. Ordering by the distance
+`ORDER BY 1 - distance DESC` cannot be served by a `vector_cosine_ops` index â€” it is an ordering
+over a *derived* expression â€” so it always sorted the whole tenant corpus. Ordering by the distance
 expression itself is index-usable and mathematically identical.
 
 Recall at 8 004 rows, exact scan as ground truth:
@@ -424,8 +424,8 @@ ivfflat.probes=100: nearest neighbour found=True, recall@12=12/12
 ```
 
 `recall@12` is a weak metric on this corpus and is reported only for completeness: the exact 2nd
-to 12th neighbours sit at 0.8164 / 0.8163 / … across 8 000 points, so any 12 of them are equally
-valid near-ties. What matters — the true nearest neighbour — is found at every setting, and
+to 12th neighbours sit at 0.8164 / 0.8163 / â€¦ across 8 000 points, so any 12 of them are equally
+valid near-ties. What matters â€” the true nearest neighbour â€” is found at every setting, and
 `probes=100` (exhaustive) reproduces the exact result set.
 
 ### 3. The relevance gate
@@ -442,7 +442,7 @@ own scale instead of one shared number:
 Measured on the real corpus: a relevant question scored **0.999** through the reranker and an
 unrelated one **0.00003**; a relevant `ts_rank_cd` was **0.1**; an unrelated question's best vector
 similarity was **0.387**, i.e. *above* the 0.3 similarity floor. That last number is why the
-similarity gate alone never removed noise once the reranker was enabled — the reranked branch
+similarity gate alone never removed noise once the reranker was enabled â€” the reranked branch
 returned every passage unconditionally.
 
 Live result, same question set, after the fix:
@@ -479,7 +479,7 @@ some local tooling) must not receive it.
 
 ```
 POST /api/v1/chat/messages/{id}/feedback   (same message, same user, 2nd time)
-500 {"error":{"code":"INTERNAL_ERROR",…}}
+500 {"error":{"code":"INTERNAL_ERROR",â€¦}}
 asyncpg.exceptions.UniqueViolationError: duplicate key value violates unique constraint
     "uq_feedback_message_user"
 ```
@@ -509,9 +509,9 @@ pytest tests/unit tests/tenant_isolation   98 passed
 
 ---
 
-# G2.1 — CI blocking on lint, types, migrations, tests and build
+# G2.1 â€” CI blocking on lint, types, migrations, tests and build
 
-**Date:** 2026-11-18 · **Status:** pass (local) · **Remote run:** pending first push
+**Date:** 2026-11-18 Â· **Status:** pass (local) Â· **Remote run:** pending first push
 
 ## What was missing
 
@@ -537,9 +537,9 @@ the build*, so the checks themselves had to be green before the workflow could b
 Lint fixes in the same pass: `token_type="bearer"  # noqa: S106`; `InvalidFileTypeError` /
 `FileTooLargeError` renames; `ClassVar[set[str]]` for the probe skip list; `contextlib.suppress`
 in `telemetry.stage_span`; `defusedxml.ElementTree` for OOXML (untrusted archive); unicode-escape
-citation table; `raise … from exc`; `[*shared_processors, …]` instead of `+`; a real
+citation table; `raise â€¦ from exc`; `[*shared_processors, â€¦]` instead of `+`; a real
 `_log.exception` where `documents.py` swallowed a failure; `settings_import() -> Settings`
-instead of a bare helper. `B008` is ignored in `pyproject.toml` — it is FastAPI's DI idiom, not a
+instead of a bare helper. `B008` is ignored in `pyproject.toml` â€” it is FastAPI's DI idiom, not a
 defect.
 
 ## Results
@@ -556,13 +556,13 @@ frontend$ npm.cmd run type-check          clean (tsc --noEmit)
 
 ## Workflow added
 
-`.github/workflows/ci.yml` — two blocking jobs:
+`.github/workflows/ci.yml` â€” two blocking jobs:
 
-- **backend** — `pgvector/pgvector:pg16` + `redis:7-alpine` services; CPU-only torch installed
+- **backend** â€” `pgvector/pgvector:pg16` + `redis:7-alpine` services; CPU-only torch installed
   first so pip does not pull the multi-gigabyte CUDA wheel; `ruff check`, `ruff format --check`,
   `mypy`, `alembic upgrade head`, `alembic check` (catches the model/migration drift that hid
   P0-4), unit + tenant-isolation tests, integration tests.
-- **frontend** — Node 20, `npm ci --legacy-peer-deps`, `npm run type-check`, `npm run build`.
+- **frontend** â€” Node 20, `npm ci --legacy-peer-deps`, `npm run type-check`, `npm run build`.
 
 `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` are set because unit tests mock the providers and
 the integration suite never runs ingestion, so no model weights are downloaded on CI.
@@ -573,33 +573,33 @@ of this gate, so the remote half stays open until then.
 
 ---
 
-# G2.2 — Frontend consolidation, error surfaces, honest mutations, live status
+# G2.2 â€” Frontend consolidation, error surfaces, honest mutations, live status
 
-**Date:** 2026-11-18 · **Status:** pass (local) · **CI remote run:** pending first push
+**Date:** 2026-11-18 Â· **Status:** pass (local) Â· **CI remote run:** pending first push
 
 ## What was done
 
-1. **One document table** — new `features/documents/DocumentTable.tsx` with
+1. **One document table** â€” new `features/documents/DocumentTable.tsx` with
    `variant="library" | "admin"`. The library page (`app/(protected)/documents/page.tsx`)
    became a thin read-only shell; the admin tab renders the same component with the
    upload / search / status-filter / delete / reindex controls. One row renderer, one
    status map, one detail modal, one pagination control. Dead `DocumentsTab.tsx` and
    `AnalyticsTab.tsx` deleted (P1-U14/U15/U16).
-2. **Route boundaries** — added `app/error.tsx`, `app/global-error.tsx`, `app/not-found.tsx`
+2. **Route boundaries** â€” added `app/error.tsx`, `app/global-error.tsx`, `app/not-found.tsx`
    and `app/loading.tsx` (P0-8). A render error now gets a retry/leave surface instead of a
    white screen, unknown routes get the branded 404, and navigations get a loading fallback.
-3. **Error/empty conflation** — the document table keeps `error` apart from `empty` and renders
+3. **Error/empty conflation** â€” the document table keeps `error` apart from `empty` and renders
    an error panel with a Retry button; chat keeps `messagesError` with a Retry that re-runs
    the fetch via a reload key instead of clearing the thread (P1-U5).
-4. **Honest mutations** — new `components/ui/Toast.tsx` (`ToastProvider` / `useToast`, success |
+4. **Honest mutations** â€” new `components/ui/Toast.tsx` (`ToastProvider` / `useToast`, success |
    error | info) mounted in the root layout; admin document mutations (upload, delete,
    reindex, feedback decisions, access-request decisions) and conversation mutations
    (rename, delete, new conversation) toast on failure and only mutate local state after the
    server confirmed (P1-U8).
-5. **Live system status** — the settings "System status" card now polls
+5. **Live system status** â€” the settings "System status" card now polls
    `GET /api/v1/health/ready` (public, parsed directly because 503 is a valid body) and maps
    `ready | degraded | offline` to the UI (P1-U18).
-6. **Member-safe upload entry** — the chat attach menu only offers "Upload documents" to org
+6. **Member-safe upload entry** â€” the chat attach menu only offers "Upload documents" to org
    admins / platform admins; members get "Browse knowledge base" only (P1-U17).
 
 ## Results
@@ -610,8 +610,8 @@ frontend$ npm.cmd run build                Compiled successfully; 13 routes, 87.
 frontend$ $env:PLAYWRIGHT_CHANNEL="chrome"; npm.cmd test
                                          15 passed (2.0m)   [tests/e2e.spec.ts]
 frontend$ node .verify-ui.mjs             (throwaway gate script, since deleted) 15/15 passed
-                                          library rows=1 · admin rows=1 · settings live "Healthy"
-                                          · custom 404 rendered · no page errors · no console errors
+                                          library rows=1 Â· admin rows=1 Â· settings live "Healthy"
+                                          Â· custom 404 rendered Â· no page errors Â· no console errors
 ```
 
 E2E fix in passing: `playwright.config.ts` pointed at port **3001** while `npm run dev` serves
@@ -620,15 +620,67 @@ E2E fix in passing: `playwright.config.ts` pointed at port **3001** while `npm r
 
 ---
 
-## Open items for the next gate (G3.1 — deploy / scale)
+## Open items for the next gate (G3.1 â€” deploy / scale)
 
-1. **Remote CI run** — the G2.1 workflow has not seen a real push yet; after this push it must
+1. **Remote CI run** â€” the G2.1 workflow has not seen a real push yet; after this push it must
    go green (backend lint/type/migrate/tests, frontend type-check/build).
-2. **P1-U10** — `window.confirm` / `window.prompt` unification onto the new toast/modal system
+2. **P1-U10** â€” `window.confirm` / `window.prompt` unification onto the new toast/modal system
    is still open (the toast now *reports* these failures; the native dialogs themselves remain).
-3. **P1-U9** — conversation-row accessibility (screen-reader labels on the chat sidebar rows) is
+3. **P1-U9** â€” conversation-row accessibility (screen-reader labels on the chat sidebar rows) is
    still open.
-4. **G3.1** — production image build/run, separate migration job, backup restore rehearsal,
-   load test at 3× peak.
+4. **G3.1** â€” production image build/run, separate migration job, backup restore rehearsal,
+
+---
+
+# G3.x — Deploy / scale: staging rehearsal evidence (local)
+
+**Date:** 2026-11-19 · **Status:** partial (rehearsal evidence collected, image build/run and
+load test pending — Docker is not installed on this host)
+
+## Migration job, separate from app start — **PASS**
+
+A migration run against an empty database, exactly the way the production migration job would:
+
+```text
+$ psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE fikra_migration_rehearsal"
+$ DATABASE_URL=postgresql+asyncpg://postgres:root@127.0.0.1:5432/fikra_migration_rehearsal \
+    ..\.venv\Scripts\alembic.exe upgrade head
+INFO  ... Running upgrade  -> 0001, Initial schema
+INFO  ... Running upgrade 0001 -> 0002, Feedback review workflow, notifications, and organization-admin requests.
+INFO  ... Running upgrade 0002 -> 0003, Per-user favourite questions and chat/query hot-path indexes.
+INFO  ... Running upgrade 0003 -> 0004, Align index/constraint names with the ORM metadata and close the schema drift.
+INFO  ... Context impl PostgresqlImpl.
+INFO  ... Will assume transactional DDL.
+$ DATABASE_URL=... ..\.venv\Scripts\alembic.exe check
+INFO  ... UserWarning: Computed default on document_chunks.content_tsv cannot be modified
+INFO  ...
+No new upgrade operations detected.
+```
+
+The full chain `0001 -> 0004` runs clean from zero and `alembic check` reports no drift, on a real
+PostgreSQL 18 + pgvector server. The same command shape is what the CI migration step runs
+(`alembic upgrade head` then `alembic check`).
+
+## Backup restore rehearsal — **PASS**
+
+```text
+$ pg_dump -h 127.0.0.1 -U postgres -d rag-prod -Fc -f docs/operations/backup_fikra_rag_prod.dump   # 150,123 bytes
+$ psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE fikra_restore_rehearsal"
+$ pg_restore -h 127.0.0.1 -U postgres -d fikra_restore_rehearsal docs/operations/backup_fikra_rag_prod.dump
+$ DATABASE_URL=postgresql+asyncpg://postgres:root@127.0.0.1:5432/fikra_restore_rehearsal ..\.venv\Scripts\alembic.exe current
+0004 (head)
+```
+
+The restored database reports `0004 (head)` and needs no further migration — the live dump and
+the migration chain agree at the current head.
+
+## Outstanding for G3.1 / G3.2 (host without Docker)
+
+| Exit criterion | Local status |
+|---|---|
+| Production image builds and runs | **blocked** — Docker CLI is not installed on this host (`docker` → command not found). The backend Docker image content is unchanged from the pre-existing compose definition; it still needs a Docker-capable host or a CI-built image. |
+| Migration job separate from app start | **pass** (local, above) — migration step verified on a fresh DB; CI runs the same two commands. |
+| Backup restore rehearsed | **pass** (local, above) — dump → restore → `alembic current` = head. |
+| Load test at 3× peak inside SLO | **pending** — no load generator (k6/locust/gatling) installed; first load test should target `POST /api/v1/chat/ask` with `p50 ≤ 4 s` / `p95 ≤ 8 s` SLO at 3× the peak measured in G1.4. |
 
 

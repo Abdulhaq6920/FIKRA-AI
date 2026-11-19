@@ -147,3 +147,190 @@ jobs:
           # the build deterministic instead of falling back to localhost.
           BACKEND_URL: http://localhost:8000
           NEXT_TELEMETRY_DISABLED: "1"
+
+  docker:
+    name: docker — build production images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend, frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log Docker version
+        run: docker version && docker buildx version
+
+      - name: Build backend image
+        # Verifies the production Dockerfile (system deps, Python version,
+        # package install) actually builds. No push: credentials are only added
+        # when a release pipeline is wired up.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          load: true
+          tags: fikra-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build worker image
+        # Same Dockerfile as backend, different runtime command. Building it
+        # separately confirms the image is usable for the Celery worker role.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          load: true
+          tags: fikra-worker:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          load: true
+          tags: fikra-frontend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify images exist
+        run: |
+          docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "fikra-(backend|worker|frontend):ci"
+
+  frontend-e2e:
+    name: frontend — Playwright E2E smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [frontend]
+    # Runs against a live backend + frontend so the smoke suite exercises the
+    # real login → chat → navigation path. Degrades gracefully without model
+    # weights (HF_HUB_OFFLINE=1); assertions are intentionally lenient.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fikra_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fikra_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/fikra_e2e
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: e2e-secret-key-not-for-production
+      JWT_SECRET_KEY: e2e-jwt-key-not-for-production
+      GROQ_API_KEY: e2e-not-a-real-key
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      BACKEND_URL: http://localhost:8000
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps (postgresql-client for psql)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client libmagic1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install CPU-only torch
+        run: pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install backend
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Create E2E database + pgvector extension
+        run: |
+          psql -U postgres -h localhost -c "CREATE DATABASE fikra_e2e;" 2>/dev/null || true
+          PGPASSWORD=postgres psql -U postgres -h localhost -d fikra_e2e -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Run migrations
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Seed initial org + admin user (admin@fikra.ai / Admin1234!)
+        run: python scripts/create_initial_org.py
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install chromium
+
+      - name: Start backend (uvicorn)
+        working-directory: backend
+        run: |
+          nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 &
+          disown
+
+      - name: Wait for backend to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/v1/health/live > /dev/null 2>&1; then
+              echo "Backend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not become healthy; tailing log:" >&2
+          tail -50 /tmp/backend.log >&2
+          exit 1
+
+      - name: Start frontend dev server
+        working-directory: frontend
+        run: |
+          nohup npm run dev > /tmp/frontend.log 2>&1 &
+          disown
+
+      - name: Wait for frontend to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/ > /dev/null 2>&1; then
+              echo "Frontend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend did not become healthy; tailing log:" >&2
+          tail -50 /tmp/frontend.log >&2
+          exit 1
+
+      - name: Run Playwright E2E smoke tests
+        working-directory: frontend
+        run: npx playwright test
