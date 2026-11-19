@@ -355,7 +355,10 @@ export function AppShell({
           </div>
 
           {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+          <div
+            role="list"
+            className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"
+          >
             {conversations.length === 0 ? (
               <p className="text-xs text-surface-600 text-center py-4 px-2">
                 No conversations yet
@@ -740,6 +743,8 @@ function ConversationItem({
 
   return (
     <div
+      role="listitem"
+      aria-current={active ? "true" : undefined}
       onClick={onSelect}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}

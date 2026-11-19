@@ -28,6 +28,29 @@ export class ApiRequestError extends Error {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Session expiry
+// ---------------------------------------------------------------------------
+//
+// A 401 that survives a token refresh means the session is gone. The caller
+// owns what happens next (the auth provider owns the redirect), so a hard
+// `window.location.href` navigation is only a fallback. A hard navigation
+// discards in-flight requests and SSE streams; routing through the handler
+// lets the app settle in place.
+
+type SessionExpiredHandler = () => void;
+let sessionExpiredHandler: SessionExpiredHandler | null = null;
+
+/** Register where a session expiry should send the user (the auth flow owns it). */
+export function registerSessionExpiredHandler(handler: SessionExpiredHandler): void {
+  sessionExpiredHandler = handler;
+}
+
+/** Fire the registered handler (no-op when none is registered). */
+export function notifySessionExpired(): void {
+  sessionExpiredHandler?.();
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -59,10 +82,13 @@ async function request<T>(
       // starting another refresh cycle.
       return request<T>(method, path, body, headers, true);
     }
-    // Refresh failed — redirect to login, unless we are already on a public
-    // auth page (the mount-time /auth/me probe 401s for logged-out visitors
-    // on every public page and must not hijack those routes, e.g. it would
-    // clobber the /register → /login?mode=signup hand-off).
+    // Refresh failed — hand off to the auth layer (route through the handler
+    // when one is registered so in-flight streams survive; only fall back to a
+    // hard navigation on pages that never mounted the handler).
+    if (sessionExpiredHandler) {
+      sessionExpiredHandler();
+      return Promise.reject(new ApiRequestError(401, "SESSION_EXPIRED", "Session expired", ""));
+    }
     const PUBLIC_AUTH_PATHS = ["/login", "/register", "/forgot-password", "/reset-password"];
     if (
       typeof window !== "undefined" &&

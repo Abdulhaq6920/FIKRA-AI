@@ -38,6 +38,7 @@ import {
 } from "@/lib/api/analytics";
 import { documentsApi } from "@/lib/api/documents";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/ActionMenu";
+import { Dialog } from "@/components/ui/Dialog";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatBytes, relativeTime } from "@/lib/utils/format";
@@ -133,6 +134,7 @@ export function DocumentTable({
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DocumentRow | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -241,7 +243,13 @@ export function DocumentTable({
   };
 
   const handleDelete = async (row: DocumentRow) => {
-    if (!window.confirm(`Delete “${row.title}”? This cannot be undone.`)) return;
+    setPendingDelete(row);
+  };
+
+  const confirmDelete = async () => {
+    const row = pendingDelete;
+    if (!row) return;
+    setPendingDelete(null);
     setBusyId(row.id);
     try {
       await documentsApi.delete(row.id);
@@ -391,11 +399,45 @@ export function DocumentTable({
     </Modal>
   );
 
+  const deleteDialog =
+    pendingDelete ? (
+      <Dialog
+        open
+        title="Delete document?"
+        description={
+          <>
+            <span className="font-medium text-surface-200">“{pendingDelete.title}”</span> and its
+            chunks will be permanently removed. This cannot be undone.
+          </>
+        }
+        onClose={() => setPendingDelete(null)}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setPendingDelete(null)}
+              className="rounded-lg border border-surface-700 px-3.5 py-2 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmDelete()}
+              className="rounded-lg bg-red-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400"
+            >
+              Delete
+            </button>
+          </>
+        }
+      />
+    ) : null;
+
   if (!isAdmin) {
     return (
       <>
         {list}
         {detailOverlay}
+        {deleteDialog}
       </>
     );
   }
@@ -503,6 +545,7 @@ export function DocumentTable({
         {list}
       </Section>
       {detailOverlay}
+      {deleteDialog}
     </>
   );
 }

@@ -69,6 +69,7 @@ export default function LoginPage() {
     }
     // Legacy "?registered=1" entry point: the success banner is now replaced
     // by autofilling the verified email in the sign-in form.
+    if (params.get("session_expired")) setSessionExpired(true);
   }, []);
 
   const switchMode = useCallback((next: AuthMode) => {
@@ -189,6 +190,7 @@ function LoginForm({
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const { defaultOrgId, isLoading: orgsLoading } = useSignupOptions();
   const { flashMood, holdMood } = useRobotStage();
 
@@ -525,6 +527,11 @@ function SignupForm({
       {/* Hidden workspace ID resolved from the public signup-options endpoint */}
       <input type="hidden" {...register("organization_id")} />
 
+      {sessionExpired && !serverError && (
+        <div className="mt-5">
+          <AuthNotice tone="success">Your session has expired. Please sign in again.</AuthNotice>
+        </div>
+      )}
       {serverError && (
         <div className="mt-5">
           <AuthNotice>{serverError}</AuthNotice>

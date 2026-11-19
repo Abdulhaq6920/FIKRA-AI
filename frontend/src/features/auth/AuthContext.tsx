@@ -21,6 +21,7 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api/auth";
+import { registerSessionExpiredHandler } from "@/lib/api/client";
 import type { User, LoginRequest } from "@/types";
 
 interface AuthContextValue {
@@ -60,6 +61,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh().finally(() => setIsLoading(false));
   }, [refresh]);
+
+  // A refresh that fails means the session is gone. Route through the handler
+  // the API layer registered so we never tear down in-flight requests/streams
+  // with a hard navigation.
+  useEffect(() => {
+    registerSessionExpiredHandler(() => {
+      setUser(null);
+      router.replace("/login?session_expired=1");
+    });
+  }, [router]);
 
   const login = useCallback(
     async (data: LoginRequest, options?: LoginOptions) => {

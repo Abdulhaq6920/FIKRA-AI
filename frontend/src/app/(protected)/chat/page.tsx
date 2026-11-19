@@ -117,6 +117,9 @@ export default function ChatPage() {
   // Question that produced the last failed answer, so an error offers a
   // one-click retry instead of forcing the user to retype it.
   const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
+  // Feedback comment captured through the in-app dialog (replaces window.prompt).
+  const [feedbackDialog, setFeedbackDialog] = useState<{ messageId: string; type: "thumbs_down" } | null>(null);
+  const [feedbackComment, setFeedbackComment] = useState("");
   // Optimistic bubble from the failed attempt — removed when retrying so the
   // question is not shown twice while the replacement request runs.
   const failedTempIdRef = useRef<string | null>(null);
@@ -731,26 +734,36 @@ export default function ChatPage() {
 
   const handleFeedback = useCallback(
     async (messageId: string, type: "thumbs_up" | "thumbs_down") => {
-      const comment =
-        type === "thumbs_down"
-          ? window.prompt("What should we improve about this answer?")?.trim()
-          : undefined;
-      if (type === "thumbs_down" && !comment) return;
+      if (type === "thumbs_down") {
+        // Ask for the improvement note in-app instead of a native prompt so
+        // the dialog is focusable, Esc-able and announced.
+        setFeedbackComment("");
+        setFeedbackDialog({ messageId, type });
+        return;
+      }
       try {
-        await chatApi.submitFeedback(messageId, type, comment);
-        showToast(
-          type === "thumbs_up"
-            ? "Thanks — your rating was recorded."
-            : "Thanks — your feedback was recorded."
-        );
+        await chatApi.submitFeedback(messageId, type, undefined);
+        showToast("Thanks — your rating was recorded.");
       } catch (cause) {
-        // Silence here looked like a successful rating: nothing changed on
-        // screen and the user assumed it had been saved.
         showToast(errorText(cause, "Could not record your feedback."));
       }
     },
     [showToast]
   );
+
+  const submitFeedbackDialog = async () => {
+    const dialog = feedbackDialog;
+    if (!dialog) return;
+    const comment = feedbackComment.trim();
+    setFeedbackDialog(null);
+    if (!comment) return;
+    try {
+      await chatApi.submitFeedback(dialog.messageId, dialog.type, comment);
+      showToast("Thanks — your feedback was recorded.");
+    } catch (cause) {
+      showToast(errorText(cause, "Could not record your feedback."));
+    }
+  };
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-surface-950">
@@ -1093,6 +1106,44 @@ export default function ChatPage() {
           )}
         </AnimatePresence>
       </div>
+
+      {feedbackDialog && (
+        <Dialog
+          open
+          title="What should we improve?"
+          description="Your written feedback helps the team tune the answers. It stays private to your organization."
+          onClose={() => setFeedbackDialog(null)}
+          wide
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setFeedbackDialog(null)}
+                className="rounded-lg border border-surface-700 px-3.5 py-2 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitFeedbackDialog()}
+                disabled={!feedbackComment.trim()}
+                className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50"
+              >
+                Submit
+              </button>
+            </>
+          }
+        >
+          <textarea
+            value={feedbackComment}
+            onChange={(event) => setFeedbackComment(event.target.value)}
+            placeholder="What should we improve about this answer?"
+            rows={3}
+            aria-label="Feedback comment"
+            className="w-full rounded-lg border border-surface-700 bg-surface-800 px-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 outline-none focus:ring-1 focus:ring-brand-500"
+          />
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -1577,10 +1628,47 @@ function EmptyState({
         </p>
       </div>
     </div>
+
+      {feedbackDialog && (
+        <Dialog
+          open
+          title="What should we improve?"
+          description="Your written feedback helps the team tune the answers. It stays private to your organization."
+          onClose={() => setFeedbackDialog(null)}
+          wide
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setFeedbackDialog(null)}
+                className="rounded-lg border border-surface-700 px-3.5 py-2 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitFeedbackDialog()}
+                disabled={!feedbackComment.trim()}
+                className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50"
+              >
+                Submit
+              </button>
+            </>
+          }
+        >
+          <textarea
+            value={feedbackComment}
+            onChange={(event) => setFeedbackComment(event.target.value)}
+            placeholder="What should we improve about this answer?"
+            rows={3}
+            aria-label="Feedback comment"
+            className="w-full rounded-lg border border-surface-700 bg-surface-800 px-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 outline-none focus:ring-1 focus:ring-brand-500"
+          />
+        </Dialog>
+      )}
+    </div>
   );
 }
-
-function MessagesSkeleton() {
   return (
     <div className="space-y-4">
       {[1, 2].map((i) => (
