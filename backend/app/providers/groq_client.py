@@ -196,7 +196,7 @@ class GroqClient:
                     continue
 
                 latency_ms = int((time.perf_counter() - start) * 1000)
-                usage: Mapping[str, Any] = response.usage_metadata or {}
+                usage: Mapping[str, Any] = getattr(response, "usage_metadata", {}) or {}
                 result = GenerationResult(
                     content=str(response.content or ""),
                     finish_reason=response.response_metadata.get("finish_reason", "stop"),
