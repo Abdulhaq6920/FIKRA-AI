@@ -8,13 +8,13 @@ import pytest
 
 from app.core.config import settings
 from app.services import retrieval_service
+from app.services.rag_service import Citation, _build_context, _extract_citations
 from app.services.retrieval_service import (
     RetrievedPassage,
     _passes_relevance_gate,
     _reciprocal_rank_fusion,
     retrieve,
 )
-from app.services.rag_service import Citation, _extract_citations, _build_context
 
 
 def _make_passage(i: int, score: float = 0.5) -> RetrievedPassage:

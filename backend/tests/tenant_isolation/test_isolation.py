@@ -13,7 +13,7 @@ import uuid
 
 import pytest
 
-from app.services.retrieval_service import _reciprocal_rank_fusion, RetrievedPassage
+from app.services.retrieval_service import RetrievedPassage, _reciprocal_rank_fusion
 
 
 class TestTenantIsolationLogic:

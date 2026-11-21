@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.exceptions import InvalidTokenError, TokenExpiredError
 from app.core.security import (
     create_access_token,
     create_password_reset_token,
@@ -11,7 +12,6 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.core.exceptions import InvalidTokenError, TokenExpiredError
 
 
 class TestPasswordHashing:

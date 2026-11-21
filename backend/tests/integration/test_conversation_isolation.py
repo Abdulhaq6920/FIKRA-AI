@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.db.models.conversation import Conversation
 from app.db.models.organization import Organization, OrganizationStatus
-from app.db.models.user import OrgRole, OrganizationMembership, User, UserStatus
+from app.db.models.user import OrganizationMembership, OrgRole, User, UserStatus
 
 ORG_A = uuid.UUID("cccccccc-0000-0000-0000-000000000001")
 ORG_B = uuid.UUID("cccccccc-0000-0000-0000-000000000002")

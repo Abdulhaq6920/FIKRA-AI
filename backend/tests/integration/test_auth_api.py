@@ -23,8 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
 from app.db.models.organization import Organization, OrganizationStatus
-from app.db.models.user import OrgRole, OrganizationMembership, User, UserStatus
-
+from app.db.models.user import OrganizationMembership, OrgRole, User, UserStatus
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────
 
