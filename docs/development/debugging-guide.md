@@ -55,10 +55,11 @@ uv pip install sentence-transformers torch --index-url https://download.pytorch.
 
 The app starts without it (lazy import). The error only appears when embeddings are actually called.
 
-### `No module named 'pgvector'`
+### `No module named 'qdrant_client'`
 
 ```powershell
-uv pip install pgvector
+cd backend
+uv pip install qdrant-client
 ```
 
 ### Database connection refused

@@ -1,7 +1,7 @@
 # Changing an Embedding Model
 
 When you switch to a different embedding model, existing vectors become incompatible.
-All documents must be re-embedded.
+All documents must be re-embedded and the Qdrant collection rebuilt.
 
 ## When to change
 
@@ -23,45 +23,25 @@ EMBEDDING_DIMENSIONS=1024
 **Critical**: `EMBEDDING_DIMENSIONS` must match the model's actual output size.
 BGE-small-en = 384, BGE-m3 = 1024, all-MiniLM-L6-v2 = 384.
 
-### 2. Update the Alembic migration
+No Alembic migration is needed — PostgreSQL does not store vectors anymore.
 
-The `document_chunks.embedding` column is typed as `Vector(384)`.
-You need a migration to change the dimension:
+### 2. Recreate the Qdrant collection
+
+The collection's vector size is fixed at creation time. Delete it so application
+startup recreates it with the new dimension:
 
 ```powershell
 cd backend
-alembic revision -m "change_embedding_dimensions_to_1024"
+..\.venv\Scripts\python.exe -c "import asyncio; from app.providers.vector_store import drop_collection; asyncio.run(drop_collection())"
 ```
 
-Edit the generated migration:
+(Or use the Qdrant Cloud console / `qdrant-client` directly.)
 
-```python
-def upgrade():
-    op.execute("DROP INDEX IF EXISTS ix_chunks_embedding_ivfflat")
-    op.alter_column(
-        "document_chunks",
-        "embedding",
-        type_=Vector(1024),
-        existing_nullable=True,
-    )
-    op.execute("""
-        CREATE INDEX ix_chunks_embedding_ivfflat
-        ON document_chunks USING ivfflat (embedding vector_cosine_ops)
-        WITH (lists = 100)
-    """)
+Restart the API and the Celery worker: both call `ensure_collection()` at
+startup, which recreates the collection and its `organization_id` /
+`document_id` payload indexes.
 
-def downgrade():
-    # reverse the above
-    ...
-```
-
-### 3. Run the migration
-
-```powershell
-alembic upgrade head
-```
-
-### 4. Mark all documents for reindexing
+### 3. Mark all documents for reindexing
 
 ```sql
 UPDATE documents
@@ -69,18 +49,20 @@ SET status = 'reindexing'
 WHERE is_active = true AND status = 'ready';
 ```
 
-Or use the admin API to reindex each document:
+Or reindex each document through the admin API:
+
 ```
 POST /api/v1/documents/{id}/reindex
 ```
 
-### 5. Re-run the Celery worker
+### 4. Run the Celery worker
 
-The worker will pick up reindexing tasks and re-embed all chunks with the new model.
+The worker re-embeds every chunk and replaces the old Qdrant points for each
+document (the point ID is the chunk UUID).
 
-### 6. Verify
+### 5. Verify
 
-Check that `documents.embedding_model` and `embedding_model_version` reflect the new model.
+Check that `documents.embedding_model` and `embedding_model_version` reflect the new model:
 
 ```sql
 SELECT DISTINCT embedding_model, embedding_model_version
@@ -91,6 +73,9 @@ All documents should show the new model name and version hash.
 
 ## Warnings
 
-- **Never mix vectors from different models** in the same index. Cosine distance between incompatible vectors produces meaningless results.
-- The IVFFlat index must be dropped before the column type changes (PostgreSQL constraint).
-- Re-embedding takes ~1 second per ~10 chunks on CPU. For 10,000 documents with 50 chunks each, budget ~14 hours on a single CPU worker.
+- **Never mix vectors from different models** in the same collection. Cosine
+  distance between incompatible vectors produces meaningless results.
+- Deleting the collection removes every tenant's vectors; reindex before serving
+  chat traffic again.
+- Re-embedding takes ~1 second per ~10 chunks on CPU. For 10,000 documents with
+  50 chunks each, budget ~14 hours on a single CPU worker.

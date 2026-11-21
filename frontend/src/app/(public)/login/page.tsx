@@ -52,6 +52,8 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("login");
   /** Success notice shown right after an in-page account creation. */
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  /** Set when an expired session redirected here, so the login form can say so. */
+  const [sessionExpired, setSessionExpired] = useState(false);
   /** Mirror of `mode` so callbacks can read it without stale updates. */
   const modeRef = useRef<AuthMode>("login");
 
@@ -140,6 +142,7 @@ export default function LoginPage() {
               >
                 <LoginForm
                   registeredEmail={registeredEmail}
+                  sessionExpired={sessionExpired}
                   onClearRegistered={() => setRegisteredEmail(null)}
                   onSwitchToSignUp={() => switchMode("signup")}
                 />
@@ -180,17 +183,18 @@ const fadeVariants = {
 
 function LoginForm({
   registeredEmail,
+  sessionExpired,
   onClearRegistered,
   onSwitchToSignUp,
 }: {
   registeredEmail: string | null;
+  sessionExpired: boolean;
   onClearRegistered: () => void;
   onSwitchToSignUp: () => void;
 }) {
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [sessionExpired, setSessionExpired] = useState(false);
   const { defaultOrgId, isLoading: orgsLoading } = useSignupOptions();
   const { flashMood, holdMood } = useRobotStage();
 
@@ -323,6 +327,11 @@ function LoginForm({
         </Link>
       </div>
 
+      {sessionExpired && !serverError && (
+        <div className="mt-5">
+          <AuthNotice tone="success">Your session has expired. Please sign in again.</AuthNotice>
+        </div>
+      )}
       {serverError && (
         <div className="mt-5">
           <AuthNotice>{serverError}</AuthNotice>
@@ -527,11 +536,6 @@ function SignupForm({
       {/* Hidden workspace ID resolved from the public signup-options endpoint */}
       <input type="hidden" {...register("organization_id")} />
 
-      {sessionExpired && !serverError && (
-        <div className="mt-5">
-          <AuthNotice tone="success">Your session has expired. Please sign in again.</AuthNotice>
-        </div>
-      )}
       {serverError && (
         <div className="mt-5">
           <AuthNotice>{serverError}</AuthNotice>

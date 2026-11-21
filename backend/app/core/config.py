@@ -128,6 +128,15 @@ class Settings(BaseSettings):
     reranker_enabled: bool = Field(default=True)
 
     # ------------------------------------------------------------------
+    # Vector store (Qdrant)
+    # ------------------------------------------------------------------
+    qdrant_url: str = Field(default="http://localhost:6333")
+    # Cloud deployments require an API key; local Qdrant does not.
+    qdrant_api_key: str = Field(default="")
+    qdrant_collection: str = Field(default="fikra-ai")
+    qdrant_timeout: int = Field(default=30, ge=1)
+
+    # ------------------------------------------------------------------
     # Retrieval
     # ------------------------------------------------------------------
     retrieval_top_k: int = Field(default=20, ge=1, le=100)
@@ -140,10 +149,6 @@ class Settings(BaseSettings):
     # boundary: measured on this corpus, a relevant question scored 0.999 and an
     # unrelated one 0.00003.
     min_rerank_score: float = Field(default=0.5, ge=0.0, le=1.0)
-    # Inverted lists visited by an ivfflat ANN query (pgvector default is 1,
-    # which under-searches the index). 10 of the 100 lists is the usual
-    # recall/latency trade-off for a corpus of this size.
-    vector_index_probes: int = Field(default=10, ge=1, le=1000)
     # Candidate pool passed to fusion/reranking before the prompt is built.
     rag_retrieval_candidates: int = Field(default=12, ge=1, le=100)
 
@@ -248,6 +253,13 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     log_level: str = Field(default="INFO")
     log_format: Literal["json", "console"] = Field(default="json")
+    # Structured logs go to stdout and to a rotating file. LOG_FILE defaults to
+    # backend.log for the API; set LOG_FILE=celery.log for the worker process.
+    log_to_file: bool = Field(default=True)
+    log_dir: str = Field(default="logs")
+    log_file: str = Field(default="backend.log")
+    log_file_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
+    log_file_backup_count: int = Field(default=5, ge=0)
     # SQL echo is a debugging aid, not a property of DEBUG: leaving it tied to
     # `debug` prints every statement in any environment that turns DEBUG on.
     sql_echo: bool = Field(default=False)
@@ -308,9 +320,13 @@ class Settings(BaseSettings):
         Every check here is a misconfiguration that has no safe runtime fallback:
         a weak JWT secret lets anyone mint tokens, DEBUG leaks internals (and
         used to log password-reset tokens), a wildcard origin defeats the
-        cookie-only auth design, and a placeholder database URL silently points
-        the app at the wrong database.
+        cookie-only auth design, a placeholder database URL silently points the
+        app at the wrong database, and an HTTPS Qdrant URL without an API key
+        cannot authenticate.
         """
+        if self.qdrant_url.startswith("https://") and not self.qdrant_api_key:
+            raise ValueError("qdrant_api_key must be set when qdrant_url uses HTTPS")
+
         if self.is_production:
             if self.debug:
                 raise ValueError("debug must be false in production")

@@ -40,7 +40,7 @@ backend/
 │   │   └── models/
 │   │       ├── organization.py  Organization model
 │   │       ├── user.py          User, OrganizationMembership, RefreshSession
-│   │       ├── document.py      Document, DocumentChunk (with pgvector), ProcessingJob
+│   │       ├── document.py      Document, DocumentChunk (relational + FTS), ProcessingJob
 │   │       ├── conversation.py  Conversation, Message, ConversationSummary, Feedback
 │   │       └── audit.py         AuditLog, UsageRecord
 │   ├── schemas/
@@ -55,7 +55,8 @@ backend/
 │   ├── providers/
 │   │   ├── groq_client.py    Groq SDK wrapper — the ONLY Groq import in the codebase
 │   │   ├── embeddings.py     sentence-transformers BGE embedding model
-│   │   └── reranker.py       CrossEncoder BGE reranker model
+│   │   ├── reranker.py       CrossEncoder BGE reranker model
+│   │   └── vector_store.py   Qdrant client, tenant-scoped search/upsert/delete
 │   ├── workers/
 │   │   ├── celery_app.py     Celery app configuration, queues, retry policy
 │   │   └── document_tasks.py ingest_document task: extract → chunk → embed → index
@@ -136,7 +137,7 @@ User types question
     → FastAPI validates JWT cookie → extracts user_id, org_id
       → RAGService.answer(question, conv_id, user_id, org_id)
         → RetrievalService.retrieve(query, org_id)
-          → pgvector search (WHERE org_id=?)
+          → Qdrant search (payload filter org_id=?)
           → FTS search (WHERE org_id=?)
           → RRF fusion → reranking
         → Build prompt with [Source N] blocks

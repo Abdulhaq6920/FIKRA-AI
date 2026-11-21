@@ -8,8 +8,8 @@ GET /api/v1/health/startup  — one-shot startup check (migrations + model warm)
 Contract:
 - ``/live`` never touches the database, Redis or the model. It must stay under a
   few milliseconds so a slow upload cannot make the orchestrator kill the pod.
-- ``/ready`` fails (503) only on **required** dependencies: PostgreSQL and the
-  embedding model (retrieval cannot answer without it). Redis and Celery are
+- ``/ready`` fails (503) only on **required** dependencies: PostgreSQL, Qdrant
+  and the embedding model (retrieval cannot answer without them). Redis and Celery are
   reported as ``degraded`` — the app degrades to inline ingestion by design, so
   taking the instance out of rotation for them would remove capacity needlessly.
 - ``/startup`` reports whether the process is fully initialised: migrations at
@@ -50,7 +50,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """
     Returns 200 when the required dependencies are ready, 503 otherwise.
 
-    Required: PostgreSQL, embedding model loaded.
+    Required: PostgreSQL, Qdrant, embedding model loaded.
     Reported but non-fatal: Redis (degrades to inline ingestion), Celery worker
     (degraded — the app falls back to inline ingestion when a worker is absent).
     """
@@ -63,8 +63,15 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         checks["database"] = f"error: {type(exc).__name__}"
 
     from app.providers.embeddings import is_model_loaded
+    from app.providers.vector_store import ping as ping_qdrant
 
     checks["embedding_model"] = "ok" if is_model_loaded() else "not_loaded"
+
+    try:
+        await ping_qdrant()
+        checks["qdrant"] = "ok"
+    except Exception as exc:
+        checks["qdrant"] = f"error: {type(exc).__name__}"
 
     from app.core.redis import ping_redis
 
@@ -84,7 +91,11 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     except Exception as exc:
         checks["celery"] = f"degraded: {type(exc).__name__}"
 
-    required_ok = checks["database"] == "ok" and checks["embedding_model"] == "ok"
+    required_ok = (
+        checks["database"] == "ok"
+        and checks["qdrant"] == "ok"
+        and checks["embedding_model"] == "ok"
+    )
 
     return JSONResponse(
         status_code=200 if required_ok else 503,
@@ -109,9 +120,20 @@ async def startup(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         checks["migrations"] = f"error: {type(exc).__name__}"
 
     from app.providers.embeddings import is_model_loaded
+    from app.providers.vector_store import ping as ping_qdrant
 
     checks["embedding_model"] = "ok" if is_model_loaded() else "not_loaded"
 
-    ready = checks["migrations"].startswith("at_head") and checks["embedding_model"] == "ok"
+    try:
+        await ping_qdrant()
+        checks["qdrant"] = "ok"
+    except Exception as exc:
+        checks["qdrant"] = f"error: {type(exc).__name__}"
+
+    ready = (
+        checks["migrations"].startswith("at_head")
+        and checks["qdrant"] == "ok"
+        and checks["embedding_model"] == "ok"
+    )
     payload: dict[str, Any] = {"status": "started" if ready else "starting", "checks": checks}
     return JSONResponse(status_code=200 if ready else 503, content=payload)

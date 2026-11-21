@@ -84,12 +84,22 @@ uv pip install --python ..\.venv\Scripts\python.exe -e ".[dev]"
 
 ```powershell
 # From backend/, use the shared root environment
-..\.venv\Scripts\python.exe -m alembic upgrade head
+..\.venv\Scripts\alembic.exe upgrade head
 
 # Verify
-..\.venv\Scripts\python.exe -m alembic current
-# Expected: 0001 (head)
+..\.venv\Scripts\alembic.exe current
+# Expected: 0005 (head)
 ```
+
+Migration `0005` drops the legacy pgvector column. Existing documents then have
+no vectors in Qdrant until they are re-embedded:
+
+```powershell
+..\.venv\Scripts\python.exe scripts\backfill_qdrant.py
+```
+
+The script is safe to re-run; point IDs are chunk UUIDs. New uploads write to
+Qdrant directly and do not need the backfill.
 
 ---
 
@@ -193,8 +203,10 @@ cd backend
 Set `LLM_PROVIDER=groq` and `GROQ_API_KEY=gsk_...` in `backend/.env`, or set
 `LLM_PROVIDER=ollama` to use your local Ollama server without a Groq key.
 
-### "pgvector extension not found"
-Use the `pgvector/pgvector:pg16` Docker image, not plain `postgres:16`.
+### "Qdrant connection failed"
+Set `QDRANT_URL` and (for Qdrant Cloud) `QDRANT_API_KEY` in `backend/.env`.
+The collection is created automatically at startup. For local Qdrant, run
+`docker run -p 6333:6333 qdrant/qdrant` and use `QDRANT_URL=http://localhost:6333`.
 
 ### uv install fails for torch on Python 3.15
 Run:

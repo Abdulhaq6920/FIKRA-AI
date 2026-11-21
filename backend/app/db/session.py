@@ -39,20 +39,6 @@ if settings.database_ssl:
     _connect_args["ssl"] = "require"
 
 # ---------------------------------------------------------------------------
-# ivfflat.probes — how many inverted lists an ANN query visits.
-#
-# pgvector's default is 1, which searches ~1% of a 100-list index and returns
-# noticeably worse neighbours than an exhaustive scan. It is a per-connection
-# setting, so it must be applied when the connection is established, not per
-# query. Only asyncpg understands `server_settings`; a SQLite URL (used by some
-# local tooling) must not receive it.
-# ---------------------------------------------------------------------------
-if settings.database_url.startswith("postgresql+asyncpg"):
-    _connect_args["server_settings"] = {
-        "ivfflat.probes": str(settings.vector_index_probes),
-    }
-
-# ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
 _engine_kwargs: dict[str, Any] = {

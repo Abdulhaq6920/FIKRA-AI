@@ -21,6 +21,15 @@ htmlcov/
 .coverage
 coverage.xml
 *.log
+*.log.*
+logs/
+
+# ── Runtime artifacts (created when starting dev servers) ─────────────────
+*-run.err
+*-run.out
+dump.rdb
+pgvector-pg18/
+*.evidence
 
 # ── Node / Next.js ────────────────────────────────────────────────────────
 node_modules/
@@ -58,10 +67,6 @@ secrets/
 test-results/
 playwright-report/
 playwright/.cache/
-
-# ── pgvector Windows binaries (local dev only) ────────────────────────────
-pgvector-pg18/
-pgvector-pg18.zip
 
 # ── Agent-only guidance (never shipped) ───────────────────────────────────
 .opencode/

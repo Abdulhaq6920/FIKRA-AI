@@ -20,7 +20,7 @@ FIKRA AI Technical Documentation
 
 Overview
 FIKRA AI is a multi-tenant Retrieval-Augmented Generation chatbot.
-It uses PostgreSQL with pgvector for vector similarity search.
+It uses Qdrant for vector similarity search and PostgreSQL for relational data.
 The system supports PDF, DOCX, Markdown, HTML, and TXT document formats.
 
 Architecture

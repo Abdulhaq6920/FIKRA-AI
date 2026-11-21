@@ -5,9 +5,8 @@ Revises:
 Create Date: 2026-01-01 00:00:00.000000
 
 Creates the complete initial schema including:
-- pgvector extension
 - organizations, users, memberships, refresh_sessions
-- documents, document_chunks (with vector column), document_processing_jobs
+- documents, document_chunks (relational + full-text columns), document_processing_jobs
 - conversations, messages, conversation_summaries, feedback
 - audit_logs, usage_records
 - All indexes, foreign keys, and constraints
@@ -18,7 +17,6 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
-from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
@@ -27,12 +25,9 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-EMBEDDING_DIMS = 384  # matches BAAI/bge-small-en-v1.5
-
-
 def upgrade() -> None:
-    # Enable required PostgreSQL extensions
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # Enable required PostgreSQL extensions. Embeddings live in Qdrant, so no
+    # vector extension is needed here.
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
@@ -175,7 +170,6 @@ def upgrade() -> None:
         sa.Column("start_char", sa.Integer(), nullable=True),
         sa.Column("end_char", sa.Integer(), nullable=True),
         sa.Column("token_count", sa.Integer(), nullable=False),
-        sa.Column("embedding", Vector(EMBEDDING_DIMS), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
@@ -195,15 +189,6 @@ def upgrade() -> None:
         CREATE INDEX ix_chunks_content_tsv
         ON document_chunks
         USING GIN (content_tsv)
-    """)
-
-    # IVFFlat index for vector similarity search (approximate, scalable)
-    # Lists parameter tuned for up to ~1M vectors; adjust after load testing.
-    op.execute("""
-        CREATE INDEX ix_chunks_embedding_ivfflat
-        ON document_chunks
-        USING ivfflat (embedding vector_cosine_ops)
-        WITH (lists = 100)
     """)
 
     # ------------------------------------------------------------------

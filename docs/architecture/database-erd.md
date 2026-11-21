@@ -80,7 +80,6 @@ erDiagram
         int page_number
         string section_heading
         int token_count
-        vector_384 embedding
         tsvector content_tsv
     }
 
@@ -189,19 +188,15 @@ erDiagram
 
 ### Tenant ownership
 Every table except `users` and `refresh_sessions` has `organization_id`.
-`document_chunks` has a denormalized `organization_id` to avoid a JOIN during vector search.
+`document_chunks` has a denormalized `organization_id` so SQL branches can filter tenants without joining, and so Qdrant hits can be re-verified against a tenant-scoped row.
 
-### Embedding column
-`document_chunks.embedding` is a `vector(384)` column (pgvector).
-The dimension **must match** `EMBEDDING_DIMENSIONS` in config.
-Changing the embedding model requires updating this column definition and reindexing.
+### Embeddings
+Embeddings are not stored in PostgreSQL. They live in the Qdrant collection
+`QDRANT_COLLECTION` with vectors of size `EMBEDDING_DIMENSIONS` (384 by default)
+and cosine distance. A Qdrant point ID is the `document_chunks.id` UUID, with
+`organization_id` and `document_id` stored as keyword payload fields and indexed.
 
-An IVFFlat index with `lists=100` is created at migration time:
-```sql
-CREATE INDEX ix_chunks_embedding_ivfflat
-ON document_chunks USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
-```
+Changing the embedding model requires recreating the collection and reindexing.
 
 ### Full-text search
 `document_chunks.content_tsv` is a `tsvector GENERATED ALWAYS AS STORED` column.
@@ -227,5 +222,5 @@ The model cannot inject unauthorized document references.
 ### Indexes
 All `organization_id`, `user_id`, and `status` columns are indexed.
 `document_chunks.content_tsv` has a GIN index.
-`document_chunks.embedding` has an IVFFlat index.
+Vector indexes live in Qdrant, not PostgreSQL.
 `users.email_normalized` has a unique index for fast login lookups.

@@ -3,7 +3,7 @@ version: "3.9"
 # FIKRA AI — Local Development Stack
 #
 # Services:
-#   postgres  — PostgreSQL 16 with pgvector
+#   postgres  — PostgreSQL 16 (relational data + full-text search)
 #   redis     — Redis 7 (Celery broker + cache)
 #   backend   — FastAPI application
 #   worker    — Celery document-ingestion worker
@@ -15,10 +15,10 @@ version: "3.9"
 
 services:
   # -----------------------------------------------------------------------
-  # PostgreSQL + pgvector
+  # PostgreSQL (embeddings are stored in Qdrant, configured via .env)
   # -----------------------------------------------------------------------
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:16
     container_name: fikra_postgres
     environment:
       POSTGRES_DB: rag-prod
@@ -34,6 +34,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------
+  # Qdrant (optional local vector store)
+  # To use this instead of Qdrant Cloud set QDRANT_URL=http://qdrant:6333
+  # in backend/.env. By default the app uses the URL from .env (cloud).
+  # -----------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: fikra_qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
     restart: unless-stopped
 
   # -----------------------------------------------------------------------
@@ -68,8 +82,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/2
       CELERY_RESULT_BACKEND: redis://redis:6379/3
+      LOG_DIR: /app/logs
+      LOG_FILE: backend.log
     volumes:
       - uploads_data:/app/uploads
+      - logs_data:/app/logs
       - ./backend:/app  # hot-reload in development
     ports:
       - "8000:8000"
@@ -100,8 +117,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/2
       CELERY_RESULT_BACKEND: redis://redis:6379/3
+      LOG_DIR: /app/logs
+      LOG_FILE: celery.log
     volumes:
       - uploads_data:/app/uploads
+      - logs_data:/app/logs
       - ./backend:/app
     depends_on:
       postgres:
@@ -135,5 +155,7 @@ services:
 
 volumes:
   postgres_data:
+  qdrant_data:
   redis_data:
   uploads_data:
+  logs_data:

@@ -11,15 +11,15 @@ What these tests block:
   restricted text reached the prompt, ``Citation.excerpt`` and
   ``messages.citations``. Asserting on the *compiled* statement catches that
   class of bug because the SQL text is what the database actually runs.
-* Cross-tenant access — both retrieval branches must keep
-  ``document_chunks.organization_id`` and ``documents.organization_id`` in the
-  WHERE clause (not a post-filter).
-* A NULL ``embedding`` must be excluded from the vector branch and skipped in
-  the row loop; ``1 - NULL`` is NULL, and ``float(None)`` used to raise a 500
-  for every user of the tenant.
+* Cross-tenant access — the Qdrant payload filter must carry the tenant ID and
+  both retrieval branches must keep ``document_chunks.organization_id`` and
+  ``documents.organization_id`` in the relational WHERE clause (not a
+  post-filter).
+* Stale Qdrant points whose chunk no longer exists must not crash chat.
 
-No database is required: the statement is captured from a stub session and
-compiled with the PostgreSQL dialect.
+No database or Qdrant server is required: the Qdrant call is stubbed and the
+relational statement is captured from a stub session and compiled with the
+PostgreSQL dialect.
 """
 
 from __future__ import annotations
@@ -27,13 +27,17 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import pytest
 from sqlalchemy.dialects import postgresql
 
+from app.providers import vector_store
+from app.providers.vector_store import VectorHit, build_tenant_filter
 from app.services.retrieval_service import _keyword_search, _vector_search
 
 _ORG_ID = uuid.uuid4()
 _QUERY_VECTOR = [0.01] * 384
 _DIALECT = postgresql.dialect()
+_CHUNK_IDS = [uuid.uuid4() for _ in range(3)]
 
 
 class _EmptyResult:
@@ -46,14 +50,13 @@ class _EmptyResult:
 class _Row:
     """Minimal row for the vector-search mapping loop."""
 
-    def __init__(self, score: float | None) -> None:
-        self.id = uuid.uuid4()
+    def __init__(self, chunk_id: uuid.UUID) -> None:
+        self.id = chunk_id
         self.document_id = uuid.uuid4()
         self.title = "Doc"
         self.content = "chunk text"
         self.page_number = 1
         self.section_heading = None
-        self.score = score
 
 
 class _RowsResult:
@@ -101,8 +104,32 @@ def _assert_no_bare_true(statement: Any) -> None:
     )
 
 
-async def _vector_statement(include_restricted: bool) -> Any:
-    db = _CapturingSession()
+def _fake_search(
+    hits: list[tuple[uuid.UUID, float]],
+) -> Any:
+    """Stub Qdrant: return the given (chunk ID, score) pairs."""
+
+    async def _inner(
+        _query_vector: list[float],
+        _organization_id: uuid.UUID,
+        _limit: int,
+    ) -> list[VectorHit]:
+        return [VectorHit(chunk_id=chunk_id, score=score) for chunk_id, score in hits]
+
+    return _inner
+
+
+async def _vector_statement(
+    monkeypatch: pytest.MonkeyPatch,
+    include_restricted: bool,
+    hits: list[tuple[uuid.UUID, float]] | None = None,
+    rows: list[_Row] | None = None,
+) -> Any:
+    db = _CapturingSession(rows=rows if rows is not None else [_Row(cid) for cid in _CHUNK_IDS])
+    stub_hits = hits if hits is not None else [
+        (cid, 0.9 - i) for i, cid in enumerate(_CHUNK_IDS)
+    ]
+    monkeypatch.setattr(vector_store, "search_vectors", _fake_search(stub_hits))
     await _vector_search(
         query_vector=_QUERY_VECTOR,
         organization_id=_ORG_ID,
@@ -130,8 +157,10 @@ async def _keyword_statement(include_restricted: bool) -> Any:
 class TestRestrictedDocumentsAreFiltered:
     """A member must never retrieve a restricted document's chunks."""
 
-    async def test_vector_search_filters_restricted_for_members(self) -> None:
-        statement = await _vector_statement(include_restricted=False)
+    async def test_vector_search_filters_restricted_for_members(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        statement = await _vector_statement(monkeypatch, include_restricted=False)
         sql = _compiled(statement)
         assert "access_level" in sql, "restricted documents would leak into vector results"
         # The PostgreSQL dialect renders true() as `true`; this keeps the
@@ -146,8 +175,10 @@ class TestRestrictedDocumentsAreFiltered:
         assert "true()" not in sql
         _assert_no_bare_true(statement)
 
-    async def test_vector_search_allows_restricted_for_admins(self) -> None:
-        sql = _compiled(await _vector_statement(include_restricted=True))
+    async def test_vector_search_allows_restricted_for_admins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sql = _compiled(await _vector_statement(monkeypatch, include_restricted=True))
         assert "access_level" not in sql
 
     async def test_keyword_search_allows_restricted_for_admins(self) -> None:
@@ -156,10 +187,12 @@ class TestRestrictedDocumentsAreFiltered:
 
 
 class TestTenantPredicateIsInTheQuery:
-    """The org filter must be part of the WHERE clause in both branches."""
+    """The org filter must be part of both the Qdrant and SQL queries."""
 
-    async def test_vector_search_is_tenant_scoped(self) -> None:
-        sql = _compiled(await _vector_statement(include_restricted=False))
+    async def test_vector_search_is_tenant_scoped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sql = _compiled(await _vector_statement(monkeypatch, include_restricted=False))
         assert "document_chunks.organization_id" in sql
         assert "documents.organization_id" in sql
 
@@ -168,19 +201,45 @@ class TestTenantPredicateIsInTheQuery:
         assert "document_chunks.organization_id" in sql
         assert "documents.organization_id" in sql
 
+    def test_qdrant_filter_carries_the_tenant_id(self) -> None:
+        tenant_filter = build_tenant_filter(_ORG_ID)
+        assert tenant_filter.must is not None
+        tenant_condition = tenant_filter.must[0]
+        assert tenant_condition.key == "organization_id"
+        assert tenant_condition.match is not None
+        assert tenant_condition.match.value == str(_ORG_ID)
 
-class TestNullEmbeddingCannotCrashChat:
-    async def test_vector_search_excludes_null_embeddings(self) -> None:
-        sql = _compiled(await _vector_statement(include_restricted=False))
-        assert "embedding IS NOT NULL" in sql
 
-    async def test_vector_search_skips_rows_with_null_score(self) -> None:
-        db = _CapturingSession(rows=[_Row(score=None), _Row(score=0.42)])
+class TestVectorHitResolution:
+    """Qdrant hits are resolved safely against relational rows."""
+
+    async def test_stale_qdrant_ids_are_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        unknown = uuid.uuid4()
+        db = _CapturingSession(rows=[_Row(_CHUNK_IDS[0])])
+        monkeypatch.setattr(vector_store, "search_vectors", _fake_search([(unknown, 0.9)]))
         passages = await _vector_search(
             query_vector=_QUERY_VECTOR,
             organization_id=_ORG_ID,
             db=db,  # type: ignore[arg-type]
             limit=5,
-            include_restricted=False,
         )
-        assert [p.score for p in passages] == [0.42]
+        assert passages == []
+
+    async def test_qdrant_ranking_is_preserved(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # SQLAlchemy returns rows in insertion order; Qdrant ranks them 3, 1, 2.
+        rows = [_Row(cid) for cid in _CHUNK_IDS]
+        hits = [(_CHUNK_IDS[2], 0.95), (_CHUNK_IDS[0], 0.8), (_CHUNK_IDS[1], 0.6)]
+        db = _CapturingSession(rows=rows)
+        monkeypatch.setattr(vector_store, "search_vectors", _fake_search(hits))
+        passages = await _vector_search(
+            query_vector=_QUERY_VECTOR,
+            organization_id=_ORG_ID,
+            db=db,  # type: ignore[arg-type]
+            limit=5,
+        )
+        assert [p.chunk_id for p in passages] == [_CHUNK_IDS[2], _CHUNK_IDS[0], _CHUNK_IDS[1]]
+        assert [p.similarity for p in passages] == [0.95, 0.8, 0.6]

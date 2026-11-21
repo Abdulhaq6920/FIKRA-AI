@@ -26,9 +26,8 @@ jobs:
 
     services:
       postgres:
-        # pgvector, not plain postgres: the schema uses vector columns and
-        # `CREATE EXTENSION vector` fails on the vanilla image.
-        image: pgvector/pgvector:pg16
+        # Embeddings live in Qdrant; Postgres only needs contrib modules.
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -214,7 +213,7 @@ jobs:
     # weights (HF_HUB_OFFLINE=1); assertions are intentionally lenient.
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -235,11 +234,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
 
     env:
       APP_ENV: development
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/fikra_e2e
       REDIS_URL: redis://localhost:6379/0
+      QDRANT_URL: http://localhost:6333
       SECRET_KEY: e2e-secret-key-not-for-production
       JWT_SECRET_KEY: e2e-jwt-key-not-for-production
       GROQ_API_KEY: e2e-not-a-real-key
@@ -268,11 +272,10 @@ jobs:
         working-directory: backend
         run: pip install -e ".[dev]"
 
-      - name: Create E2E database + pgvector extension
+      - name: Create E2E database
         run: |
           export PGPASSWORD=postgres
           psql -U postgres -h localhost -c "CREATE DATABASE fikra_e2e;" 2>/dev/null || true
-          psql -U postgres -h localhost -d fikra_e2e -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Run migrations
         working-directory: backend

@@ -18,7 +18,8 @@ sequenceDiagram
     participant U as User
     participant API as FastAPI
     participant RS as RetrievalService
-    participant PG as PostgreSQL+pgvector
+    participant PG as PostgreSQL
+    participant QD as Qdrant
     participant RR as Reranker (local)
     participant RAG as RAGService
     participant LLM as Configured LLM (Groq or Ollama)
@@ -29,7 +30,9 @@ sequenceDiagram
     API->>RS: retrieve(query, org_id)
 
     RS->>RS: embed_query(question)
-    RS->>PG: Vector cosine search WHERE org_id=? AND status='ready'
+    RS->>QD: Vector cosine search (payload filter org_id=?)
+    QD-->>RS: chunk IDs + similarity
+    RS->>PG: Resolve chunk IDs (org_id + status filters)
     RS->>PG: Full-text search WHERE org_id=? AND status='ready'
     RS->>RS: RRF fusion of results
     RS->>RR: rerank(query, passages[:20])
@@ -55,7 +58,7 @@ sequenceDiagram
 
 ### Vector search
 - Embeds the query with `BAAI/bge-small-en-v1.5` using the BGE query prefix.
-- Queries the `document_chunks.embedding` column using cosine distance (IVFFlat index).
+- Queries the Qdrant collection using cosine distance with a mandatory `organization_id` payload filter.
 - Filters: `organization_id = ?`, `documents.status = 'ready'`, `documents.is_active = true`.
 - Returns top-K passages by similarity score.
 

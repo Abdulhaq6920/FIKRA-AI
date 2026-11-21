@@ -67,7 +67,7 @@ def embed_documents(texts: list[str]) -> list[list[float]]:
     """
     Embed a list of document passage texts (no query prefix).
 
-    Returns normalized float vectors ready for pgvector cosine search.
+    Returns normalized float vectors ready for Qdrant cosine search.
     """
     if not texts:
         return []

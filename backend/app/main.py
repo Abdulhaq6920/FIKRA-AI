@@ -42,9 +42,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Startup:
     - Log configuration summary (no secrets)
     - Verify database connectivity
+    - Verify Qdrant and create the vector collection if needed
 
     Shutdown:
-    - Dispose connection pool
+    - Dispose connection pool and Qdrant client
     - Log shutdown
     """
     logger.info(
@@ -67,6 +68,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("database_connection_ok")
     except Exception as exc:
         logger.error("database_connection_failed", error=str(exc))
+        raise
+
+    # Verify the vector store and create its collection/payload indexes.
+    # Retrieval cannot answer without it, so a failure is fatal just like DB.
+    from app.providers.vector_store import ensure_collection
+
+    try:
+        await ensure_collection()
+        logger.info("qdrant_connection_ok", collection=settings.qdrant_collection)
+    except Exception as exc:
+        logger.error("qdrant_connection_failed", error=str(exc))
         raise
 
     # Verify Redis (Celery broker/cache). Non-fatal: ingestion falls back to
@@ -110,6 +122,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     logger.info("application_shutting_down")
+    from app.providers.vector_store import close_qdrant_client
+
+    await close_qdrant_client()
     await engine.dispose()
 
 

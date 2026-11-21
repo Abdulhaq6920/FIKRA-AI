@@ -5,7 +5,7 @@ Agent-only guidance. Do not import, reference, or ship this file from app/build 
 ## Stack
 
 - **Backend:** Python 3.12, FastAPI 0.111, SQLAlchemy 2 async + asyncpg, Alembic,
-  PostgreSQL 16 + pgvector, Redis + Celery, Groq LLM, sentence-transformers
+  PostgreSQL 16 + Qdrant, Redis + Celery, Groq LLM, sentence-transformers
   (BGE embeddings + reranker), structlog.
 - **Frontend:** Next.js 14 App Router, React 18, TypeScript 5.5, Tailwind,
   Radix UI, Framer Motion, SWR, Zod. Package manager: npm (use `npm.cmd` on Windows).
@@ -20,7 +20,7 @@ backend/app/core/                config, security, exceptions, logging, middlewa
 backend/app/api/v1/              route modules (auth, chat, documents, admin, ...)
 backend/app/api/dependencies.py  auth/role dependencies + tenant context
 backend/app/services/            auth, ingestion, retrieval, RAG pipeline
-backend/app/providers/           Groq client (only Groq import), embeddings, reranker
+backend/app/providers/           Groq client (only Groq import), embeddings, reranker, Qdrant vector store
 backend/app/db/models/           SQLAlchemy models; every tenant resource has organization_id
 backend/app/db/session.py        async engine, get_db() (commit/rollback/close)
 backend/app/workers/             Celery app + document ingestion task
@@ -38,13 +38,14 @@ docs/                            architecture, ADRs, dev/ops guides
 ### Setup (first time)
 
 ```powershell
-Copy-Item backend\.env.example backend\.env   # then fill GROQ_API_KEY, SECRET_KEY, JWT_SECRET_KEY
-docker compose up -d postgres redis
+Copy-Item backend\.env.example backend\.env   # then fill GROQ_API_KEY, SECRET_KEY, JWT_SECRET_KEY, QDRANT_URL, QDRANT_API_KEY
+docker compose up -d postgres redis           # add qdrant here if using local Qdrant
 uv python install 3.12
 uv venv --python 3.12 .venv
 cd backend
 uv pip install --python ..\.venv\Scripts\python.exe -e ".[dev]"
-..\.venv\Scripts\python.exe -m alembic upgrade head
+..\.venv\Scripts\alembic.exe upgrade head
+..\.venv\Scripts\python.exe scripts\backfill_qdrant.py  # only when migrating an existing corpus
 ..\.venv\Scripts\python.exe ..\scripts\create_initial_org.py
 ```
 
@@ -131,9 +132,10 @@ cd frontend; npm.cmd run build
   `HF_HUB_OFFLINE=1` after the first download to skip network checks.
 - `python-magic` needs the libmagic system library; the Docker image installs it.
   Code already falls back if `import magic` fails.
-- `pgvector/pgvector:pg16` is required, not plain `postgres:16`.
+- Plain `postgres:16` is fine: embeddings live in Qdrant, configured with
+  `QDRANT_URL` / `QDRANT_API_KEY`. The collection is created at app startup.
 - Integration tests: `tests/conftest.py` defaults to SQLite, but the models use
-  PostgreSQL `UUID`/`JSONB`/`Vector` defaults — SQLite cannot create the schema.
+  PostgreSQL `UUID`/`JSONB` defaults — SQLite cannot create the schema.
   Set `TEST_DATABASE_URL` to a real PostgreSQL URL (Docker is not available on
   this machine currently). `aiosqlite` is installed but only moves the failure.
 - Ruff currently reports ~200 pre-existing violations across `app/` and mypy is

@@ -27,7 +27,8 @@ sequenceDiagram
     W->>W: chunk_text(extraction) → [DocumentChunkData]
     W->>Embed: embed_documents([chunk.content]) → [[float]]
     W->>DB: DELETE existing chunks (safe reindex)
-    W->>DB: INSERT document_chunks (content, embedding, metadata)
+    W->>DB: INSERT document_chunks (content, metadata)
+    W->>QD: UPSERT chunk vectors (payload: org_id, doc_id)
     W->>DB: UPDATE documents (status=READY, chunk_count, page_count)
     W->>DB: UPDATE job (status=SUCCESS)
 ```
@@ -67,7 +68,7 @@ Before any file is saved:
 - Model: `BAAI/bge-small-en-v1.5` (384 dimensions, Apache 2.0 license).
 - Loaded once at worker startup, reused across all tasks.
 - Batched by `EMBEDDING_BATCH_SIZE` (default 32).
-- Vectors normalized to unit length.
+- Vectors normalized to unit length and stored in Qdrant, keyed by chunk UUID.
 - `embedding_model` and `embedding_model_version` (SHA-256 prefix of model name) stored on the document record.
 - If you change the embedding model, set all affected documents to `status=PENDING` and reindex.
 

@@ -81,14 +81,15 @@ Login: `admin@fikra.ai` / `Admin1234!` (change immediately)
 ## Architecture
 
 ```
-Browser → Next.js → FastAPI → PostgreSQL+pgvector
+Browser → Next.js → FastAPI → PostgreSQL (schema + full-text)
+                            → Qdrant (vector search)
                             → Redis (Celery queue)
                             → Groq API or local Ollama (LLM)
-                  Celery Worker → Storage → Embeddings → PostgreSQL
+                  Celery Worker → Storage → Embeddings → Qdrant
 ```
 
 - **Multi-tenant**: Every resource is scoped to an organization. Cross-tenant access is impossible through the API.
-- **RAG pipeline**: Hybrid retrieval (pgvector cosine + PostgreSQL FTS) → RRF fusion → optional cross-encoder reranking → bounded prompt → Groq generation → server-validated citations.
+- **RAG pipeline**: Hybrid retrieval (Qdrant cosine + PostgreSQL FTS) → RRF fusion → optional cross-encoder reranking → bounded prompt → Groq generation → server-validated citations.
 - **Secure auth**: Argon2id passwords, JWT in HttpOnly cookies, refresh token rotation.
 
 Full documentation: [`docs/`](docs/)

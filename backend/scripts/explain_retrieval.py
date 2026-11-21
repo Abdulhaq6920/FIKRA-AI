@@ -1,4 +1,14 @@
-"""Prove the vector query is index-usable, at a realistic corpus size.
+"""LEGACY DIAGNOSTIC — targets the retired pgvector backend.
+
+This script is kept only as a historical record of the ivfflat investigation.
+It references ``document_chunks.embedding`` and the ``vector`` extension, which
+no longer exist: vector search now runs in Qdrant. Do not use it against a
+current database. See ``docs/operations/phase-gates.md`` for the original
+measurements.
+
+---
+
+Prove the vector query is index-usable, at a realistic corpus size.
 
 The live database holds four chunks, so the planner would seq-scan regardless of
 query shape. This script inserts 8 000 synthetic chunks **with realistic

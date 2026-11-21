@@ -10,7 +10,7 @@ and a linked ``UsageRecord``. The test then verifies:
 - token usage is recorded in ``usage_records``.
 
 Requires PostgreSQL (``TEST_DATABASE_URL``) because models use
-``UUID``/``JSONB``/``Vector`` columns.
+``UUID``/``JSONB`` columns. Vector search itself lives in Qdrant.
 """
 
 from __future__ import annotations

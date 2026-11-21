@@ -12,8 +12,8 @@ Covers:
 - password reset and session revocation
 - deactivation blocks login and revokes sessions
 
-These tests require PostgreSQL because the models use ``UUID``/``JSONB``/
-``Vector`` columns. Set ``TEST_DATABASE_URL`` to a disposable database.
+These tests require PostgreSQL because the models use ``UUID``/``JSONB``
+columns. Set ``TEST_DATABASE_URL`` to a disposable database.
 """
 
 from __future__ import annotations

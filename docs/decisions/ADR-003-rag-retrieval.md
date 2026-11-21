@@ -5,7 +5,7 @@
 
 ## Decision: Hybrid retrieval with RRF + optional reranking
 
-Use both vector similarity (pgvector) and full-text keyword search (PostgreSQL tsvector), fuse with Reciprocal Rank Fusion, then optionally rerank with a local cross-encoder.
+Use both vector similarity (Qdrant cosine) and full-text keyword search (PostgreSQL tsvector), fuse with Reciprocal Rank Fusion, then optionally rerank with a local cross-encoder.
 
 ## Why hybrid?
 
@@ -37,7 +37,7 @@ Reranker adds ~50–200ms per request on CPU. Disable with `RERANKER_ENABLED=fal
 
 ## Consequences
 
-- Requires both pgvector and pg_trgm extensions
-- The IVFFlat index needs `VACUUM ANALYZE` after bulk inserts
+- Requires a Qdrant deployment plus the PostgreSQL `pg_trgm` extension
+- Qdrant payload indexes must exist for `organization_id` and `document_id`
 - Changing embedding model requires reindexing all documents
 - Cross-encoder and embedding model are loaded in the worker process, not the API process

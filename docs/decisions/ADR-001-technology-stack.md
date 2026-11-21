@@ -17,9 +17,9 @@ We need to build a production-grade multi-tenant RAG chatbot. The stack must sup
 
 **Why FastAPI**: ASGI-native async framework with automatic OpenAPI generation, Pydantic v2 integration, and a large ML ecosystem. Alternative considered: Django (sync-first, heavier).
 
-### Database: PostgreSQL + pgvector
+### Database: PostgreSQL + Qdrant
 
-**Why pgvector**: Stores vectors and relational data in the same database. No separate vector database service to operate. Supports ACID transactions, so document + chunk insertion is atomic. IVFFlat index scales to millions of vectors. Alternative considered: Qdrant (external service, operational complexity).
+**Why Qdrant**: Purpose-built vector search with server-side payload filtering, so tenant isolation is enforced before ANN candidate selection. Supports a managed cloud tier as well as self-hosting. PostgreSQL keeps relational rows and full-text search. Alternative considered: pgvector (kept vectors in Postgres but coupled index tuning and drift to the relational schema).
 
 ### Embeddings: BAAI/bge-small-en-v1.5
 
@@ -47,4 +47,4 @@ We need to build a production-grade multi-tenant RAG chatbot. The stack must sup
 
 - Workers share the application codebase — model loading happens at worker startup.
 - Changing the embedding model requires reindexing all documents.
-- pgvector IVFFlat requires `VACUUM ANALYZE` after large insertions to update index statistics.
+- Reindexing writes to both PostgreSQL and Qdrant; both stores must stay in sync for retrieval to resolve passages.

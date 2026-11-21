@@ -84,7 +84,7 @@ TEST_DATABASE_URL = os.getenv(
 )
 ```
 
-**Note**: SQLite doesn't support pgvector. Vector similarity tests require PostgreSQL with pgvector installed. Set `TEST_DATABASE_URL` to a real PostgreSQL URL for full integration coverage.
+**Note**: Unit and tenant-isolation tests stub Qdrant and need no vector server. Integration tests require PostgreSQL (`TEST_DATABASE_URL`) for `UUID`/`JSONB` columns. Live vector-search checks need a reachable Qdrant instance configured via `QDRANT_URL`/`QDRANT_API_KEY`.
 
 ---
 

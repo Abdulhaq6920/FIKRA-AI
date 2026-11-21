@@ -17,20 +17,32 @@ import {
   XCircle,
 } from "lucide-react";
 import { ThemePicker } from "@/features/theme/ThemePicker";
+import { Dialog } from "@/components/ui/Dialog";
 import { api } from "@/lib/api/client";
 import { errorText } from "@/lib/utils/errors";
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
   const [accessRequestMessage, setAccessRequestMessage] = useState<string | null>(null);
+  const [accessRequestOpen, setAccessRequestOpen] = useState(false);
+  const [accessRequestReason, setAccessRequestReason] = useState("");
+  const [accessRequestSending, setAccessRequestSending] = useState(false);
 
   const isAdmin = Boolean(
     user?.is_platform_admin || user?.organization_role === "org_admin"
   );
 
-  const requestAdminAccess = async () => {
-    const reason = window.prompt("Why do you need organization-admin access?")?.trim();
-    if (reason === undefined) return;
+  const requestAdminAccess = () => {
+    // In-app dialog instead of window.prompt: the native prompt cannot be
+    // styled, is not announced, and blocks the whole page.
+    setAccessRequestReason("");
+    setAccessRequestOpen(true);
+  };
+
+  const submitAccessRequest = async () => {
+    const reason = accessRequestReason.trim();
+    setAccessRequestOpen(false);
+    setAccessRequestSending(true);
     try {
       await api.post("/access-requests", { reason: reason || null });
       setAccessRequestMessage("Request sent to your organization administrators.");
@@ -38,6 +50,8 @@ export default function SettingsPage() {
       setAccessRequestMessage(
         err instanceof Error ? err.message : "Could not send the request."
       );
+    } finally {
+      setAccessRequestSending(false);
     }
   };
 
@@ -95,7 +109,8 @@ export default function SettingsPage() {
                   </div>
                   <button
                     onClick={requestAdminAccess}
-                    className="rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-1.5 text-xs font-medium text-brand-500 transition-colors hover:bg-brand-500/20 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                    disabled={accessRequestSending}
+                    className="rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-1.5 text-xs font-medium text-brand-500 transition-colors hover:bg-brand-500/20 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50"
                   >
                     Request admin access
                   </button>
@@ -160,6 +175,42 @@ export default function SettingsPage() {
           </div>
         </motion.div>
       </div>
+
+      <Dialog
+        open={accessRequestOpen}
+        title="Request admin access"
+        description="Tell your organization administrators why you need elevated access."
+        onClose={() => setAccessRequestOpen(false)}
+        wide
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setAccessRequestOpen(false)}
+              className="rounded-lg border border-surface-700 px-3.5 py-2 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-800 hover:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void submitAccessRequest()}
+              disabled={accessRequestSending}
+              className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50"
+            >
+              Send request
+            </button>
+          </>
+        }
+      >
+        <textarea
+          value={accessRequestReason}
+          onChange={(event) => setAccessRequestReason(event.target.value)}
+          placeholder="Why do you need organization-admin access?"
+          rows={3}
+          aria-label="Reason for admin access"
+          className="w-full rounded-lg border border-surface-700 bg-surface-800 px-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 outline-none focus:ring-1 focus:ring-brand-500"
+        />
+      </Dialog>
     </div>
   );
 }

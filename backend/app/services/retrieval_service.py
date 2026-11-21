@@ -2,7 +2,7 @@
 Hybrid retrieval service.
 
 Combines:
-1. Vector similarity search (pgvector cosine distance)
+1. Vector similarity search (Qdrant cosine distance, tenant-filtered)
 2. PostgreSQL full-text search (tsvector/tsquery)
 3. Reciprocal Rank Fusion (RRF) to merge results
 4. Optional cross-encoder reranking
@@ -28,6 +28,7 @@ from app.core.logging import get_logger
 from app.core.metrics import observe_retrieval_candidates, observe_retrieval_top_score
 from app.core.telemetry import stage_span
 from app.db.models.document import Document, DocumentAccessLevel, DocumentChunk, DocumentStatus
+from app.providers import vector_store
 
 logger = get_logger(__name__)
 
@@ -218,20 +219,29 @@ async def _vector_search(
     include_restricted: bool = False,
 ) -> list[RetrievedPassage]:
     """
-    Cosine similarity search using pgvector.
+    Cosine similarity search using Qdrant.
 
-    The organization_id filter is mandatory — it is part of the WHERE clause,
-    not a post-filter, so the database enforces tenant isolation.
+    Qdrant applies a mandatory ``organization_id`` payload filter server-side;
+    the relational query below re-checks tenant, document status and access
+    level before any passage reaches the prompt. The Qdrant point ID is the
+    chunk UUID, which is how hits are joined back to relational rows.
     """
+    # Over-fetch slightly so a few hits removed by the access filter do not
+    # starve fusion when most of a tenant's corpus is restricted.
+    hits = await vector_store.search_vectors(
+        query_vector,
+        organization_id,
+        min(limit * 2, 200),
+    )
+    if not hits:
+        return []
+
+    hit_scores = {hit.chunk_id: hit.score for hit in hits}
     access_condition = _access_scope_condition(include_restricted)
     conditions = _base_conditions(organization_id)
-    # A NULL embedding makes `1 - NULL` NULL: ORDER BY puts it first and
-    # float(None) raises, which would 500 the whole tenant's chat.
-    conditions.append(DocumentChunk.embedding.is_not(None))
+    conditions.append(DocumentChunk.id.in_(list(hit_scores)))
     if access_condition is not None:
         conditions.append(access_condition)
-
-    distance = DocumentChunk.embedding.cosine_distance(query_vector)
 
     stmt = (
         select(
@@ -241,24 +251,16 @@ async def _vector_search(
             DocumentChunk.page_number,
             DocumentChunk.section_heading,
             Document.title,
-            # cosine distance (lower = more similar); convert to similarity score
-            (1 - distance).label("score"),
         )
         .join(Document, DocumentChunk.document_id == Document.id)
         .where(*conditions)
-        # Order by the *distance expression* ascending, not by `score DESC`.
-        # pgvector indexes (ivfflat/hnsw) support ORDER BY distance with a
-        # LIMIT; they cannot serve an ORDER BY over the derived expression
-        # `1 - distance`, so the previous form forced a sequential scan plus a
-        # sort of the whole tenant corpus. The two orderings are equivalent.
-        .order_by(distance)
-        .limit(limit)
     )
 
     rows = (await db.execute(stmt)).all()
-    results = []
+    results: list[RetrievedPassage] = []
     for row in rows:
-        if row.score is None:  # belt and braces: unembedded chunk
+        score = hit_scores.get(row.id)
+        if score is None:  # stale Qdrant point whose chunk was deleted
             continue
         results.append(
             RetrievedPassage(
@@ -268,12 +270,15 @@ async def _vector_search(
                 content=row.content,
                 page_number=row.page_number,
                 section_heading=row.section_heading,
-                score=float(row.score),
+                score=score,
                 retrieval_method="vector",
-                similarity=float(row.score),
+                similarity=score,
             )
         )
-    return results
+
+    # Preserve Qdrant's ranking after the relational filter removed hits.
+    results.sort(key=lambda passage: hit_scores[passage.chunk_id], reverse=True)
+    return results[:limit]
 
 
 async def _keyword_search(

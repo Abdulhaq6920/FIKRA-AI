@@ -65,7 +65,7 @@ See `tests/tenant_isolation/test_isolation.py`:
 Full integration tests (requiring PostgreSQL) should verify:
 - User A cannot GET `/api/v1/documents/{org_b_doc_id}` — returns 404.
 - User A cannot GET `/api/v1/chat/conversations/{org_b_conv_id}/messages` — returns 404.
-- Vector search for org A does not return chunks owned by org B.
+- Qdrant search for org A (payload filter) does not return chunks owned by org B.
 
 ---
 

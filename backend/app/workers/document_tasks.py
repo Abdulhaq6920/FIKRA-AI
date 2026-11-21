@@ -253,12 +253,22 @@ async def _run_ingestion(
             }
         doc = current_doc
 
-        # Delete existing chunks (safe reindex)
+        # Replace the old vector set together with the old relational chunks.
+        # A reindex must not leave stale points pointing at deleted chunk IDs.
         from sqlalchemy import delete
 
+        from app.providers.vector_store import (
+            VectorPoint,
+            delete_document_points,
+            upsert_points,
+        )
+
+        await delete_document_points(document_id, organization_id)
         await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
 
-        # Insert new chunks
+        # Insert new chunks and flush so their generated UUIDs are available as
+        # Qdrant point IDs before the transaction is committed.
+        new_chunks: list[DocumentChunk] = []
         for cd in chunks_data:
             chunk = DocumentChunk(
                 document_id=document_id,
@@ -271,9 +281,22 @@ async def _run_ingestion(
                 start_char=cd.start_char,
                 end_char=cd.end_char,
                 token_count=cd.token_count,
-                embedding=cd.embedding,
             )
             db.add(chunk)
+            new_chunks.append(chunk)
+        await db.flush()
+
+        await upsert_points(
+            [
+                VectorPoint(
+                    chunk_id=chunk.id,
+                    document_id=document_id,
+                    organization_id=organization_id,
+                    embedding=cd.embedding,
+                )
+                for chunk, cd in zip(new_chunks, chunks_data, strict=True)
+            ]
+        )
 
         # Update document status
         doc.status = DocumentStatus.READY

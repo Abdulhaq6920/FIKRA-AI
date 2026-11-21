@@ -17,7 +17,8 @@ This revision makes the database match the models instead:
 * add the indexes the models declare but the database never had;
 * add the idempotency uniqueness constraints (chunk index per document, one
   verdict per user per message, one upload per tenant by checksum);
-* make ``document_chunks.embedding`` NOT NULL after verifying no NULL rows exist.
+* make the legacy ``document_chunks.embedding`` column NOT NULL where present
+  (the column no longer exists on databases created for the Qdrant backend).
 
 Revision ID: 0004
 Revises: 0003
@@ -153,13 +154,36 @@ def upgrade() -> None:
         ["message_id", "user_id"],
     )
 
-    # 6. A chunk without a vector breaks cosine ordering for the whole tenant.
-    #    Verified before writing this revision: zero NULL embeddings.
-    op.alter_column("document_chunks", "embedding", nullable=False)
+    # 6. A chunk without a vector used to break cosine ordering for the whole
+    #    tenant. The column is now optional: databases created after the Qdrant
+    #    migration never had it, so only tighten legacy databases that do.
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'document_chunks' AND column_name = 'embedding'
+            ) THEN
+                ALTER TABLE document_chunks ALTER COLUMN embedding SET NOT NULL;
+            END IF;
+        END
+        $$
+    """)
 
 
 def downgrade() -> None:
-    op.alter_column("document_chunks", "embedding", nullable=True)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'document_chunks' AND column_name = 'embedding'
+            ) THEN
+                ALTER TABLE document_chunks ALTER COLUMN embedding DROP NOT NULL;
+            END IF;
+        END
+        $$
+    """)
 
     op.drop_constraint("uq_feedback_message_user", "feedback", type_="unique")
     op.drop_constraint("uq_documents_org_checksum", "documents", type_="unique")

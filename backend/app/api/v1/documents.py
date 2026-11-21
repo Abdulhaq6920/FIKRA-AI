@@ -377,9 +377,15 @@ async def delete_document(
     storage = get_storage()
     await storage.delete(doc.storage_path)
 
-    # PostgreSQL ON DELETE CASCADE removes document_chunks (including pgvector
-    # embeddings) and processing jobs. Deleting the document itself also means
-    # its title and original filename cannot appear in later list requests.
+    # Qdrant has no FK cascade: delete the document's vectors explicitly, using
+    # the tenant-scoped filter, before the relational rows are removed.
+    from app.providers.vector_store import delete_document_points
+
+    await delete_document_points(doc_id, org_id)
+
+    # PostgreSQL ON DELETE CASCADE removes document_chunks and processing jobs.
+    # Deleting the document also means its title and original filename cannot
+    # appear in later list requests.
     await db.delete(doc)
     await db.commit()
     logger.info("document_permanently_deleted", document_id=str(doc_id), actor=str(user.id))
@@ -628,12 +634,19 @@ async def _process_document_inline(
                 _log.info("inline_ingestion_aborted_deleted_document", document_id=doc_id_str)
                 return
 
-            # Delete existing chunks before inserting the new set. Together with
-            # the (pending) UNIQUE(document_id, chunk_index) constraint this
-            # makes a repeated run idempotent instead of duplicating rows.
+            # Replace both stores together: stale Qdrant points would point at
+            # chunk IDs that no longer exist after a reindex.
+            from app.providers.vector_store import (
+                VectorPoint,
+                delete_document_points,
+                upsert_points,
+            )
+
+            await delete_document_points(doc_id, org_id)
             await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
 
-            # Insert new chunks
+            # Insert new chunks, flushing first so Qdrant can use their UUIDs.
+            new_chunks: list[DocumentChunk] = []
             for cd in chunks_data:
                 chunk = DocumentChunk(
                     document_id=doc_id,
@@ -646,9 +659,22 @@ async def _process_document_inline(
                     start_char=cd.start_char,
                     end_char=cd.end_char,
                     token_count=cd.token_count,
-                    embedding=cd.embedding,
                 )
                 db.add(chunk)
+                new_chunks.append(chunk)
+            await db.flush()
+
+            await upsert_points(
+                [
+                    VectorPoint(
+                        chunk_id=chunk.id,
+                        document_id=doc_id,
+                        organization_id=org_id,
+                        embedding=cd.embedding,
+                    )
+                    for chunk, cd in zip(new_chunks, chunks_data, strict=True)
+                ]
+            )
 
             # Update document
             doc.status = DocumentStatus.READY

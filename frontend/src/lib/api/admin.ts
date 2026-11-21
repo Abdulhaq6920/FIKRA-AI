@@ -1,76 +1,14 @@
 import { api } from "./client";
-
-export interface AdminMember {
-  id: string;
-  full_name: string;
-  email: string;
-  role: "admin" | "member";
-  status: string;
-  joined_at: string;
-}
-
-export type AdminUserRole = "admin" | "member";
-
-export interface AdminUser {
-  id: string;
-  email: string;
-  full_name: string;
-  role: AdminUserRole;
-  is_active: boolean;
-  account_status: string;
-  is_platform_admin: boolean;
-  joined_at: string;
-  is_self: boolean;
-}
-
-export interface AdminUserCreate {
-  email: string;
-  full_name: string;
-  password: string;
-  role: AdminUserRole;
-}
-
-export interface AdminUserUpdate {
-  full_name?: string;
-  role?: AdminUserRole;
-  is_active?: boolean;
-}
-
-export interface FeedbackItem {
-  id: string;
-  feedback_type: "thumbs_up" | "thumbs_down" | string;
-  comment: string | null;
-  review_status: "open" | "in_review" | "solved" | string;
-  admin_note: string | null;
-  user_name: string;
-  user_email: string;
-  message_excerpt: string;
-  created_at: string;
-}
-
-export interface AccessRequest {
-  id: string;
-  user_name: string;
-  user_email: string;
-  reason: string | null;
-  status: "pending" | "approved" | "rejected" | string;
-  created_at: string;
-}
-
-export interface PagedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-export interface ListUsersParams {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  role?: AdminUserRole;
-  is_active?: boolean;
-}
+import type {
+  AccessRequest,
+  AdminMember,
+  AdminUser,
+  AdminUserCreate,
+  AdminUserUpdate,
+  FeedbackItem,
+  ListUsersParams,
+  PagedResponse,
+} from "@/types";
 
 export const adminApi = {
   getMembers: (page = 1, page_size = 20, search?: string) => {
@@ -135,3 +73,16 @@ export const adminApi = {
   decideAccessRequest: (id: string, status: "approved" | "rejected", note?: string) =>
     api.patch<{ status: string }>(`/admin/access-requests/${id}`, { status, note }),
 };
+
+// Re-export types for backward compatibility (consumers import from this module)
+export type {
+  AccessRequest,
+  AdminMember,
+  AdminUser,
+  AdminUserCreate,
+  AdminUserRole,
+  AdminUserUpdate,
+  FeedbackItem,
+  ListUsersParams,
+  PagedResponse,
+} from "@/types";

@@ -14,6 +14,11 @@ from datetime import timedelta
 from celery import Celery
 
 from app.core.config import settings
+from app.core.logging import configure_logging
+
+# Install the same stdout + rotating-file sinks before Celery boots. With
+# worker_hijack_root_logger=False below, Celery will not replace them.
+configure_logging()
 
 celery_app = Celery(
     "fikra",
@@ -33,6 +38,9 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # One task at a time per worker
     task_reject_on_worker_lost=True,  # Re-queue if worker dies mid-task
     worker_concurrency=settings.worker_concurrency,
+    # Keep our structlog RotatingFileHandler on the root logger; Celery's
+    # default hijack would discard it and send task logs only to the console.
+    worker_hijack_root_logger=False,
     # Timeouts
     task_soft_time_limit=300,  # 5 min soft limit → SoftTimeLimitExceeded
     task_time_limit=360,  # 6 min hard limit → worker killed

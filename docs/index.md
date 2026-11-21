@@ -38,6 +38,9 @@ Welcome. This documentation explains every part of the system for developers at 
 
 ## Operations
 
+> Historical audit/phase-gate documents below describe the retired pgvector
+> backend. Current vector search runs in Qdrant (see `architecture/rag-pipeline.md`).
+
 - [Production Readiness Plan](operations/production-readiness-plan.md) — phased path to GA
 - [Release Checklist](operations/release-checklist.md) — the gates this release was verified against, with evidence and open items
 - [Audit Findings Register](operations/audit-findings.md) — every defect found, with severity and file:line

@@ -1,5 +1,5 @@
 """
-Structured JSON logging configuration using structlog.
+Structured JSON logging with console and rotating file sinks.
 
 Every log event includes:
 - timestamp (ISO 8601 UTC)
@@ -8,6 +8,13 @@ Every log event includes:
 - correlation_id (set per request via middleware)
 - Additional context added by callers
 
+Logs are written to stdout **and** to a rotating ``.log`` file under ``LOG_DIR``
+(``backend/logs/`` by default). The active file is ``LOG_FILE`` (``backend.log``
+for the API, ``celery.log`` for the worker); once it reaches
+``LOG_FILE_MAX_BYTES`` it is rotated into ``.log.1``, ``.log.2`` … up to
+``LOG_FILE_BACKUP_COUNT`` files. Both sinks share the same processor chain, so
+redaction and correlation IDs apply equally to console and disk.
+
 Never log passwords, API keys, tokens, or raw document content.
 """
 
@@ -15,6 +22,9 @@ from __future__ import annotations
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from threading import Lock
 from typing import Any, cast
 
 import structlog
@@ -22,7 +32,7 @@ from structlog.types import EventDict, Processor
 
 from app.core.config import settings
 
-# Shared context variable — set per-request in middleware
+# Shared context variable name — set per-request in middleware
 _CONTEXT_VAR_NAME = "request_context"
 
 # Keys whose values must never reach a log sink. Matched case-insensitively at
@@ -50,6 +60,12 @@ _SENSITIVE_KEYS = frozenset(
 )
 
 _REDACTED = "[REDACTED]"
+
+# configure_logging() runs at import time (main.py) and may be called again by
+# tests or a worker bootstrap; serialise it so two threads never install
+# competing handler sets.
+_config_lock = Lock()
+_configured = False
 
 
 def redact_sensitive(logger: Any, method: str, event_dict: EventDict) -> EventDict:
@@ -80,15 +96,11 @@ def drop_color_message_key(logger: Any, method: str, event_dict: EventDict) -> E
     return event_dict
 
 
-def configure_logging() -> None:
-    """
-    Configure structlog and the standard library logging to emit
-    structured JSON or pretty console logs depending on settings.
-
-    Call once at application startup (main.py lifespan).
-    """
-    shared_processors: list[Processor] = [
+def _shared_processors() -> list[Processor]:
+    """Processors used both by structlog events and foreign (stdlib) records."""
+    return [
         structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         add_app_info,
@@ -97,37 +109,101 @@ def configure_logging() -> None:
         structlog.processors.StackInfoRenderer(),
     ]
 
+
+def _formatter(processors: list[Processor]) -> structlog.stdlib.ProcessorFormatter:
+    """Render structured events for both console and rotating file handlers."""
+    renderer: Processor
     if settings.log_format == "json":
-        processors: list[Processor] = [
-            *shared_processors,
-            structlog.processors.dict_tracebacks,
-            structlog.processors.JSONRenderer(),
-        ]
+        renderer = structlog.processors.JSONRenderer()
     else:
-        processors = [
-            *shared_processors,
-            structlog.dev.ConsoleRenderer(colors=True),
-        ]
-
-    structlog.configure(
-        processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, settings.log_level.upper(), logging.INFO)
-        ),
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(sys.stdout),
-        cache_logger_on_first_use=True,
+        renderer = structlog.dev.ConsoleRenderer(colors=False)
+    return structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=processors,
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            renderer,
+        ],
     )
 
-    # Bridge standard library logging into structlog
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=settings.log_level.upper(),
-    )
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "celery", "sqlalchemy.engine"):
-        logging.getLogger(name).handlers = []
-        logging.getLogger(name).propagate = True
+
+def _file_handler() -> logging.Handler | None:
+    """Create the rotating file handler, or None if the sink is unavailable.
+
+    A read-only filesystem must not take the API down: console logging stays
+    active and the reason is printed to stderr (logging is not wired yet here).
+    """
+    try:
+        log_dir = Path(settings.log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return RotatingFileHandler(
+            log_dir / settings.log_file,
+            maxBytes=settings.log_file_max_bytes,
+            backupCount=settings.log_file_backup_count,
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        message = f"cannot open log file {settings.log_dir}/{settings.log_file}: {exc}\n"
+        sys.stderr.write(message)
+        return None
+
+
+def configure_logging(*, force: bool = False) -> None:
+    """
+    Configure structlog and standard library logging.
+
+    Both the console and the rotating file sink share one processor chain, so
+    JSON/console formatting, redaction and request correlation are identical.
+    Call once at application startup (main.py imports and calls this); the
+    Celery worker reuses the same configuration.
+
+    Args:
+        force: reinstall handlers even if logging was already configured.
+            Used by tests that need a temporary log directory.
+    """
+    global _configured
+
+    with _config_lock:
+        if _configured and not force:
+            return
+
+        shared = _shared_processors()
+        structlog.configure(
+            processors=[*shared, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.make_filtering_bound_logger(
+                int(getattr(logging, settings.log_level.upper(), logging.INFO))
+            ),
+            context_class=dict,
+            cache_logger_on_first_use=True,
+        )
+
+        formatter = _formatter(shared)
+        console = logging.StreamHandler(sys.stdout)
+        console.setFormatter(formatter)
+        handlers: list[logging.Handler] = [console]
+
+        if settings.log_to_file:
+            file_sink = _file_handler()
+            if file_sink is not None:
+                file_sink.setFormatter(formatter)
+                handlers.append(file_sink)
+
+        # force=True removes and closes handlers installed by an earlier call
+        # (or by a library that configured logging before us).
+        logging.basicConfig(
+            handlers=handlers,
+            level=settings.log_level.upper(),
+            force=True,
+        )
+
+        # Let uvicorn/celery/sqlalchemy records flow through our handlers and
+        # processor chain instead of writing their own unstructured format.
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "celery", "sqlalchemy.engine"):
+            named = logging.getLogger(name)
+            named.handlers = []
+            named.propagate = True
+
+        _configured = True
 
 
 def get_logger(name: str = __name__) -> structlog.BoundLogger:

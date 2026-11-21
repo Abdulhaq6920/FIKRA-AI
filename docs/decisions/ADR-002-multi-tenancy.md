@@ -45,4 +45,4 @@ This would make cross-tenant access impossible even if application code forgets 
 
 - Every DB query needs an `organization_id` filter — enforced by code review
 - Platform admins need special handling (bypass org filter with auditing)
-- pgvector IVFFlat index is shared across all tenants — tenant filter applied after ANN candidate selection
+- The Qdrant collection is shared across tenants, but `organization_id` is a server-side payload pre-filter; relational rows are re-checked before any passage is returned

@@ -624,11 +624,16 @@ E2E fix in passing: `playwright.config.ts` pointed at port **3001** while `npm r
 
 1. **Remote CI run** â€” the G2.1 workflow has not seen a real push yet; after this push it must
    go green (backend lint/type/migrate/tests, frontend type-check/build).
-2. **P1-U10** â€” `window.confirm` / `window.prompt` unification onto the new toast/modal system
-   is still open (the toast now *reports* these failures; the native dialogs themselves remain).
-3. **P1-U9** â€” conversation-row accessibility (screen-reader labels on the chat sidebar rows) is
-   still open.
-4. **G3.1** â€” production image build/run, separate migration job, backup restore rehearsal,
+2. **P1-U10** â€” **closed 2026-11-19**: every native `window.confirm` / `window.prompt` was
+   replaced by the shared `Dialog` component (document delete, chat feedback comment,
+   organization-admin access request); no native dialogs remain in `frontend/src`.
+3. **P1-U9** â€” **closed 2026-11-19**: the conversation list now exposes `role="list"` /
+   `role="listitem"` and `aria-current` on the active row.
+4. **P1-U6** â€” **closed 2026-11-19**: a 401 that survives a token refresh routes through
+   `registerSessionExpiredHandler` (registered in `AuthContext`), which clears the user and
+   `router.replace("/login?session_expired=1")`; the login page renders a "Your session has
+   expired. Please sign in again." notice instead of a hard `window.location` navigation.
+5. **G3.1** â€” production image build/run, separate migration job, backup restore rehearsal,
 
 ---
 

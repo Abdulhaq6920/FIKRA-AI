@@ -5,8 +5,8 @@
 | **RAG** | Retrieval-Augmented Generation. An AI pattern where relevant documents are fetched and provided as context before the LLM generates an answer. |
 | **Tenant** | An organization. Every resource belongs to exactly one tenant. |
 | **Tenant isolation** | The guarantee that one tenant cannot access another tenant's data. |
-| **pgvector** | A PostgreSQL extension that adds a `vector` column type for similarity search. |
-| **IVFFlat** | An approximate nearest neighbor index algorithm used by pgvector for fast vector search at scale. |
+| **Qdrant** | A vector database used here for cosine similarity search with server-side tenant filtering. |
+| **Payload index** | A Qdrant index over payload fields (here `organization_id` and `document_id`) used to filter vectors before search. |
 | **Bi-encoder** | An embedding model that encodes query and passage separately into vectors. Fast but less precise. |
 | **Cross-encoder** | A model that jointly encodes a query-passage pair. Slower but more accurate than bi-encoders. Used for reranking. |
 | **RRF** | Reciprocal Rank Fusion. Merges multiple ranked lists by scoring each item as `Σ 1/(k + rank)`. |b

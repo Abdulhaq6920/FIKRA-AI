@@ -75,7 +75,16 @@ All configuration is loaded from environment variables (or `.env` file in develo
 | `RERANKER_MODEL` | `BAAI/bge-reranker-base` | Cross-encoder model |
 | `RERANKER_ENABLED` | `true` | Enable/disable reranking |
 
-**Warning**: If you change `EMBEDDING_MODEL`, you must also change `EMBEDDING_DIMENSIONS` and reindex all documents. Mixing vectors from different models produces incorrect retrieval results.
+**Warning**: If you change `EMBEDDING_MODEL`, you must also change `EMBEDDING_DIMENSIONS`, recreate the Qdrant collection and reindex all documents. Mixing vectors from different models produces incorrect retrieval results.
+
+## Vector store (Qdrant)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant server URL (HTTPS for cloud) |
+| `QDRANT_API_KEY` | empty | API key; required when `QDRANT_URL` uses HTTPS |
+| `QDRANT_COLLECTION` | `fikra-ai` | Collection holding chunk vectors |
+| `QDRANT_TIMEOUT` | `30` | Client timeout in seconds |
 
 ## Retrieval
 
@@ -124,6 +133,21 @@ All configuration is loaded from environment variables (or `.env` file in develo
 |----------|---------|-------------|
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `LOG_FORMAT` | `json` | `json` (production) or `console` (development) |
+| `LOG_TO_FILE` | `true` | Also write logs to a rotating file (stdout always receives logs) |
+| `LOG_DIR` | `logs` | Directory for log files, relative to the backend working directory |
+| `LOG_FILE` | `backend.log` | Active log filename. Set `celery.log` for the Celery worker |
+| `LOG_FILE_MAX_BYTES` | `10485760` | Rotate when the active file reaches this size (10 MiB) |
+| `LOG_FILE_BACKUP_COUNT` | `5` | Number of rotated files to keep (`.log.1` … `.log.5`) |
+
+Both sinks share the same structlog processors, so redaction, request IDs and
+formatting are identical on console and disk. Log files live at
+`backend/logs/` by default; add that directory to your volume/backups and never
+commit it. A read-only log directory disables file logging with a stderr
+warning but does not stop the application.
+
+`RotatingFileHandler` is process-local: give each uvicorn worker or Celery process
+a distinct `LOG_FILE` (for example `backend-1.log`, `backend-2.log`) and collect
+them centrally. Pointing several processes at the same active file is not safe.
 
 ## CORS
 
