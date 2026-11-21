@@ -1,0 +1,164 @@
+name: fikra
+
+# FIKRA AI — production stack, deployed by .github/workflows/cd.yml.
+#
+# This file is copied to the host on every deploy. Secrets and service URLs
+# live ONLY in ${DEPLOY_PATH}/.env on that host (git-ignored, never in an image).
+# See docs/operations/cd-pipeline.md for the full variable list and host setup.
+#
+# Required in the host .env:
+#   POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+#   DATABASE_URL, REDIS_URL, CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+#   SECRET_KEY, JWT_SECRET_KEY, ALLOWED_ORIGINS, GROQ_API_KEY,
+#   QDRANT_URL, QDRANT_COLLECTION (and QDRANT_API_KEY for Qdrant Cloud)
+#
+# Injected by CD (do not set in .env):
+#   REGISTRY, REPOSITORY, IMAGE_TAG
+#
+# Resource sizing note: each API replica loads the embedder and reranker
+# (~1.5-2 GB RSS combined). Do not set a memory limit below 2 GB for backend
+# or worker, and do not run more than two workers per small VM.
+
+services:
+  # -------------------------------------------------------------------------
+  # Data stores are internal-only — no host ports are published.
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Extensions are also created by migration 0001; no init mount needed.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    # Opt in with COMPOSE_PROFILES=local-qdrant in .env and set
+    # QDRANT_URL=http://qdrant:6333. Omit entirely when using Qdrant Cloud.
+    profiles: ["local-qdrant"]
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # One-shot migration job. The CD script runs it before starting the app, so
+  # a bad migration fails the deploy before traffic reaches a new container.
+  # Migrations are NOT rolled back automatically on deploy failure (see docs).
+  # -------------------------------------------------------------------------
+  migrate:
+    image: ${REGISTRY:?}/${REPOSITORY:?}/backend:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: ${DATABASE_URL:?set in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head
+    restart: "no"
+
+  # -------------------------------------------------------------------------
+  # FastAPI — the healthcheck below is liveness only; the CD script waits on
+  # /api/v1/health/ready (migrations + model + Redis + Celery) before finish.
+  # -------------------------------------------------------------------------
+  backend:
+    image: ${REGISTRY:?}/${REPOSITORY:?}/backend:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: ${DATABASE_URL:?set in .env}
+      REDIS_URL: ${REDIS_URL:?set in .env}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?set in .env}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:?set in .env}
+      LOG_DIR: /app/logs
+      LOG_FILE: backend.log
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/v1/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  worker:
+    image: ${REGISTRY:?}/${REPOSITORY:?}/worker:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: ${DATABASE_URL:?set in .env}
+      REDIS_URL: ${REDIS_URL:?set in .env}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?set in .env}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:?set in .env}
+      LOG_DIR: /app/logs
+      LOG_FILE: celery.log
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Next.js standalone server. BACKEND_URL is baked into the build by CD;
+  # the runtime value below is a fallback for local `docker compose up`.
+  # -------------------------------------------------------------------------
+  frontend:
+    image: ${REGISTRY:?}/${REPOSITORY:?}/frontend:${IMAGE_TAG:-latest}
+    environment:
+      NEXT_PUBLIC_APP_NAME: "FIKRA AI"
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  redis_data:
+  uploads_data:
+  logs_data:

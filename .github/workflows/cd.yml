@@ -1,0 +1,171 @@
+name: CD
+
+# Continuous deployment for FIKRA AI.
+#
+# Builds the three production images from the commit on main, pushes them to
+# GitHub Container Registry, then rolls them out to the production host over
+# SSH. CI is expected to gate the commit before it reaches main (branch
+# protection), so this workflow never deploys an untested commit.
+#
+# Required GitHub Environment `production`:
+#   Variables: DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH, APP_URL,
+#              HEALTH_URL (optional), FRONTEND_URL (optional),
+#              BACKEND_URL (optional, repo-level fallback is used)
+#   Secrets:   SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS
+#
+# See docs/operations/cd-pipeline.md for host setup and rollback.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA / branch / tag to deploy (defaults to main)"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+# Never cancel a run that is halfway through a rollout.
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    outputs:
+      repository: ${{ steps.meta.outputs.repository }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Resolve image names
+        id: meta
+        run: |
+          # GHCR package names must be lowercase.
+          echo "repository=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          # Use the checked-out commit, not github.sha, so workflow_dispatch
+          # with a previous ref deploys (and tags) that exact revision.
+          echo "image_tag=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repository }}/backend:${{ steps.meta.outputs.image_tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repository }}/backend:latest
+          cache-from: type=gha,scope=cd-backend
+          cache-to: type=gha,mode=max,scope=cd-backend
+
+      - name: Build and push worker
+        # Same Dockerfile and codebase as the backend; the runtime command is
+        # chosen by docker-compose.prod.yml. Pushed separately so the worker
+        # can diverge later without changing the deploy.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repository }}/worker:${{ steps.meta.outputs.image_tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repository }}/worker:latest
+          cache-from: type=gha,scope=cd-backend
+          cache-to: type=gha,mode=max,scope=cd-backend
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          # Next serialises rewrites into .next/routes-manifest.json at build
+          # time, so the backend hostname must be correct during the build.
+          build-args: |
+            BACKEND_URL=${{ vars.BACKEND_URL || 'http://backend:8000' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repository }}/frontend:${{ steps.meta.outputs.image_tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repository }}/frontend:latest
+          cache-from: type=gha,scope=cd-frontend
+          cache-to: type=gha,mode=max,scope=cd-frontend
+
+  deploy:
+    name: Deploy to production
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use the same revision as `publish`, including for manual rollbacks.
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Prepare deploy directory
+        env:
+          SSH_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: ssh "$SSH_TARGET" "mkdir -p '$DEPLOY_PATH'"
+
+      - name: Copy production compose file
+        # The compose file is versioned in the repo and copied on every deploy
+        # so the host can never drift from the code being released.
+        env:
+          SSH_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: scp docker-compose.prod.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.prod.yml"
+
+      - name: Roll out
+        env:
+          SSH_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
+          REGISTRY: ${{ env.REGISTRY }}
+          REPOSITORY: ${{ needs.publish.outputs.repository }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEALTH_URL: ${{ vars.HEALTH_URL || 'http://127.0.0.1:8000/api/v1/health/ready' }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL || 'http://127.0.0.1:3000/' }}
+        run: |
+          ssh "$SSH_TARGET" \
+            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_TAG='$IMAGE_TAG' REGISTRY='$REGISTRY' REPOSITORY='$REPOSITORY' REGISTRY_USER='$REGISTRY_USER' REGISTRY_TOKEN='$REGISTRY_TOKEN' HEALTH_URL='$HEALTH_URL' FRONTEND_URL='$FRONTEND_URL' bash -s" \
+            < deploy/deploy.sh

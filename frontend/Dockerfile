@@ -14,6 +14,11 @@ CMD ["npm", "run", "dev"]
 
 # Production build
 FROM base AS builder
+# Next serialises rewrites into .next/routes-manifest.json at build time, so
+# the backend hostname must be supplied as a build arg, not only at runtime.
+ARG BACKEND_URL=http://localhost:8000
+ENV BACKEND_URL=${BACKEND_URL}
+ENV NEXT_TELEMETRY_DISABLED=1
 COPY . .
 RUN npm run build
 
@@ -21,8 +26,11 @@ RUN npm run build
 FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+RUN chown -R node:node /app
+USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
