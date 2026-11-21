@@ -59,10 +59,14 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    # Neon and other cloud Postgres providers require TLS. asyncpg does not
+    # read sslmode from the URL, so pass it the same way app/db/session.py does.
+    connect_args = {"ssl": "require"} if settings.database_ssl else {}
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

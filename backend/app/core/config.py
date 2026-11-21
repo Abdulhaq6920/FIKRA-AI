@@ -100,14 +100,22 @@ class Settings(BaseSettings):
         origins: list[str]
         if isinstance(v, str):
             v = v.strip()
-            if v.startswith("["):
+            if v.startswith("[") and v.endswith("]"):
                 import json
 
-                origins = json.loads(v)
+                try:
+                    parsed: list[str] = json.loads(v)
+                except json.JSONDecodeError:
+                    # Vercel strips the double quotes from JSON-looking env
+                    # values, so `["https://a", "https://b"]` arrives as
+                    # `[https://a, https://b]`. Still parse it as a list
+                    # instead of crashing at startup.
+                    parsed = v[1:-1].split(",")
+                origins = [o for o in (str(item).strip().strip("'\"") for item in parsed) if o]
             else:
                 origins = [o.strip() for o in v.split(",") if o.strip()]
         else:
-            origins = v
+            origins = list(v)
         # A wildcard origin combined with allow_credentials=True lets any
         # site make credentialed cross-origin requests (cookies carry the
         # JWT). Fail fast instead of silently reflecting every origin.

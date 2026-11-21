@@ -77,7 +77,7 @@ dependencies = [
     # Utilities
     "python-slugify==8.0.4",
     "tenacity==8.4.1",
-    "anyio==4.4.0",
+    "anyio==4.16.0",  # vercel-blob -> vercel-internal-core requires >=4.11
     "aiofiles==23.2.1",
     "python-dateutil==2.9.0.post0",
 ]

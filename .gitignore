@@ -43,6 +43,9 @@ next-env.d.ts
 
 # ── Docker / uploads ─────────────────────────────────────────────────────
 uploads/
+# Frontend upload helper source is code, not runtime upload data.
+!frontend/src/lib/uploads/
+!frontend/src/lib/uploads/**
 *.sqlite
 *.db
 
@@ -77,3 +80,5 @@ playwright/.cache/
 # Local reference material / docs with embedded credentials
 3.docx
 *.docx
+.vercel
+.env*

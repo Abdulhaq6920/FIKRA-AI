@@ -134,6 +134,31 @@ class TestCSRFOrigin:
         assert response.status_code == 200
 
 
+class TestAllowedOriginsParsing:
+    """ALLOWED_ORIGINS must survive Vercel's env-value quote stripping.
+
+    Vercel stores `["https://a"]` as `[https://a]`. The config validator used to
+    call `json.loads()` on any bracketed value, which crashed the API and daemon
+    at import time with `JSONDecodeError: Expecting value: line 1 column 2`.
+    """
+
+    def test_comma_separated_value(self) -> None:
+        settings = Settings(allowed_origins="https://a.example, https://b.example")
+        assert settings.allowed_origins == ["https://a.example", "https://b.example"]
+
+    def test_json_array_value(self) -> None:
+        settings = Settings(allowed_origins='["https://a.example"]')
+        assert settings.allowed_origins == ["https://a.example"]
+
+    def test_vercel_stripped_quotes_value(self) -> None:
+        settings = Settings(allowed_origins="[https://a.example, https://b.example]")
+        assert settings.allowed_origins == ["https://a.example", "https://b.example"]
+
+    def test_wildcard_still_refused_in_mangled_array(self) -> None:
+        with pytest.raises(ValueError, match="allowed_origins"):
+            Settings(allowed_origins="[*]")
+
+
 class TestProductionConfigGuard:
     """A production boot must fail fast on unsafe configuration."""
 
