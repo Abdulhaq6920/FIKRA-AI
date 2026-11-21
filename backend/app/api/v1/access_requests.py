@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,18 +12,18 @@ from app.core.logging import get_logger
 from app.db.models.audit import Notification, RoleRequest, RoleRequestStatus
 from app.db.models.user import OrganizationMembership, OrgRole
 from app.db.session import get_db
-from app.schemas.workflow import RoleRequestCreate
+from app.schemas.workflow import AccessRequestStatusOut, RoleRequestCreate
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/access-requests", tags=["access requests"])
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=AccessRequestStatusOut)
 async def request_org_admin_access(
     body: RoleRequestCreate,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> AccessRequestStatusOut:
     user, org_id, role = ctx
     if user.is_platform_admin or role == OrgRole.ORG_ADMIN.value:
         raise ConflictError("You already have administrator access.")
@@ -73,4 +71,4 @@ async def request_org_admin_access(
         organization_id=str(org_id),
         admins_notified=len(admin_ids),
     )
-    return {"status": "pending"}
+    return AccessRequestStatusOut(status="pending")

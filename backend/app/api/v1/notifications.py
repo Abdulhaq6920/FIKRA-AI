@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -14,19 +13,19 @@ from app.core.exceptions import PermissionDeniedError
 from app.core.logging import get_logger
 from app.db.models.audit import Notification
 from app.db.session import get_db
-from app.schemas.workflow import NotificationOut
+from app.schemas.workflow import NotificationListOut, NotificationOut
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
-@router.get("")
+@router.get("", response_model=NotificationListOut)
 async def list_notifications(
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-) -> dict[str, Any]:
+) -> NotificationListOut:
     user, org_id, _role = ctx
     base = select(Notification).where(
         Notification.organization_id == org_id,
@@ -45,13 +44,13 @@ async def list_notifications(
             Notification.is_read == False,  # noqa: E712
         )
     )
-    return {
-        "items": [NotificationOut.model_validate(row) for row in rows.scalars().all()],
-        "total": total or 0,
-        "page": page,
-        "page_size": page_size,
-        "unread": unread or 0,
-    }
+    return NotificationListOut(
+        items=[NotificationOut.model_validate(row) for row in rows.scalars().all()],
+        total=total or 0,
+        page=page,
+        page_size=page_size,
+        unread=unread or 0,
+    )
 
 
 @router.patch("/{notification_id}/read", status_code=204, response_model=None)

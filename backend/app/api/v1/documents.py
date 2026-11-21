@@ -52,6 +52,7 @@ from app.schemas.document import (
     DocumentListResponse,
     DocumentOut,
     ProcessingJobOut,
+    ReindexResponse,
 )
 from app.storage.local_storage import get_storage
 
@@ -480,12 +481,12 @@ async def delete_document(
     logger.info("document_permanently_deleted", document_id=str(doc_id), actor=str(user.id))
 
 
-@router.post("/{doc_id}/reindex", status_code=202)
+@router.post("/{doc_id}/reindex", status_code=202, response_model=ReindexResponse)
 async def reindex_document(
     doc_id: uuid.UUID,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> ReindexResponse:
     """
     Re-queue a document for ingestion (admin only).
 
@@ -548,7 +549,7 @@ async def reindex_document(
                 error=str(exc)[:200],
             )
 
-    return {"task_id": task_id or "inline", "status": DocumentStatus.REINDEXING.value}
+    return ReindexResponse(task_id=task_id or "inline", status=DocumentStatus.REINDEXING.value)
 
 
 @router.get("/{doc_id}/status", response_model=ProcessingJobOut)
@@ -575,7 +576,7 @@ async def get_processing_status(
     return ProcessingJobOut.model_validate(job)
 
 
-@router.get("/{doc_id}/download")
+@router.get("/{doc_id}/download", response_model=None)
 async def download_document(
     doc_id: uuid.UUID,
     ctx: CurrentUser,

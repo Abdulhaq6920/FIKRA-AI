@@ -8,6 +8,7 @@ or invalid values — no silent misconfigurations in production.
 
 from __future__ import annotations
 
+import json
 import secrets
 from functools import lru_cache
 from typing import Literal
@@ -101,8 +102,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             v = v.strip()
             if v.startswith("[") and v.endswith("]"):
-                import json
-
                 try:
                     parsed: list[str] = json.loads(v)
                 except json.JSONDecodeError:
@@ -209,8 +208,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             v = v.strip()
             if v.startswith("["):
-                import json
-
                 return [e.strip().lower() for e in json.loads(v)]
             return [e.strip().lower() for e in v.split(",") if e.strip()]
         return v

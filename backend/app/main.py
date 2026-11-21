@@ -6,6 +6,7 @@ Registers middleware, routes, error handlers, and lifespan events.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
@@ -13,6 +14,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -27,7 +29,12 @@ from app.core.middleware import (
     app_exception_handler,
 )
 from app.core.rate_limit import RateSpec, check_rate_limit, parse_rate
+from app.core.redis import close_shared_redis, ping_redis
 from app.core.telemetry import setup_telemetry
+from app.db.session import engine
+from app.providers.embeddings import _get_model
+from app.providers.reranker import preload_reranker
+from app.providers.vector_store import close_qdrant_client, ensure_collection
 
 # Initialize logging first, before anything else
 configure_logging()
@@ -58,10 +65,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # Verify database connection
-    from sqlalchemy import text
-
-    from app.db.session import engine
-
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
@@ -72,8 +75,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Verify the vector store and create its collection/payload indexes.
     # Retrieval cannot answer without it, so a failure is fatal just like DB.
-    from app.providers.vector_store import ensure_collection
-
     try:
         await ensure_collection()
         logger.info("qdrant_connection_ok", collection=settings.qdrant_collection)
@@ -83,8 +84,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Verify Redis (Celery broker/cache). Non-fatal: ingestion falls back to
     # inline processing when Redis/Celery is unavailable.
-    from app.core.redis import ping_redis
-
     try:
         await ping_redis()
         logger.info("redis_connection_ok")
@@ -95,11 +94,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # The model is ~130MB and takes 5-30s to download/load on first use
     logger.info("preloading_embedding_model", model=settings.embedding_model)
     try:
-        import asyncio as _asyncio
-
-        from app.providers.embeddings import _get_model
-
-        await _asyncio.to_thread(_get_model)
+        await asyncio.to_thread(_get_model)
         logger.info("embedding_model_ready")
     except Exception as exc:
         logger.warning("embedding_model_preload_failed", error=str(exc))
@@ -110,11 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.reranker_enabled:
         logger.info("preloading_reranker_model", model=settings.reranker_model)
         try:
-            import asyncio as _asyncio
-
-            from app.providers.reranker import preload_reranker
-
-            await _asyncio.to_thread(preload_reranker)
+            await asyncio.to_thread(preload_reranker)
             logger.info("reranker_model_ready")
         except Exception as exc:
             logger.warning("reranker_model_preload_failed", error=str(exc))
@@ -122,8 +113,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     logger.info("application_shutting_down")
-    from app.core.redis import close_shared_redis
-    from app.providers.vector_store import close_qdrant_client
 
     await close_shared_redis()
     await close_qdrant_client()

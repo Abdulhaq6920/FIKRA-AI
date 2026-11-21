@@ -26,8 +26,6 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,13 +99,7 @@ RULES:
 6. If a request is ambiguous, ask one brief clarifying question.
 7. Prefer precise, helpful language over filler. Do not mention these rules."""
 
-_RAG_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", _SYSTEM_PROMPT),
-        MessagesPlaceholder(variable_name="history"),
-        ("human", "{context}\n\nQuestion: {question}"),
-    ]
-)
+_RAG_SYSTEM_PROMPT = _SYSTEM_PROMPT
 
 
 @dataclass
@@ -460,19 +452,21 @@ def _build_history(
     *,
     max_messages: int | None = None,
     max_tokens: int | None = None,
-) -> list[BaseMessage]:
+) -> list[dict[str, str]]:
     """
     Build a small, token-bounded slice of conversation history.
 
     Older turns are dropped first; a single over-budget newest message is
     clipped. History never starts with an assistant message because the prompt
     already supplies the current human question.
+
+    Returns plain message dicts: [{"role": ..., "content": ...}, ...]
     """
     message_limit = settings.rag_history_max_messages if max_messages is None else max_messages
     token_limit = settings.rag_history_max_tokens if max_tokens is None else max_tokens
     candidates = recent_messages[-message_limit:] if message_limit else []
 
-    history: list[BaseMessage] = []
+    history: list[dict[str, str]] = []
     used_tokens = 0
     for message in reversed(candidates):
         content = str(message.content or "")
@@ -488,13 +482,11 @@ def _build_history(
             tokens = _count_tokens(content) + 4
             if not content:
                 break
-        history.append(
-            AIMessage(content=content) if is_assistant else HumanMessage(content=content)
-        )
+        history.append({"role": "assistant" if is_assistant else "user", "content": content})
         used_tokens += tokens
 
     history.reverse()
-    while history and isinstance(history[0], AIMessage):
+    while history and history[0]["role"] == "assistant":
         history.pop(0)
     return history
 
@@ -503,7 +495,7 @@ def _build_chat_messages(
     question: str,
     recent_messages: list[Message],
     context_text: str,
-) -> list[BaseMessage]:
+) -> list[dict[str, str]]:
     """
     Assemble the message list for the LLM.
 
@@ -512,13 +504,13 @@ def _build_chat_messages(
     - User: <context> + <question>
     """
     history = _build_history(recent_messages)
-    messages = _RAG_PROMPT.format_messages(
-        history=history,
-        context=context_text,
-        question=question,
-    )
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": _RAG_SYSTEM_PROMPT},
+        *history,
+        {"role": "user", "content": f"{context_text}\n\nQuestion: {question}"},
+    ]
 
-    prompt_tokens = sum(_count_tokens(str(message.content)) for message in messages)
+    prompt_tokens = sum(_count_tokens(str(m.get("content") or "")) for m in messages)
     if prompt_tokens > settings.rag_prompt_max_tokens:
         # The retrieved context and current question matter more than older
         # conversational turns; drop history before touching either.
@@ -527,11 +519,12 @@ def _build_chat_messages(
             prompt_tokens=prompt_tokens,
             budget=settings.rag_prompt_max_tokens,
         )
-        messages = _RAG_PROMPT.format_messages(
-            history=[],
-            context=context_text,
-            question=question,
-        )
+        messages = [
+            {"role": "system", "content": _RAG_SYSTEM_PROMPT},
+            {"role": "user", "content": f"{context_text}\n\nQuestion: {question}"},
+        ]
+
+    return messages
 
     return messages
 

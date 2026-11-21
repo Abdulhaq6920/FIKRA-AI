@@ -125,3 +125,7 @@ class FeedbackRequest(BaseModel):
         if self.feedback_type == "thumbs_down" and not (self.comment or "").strip():
             raise ValueError("A short description is required for negative feedback.")
         return self
+
+
+class FeedbackSubmitResponse(BaseModel):
+    status: str = "received"

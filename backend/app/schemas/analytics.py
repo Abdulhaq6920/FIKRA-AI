@@ -80,6 +80,15 @@ class QuestionFeedbackOut(BaseModel):
     created_at: datetime
 
 
+class FeedbackListOut(BaseModel):
+    """Paged admin feedback queue."""
+
+    items: list[QuestionFeedbackOut]
+    total: int
+    page: int
+    page_size: int
+
+
 class CitationSourceOut(BaseModel):
     source_number: int
     document_id: str | None = None
@@ -199,7 +208,43 @@ class UserAnalyticsDetailOut(BaseModel):
     recent_questions: list[RecentQuestion]
 
 
-# ─── Document explorer ────────────────────────────────────────────────────
+# ─── Admin dashboard overview ──────────────────────────────────────────────
+
+
+class AdminUserSummaryOut(BaseModel):
+    """A single organization member as surfaced on the admin overview."""
+
+    id: uuid.UUID
+    full_name: str
+    email: str
+    role: str
+    created_at: datetime
+
+
+class AdminFailedJobOut(BaseModel):
+    id: uuid.UUID
+    document_id: uuid.UUID
+    document_title: str
+    status: str
+    error_message: str | None = None
+    updated_at: datetime
+
+
+class AdminOverviewOut(BaseModel):
+    """Live tenant-scoped dashboard counters + latest failed documents."""
+
+    total_users: int = 0
+    total_documents: int = 0
+    total_conversations: int = 0
+    total_questions: int = 0
+    total_tokens_used: int = 0
+    users: list[AdminUserSummaryOut] = []
+    users_page: int = 1
+    users_page_size: int = 20
+    failed_jobs: list[AdminFailedJobOut] = []
+
+
+# ─── Question explorer ────────────────────────────────────────────────────
 
 
 class AdminDocumentRow(BaseModel):

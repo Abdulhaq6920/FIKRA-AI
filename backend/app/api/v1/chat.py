@@ -37,7 +37,7 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.core.metrics import record_rag_outcome
-from app.db.models.audit import Notification
+from app.db.models.audit import Notification, UsageRecord
 from app.db.models.conversation import (
     Conversation,
     FavoriteQuestion,
@@ -61,6 +61,7 @@ from app.schemas.chat import (
     FavoriteQuestionListOut,
     FavoriteQuestionOut,
     FeedbackRequest,
+    FeedbackSubmitResponse,
     MessageListOut,
     MessageOut,
 )
@@ -271,8 +272,6 @@ async def ask(
         conv.message_count += 2
 
     # Record usage
-    from app.db.models.audit import UsageRecord
-
     usage = UsageRecord(
         organization_id=org_id,
         user_id=user.id,
@@ -391,8 +390,6 @@ async def ask_stream(
                 # Flush so the usage record can reference the assistant message.
                 await db.flush()
 
-                from app.db.models.audit import UsageRecord
-
                 db.add(
                     UsageRecord(
                         organization_id=org_id,
@@ -456,13 +453,13 @@ async def ask_stream(
     )
 
 
-@router.post("/messages/{message_id}/feedback", status_code=201)
+@router.post("/messages/{message_id}/feedback", status_code=201, response_model=FeedbackSubmitResponse)
 async def submit_feedback_by_message(
     message_id: uuid.UUID,
     body: FeedbackRequest,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> FeedbackSubmitResponse:
     """Submit feedback on an assistant message via per-message URL."""
     # Reuse the same body schema but override message_id from the path
     overridden = FeedbackRequest(
@@ -470,17 +467,19 @@ async def submit_feedback_by_message(
         feedback_type=body.feedback_type,
         comment=body.comment,
     )
-    return await _do_submit_feedback(overridden, ctx, db)
+    outcome = await _do_submit_feedback(overridden, ctx, db)
+    return FeedbackSubmitResponse(status=outcome["status"])
 
 
-@router.post("/feedback", status_code=201)
+@router.post("/feedback", status_code=201, response_model=FeedbackSubmitResponse)
 async def submit_feedback(
     body: FeedbackRequest,
     ctx: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> FeedbackSubmitResponse:
     """Submit feedback on an assistant message."""
-    return await _do_submit_feedback(body, ctx, db)
+    outcome = await _do_submit_feedback(body, ctx, db)
+    return FeedbackSubmitResponse(status=outcome["status"])
 
 
 @router.get("/favorites", response_model=FavoriteQuestionListOut)

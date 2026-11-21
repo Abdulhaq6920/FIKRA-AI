@@ -6,29 +6,38 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import OrgAdminUser
+from app.core.exceptions import AppError, PermissionDeniedError
 from app.core.logging import get_logger
 from app.db.models.audit import Notification, RoleRequest, RoleRequestStatus, UsageRecord
 from app.db.models.conversation import Conversation, Feedback, Message, MessageRole
 from app.db.models.document import Document, DocumentProcessingJob, JobStatus
 from app.db.models.user import OrganizationMembership, OrgRole, User
 from app.db.session import get_db
-from app.schemas.workflow import FeedbackReviewUpdate, ReviewDecision
+from app.schemas.analytics import AdminOverviewOut, FeedbackListOut
+from app.schemas.user_admin import AdminMemberListOut
+from app.schemas.workflow import (
+    AccessRequestListOut,
+    AccessRequestStatusOut,
+    FeedbackReviewOut,
+    FeedbackReviewUpdate,
+    ReviewDecision,
+)
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.get("/overview")
+@router.get("/overview", response_model=AdminOverviewOut)
 async def organization_overview(
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-) -> dict[str, Any]:
+) -> AdminOverviewOut:
     """Return live, tenant-scoped dashboard metrics and recent members."""
     _user, org_id, _role = ctx
 
@@ -121,14 +130,14 @@ async def organization_overview(
     }
 
 
-@router.get("/members")
+@router.get("/members", response_model=AdminMemberListOut)
 async def list_members(
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(default=None, max_length=255),
-) -> dict[str, Any]:
+) -> AdminMemberListOut:
     """Paginated, searchable list of organization members."""
     _admin, org_id, _role = ctx
 
@@ -142,8 +151,6 @@ async def list_members(
     )
     if search:
         term = f"%{search.lower()}%"
-        from sqlalchemy import or_
-
         base = base.where(or_(User.full_name.ilike(term), User.email_normalized.ilike(term)))
 
     total = await db.scalar(select(func.count()).select_from(base.subquery()))
@@ -168,14 +175,14 @@ async def list_members(
     return {"items": items, "total": total or 0, "page": page, "page_size": page_size}
 
 
-@router.get("/feedback")
+@router.get("/feedback", response_model=FeedbackListOut)
 async def list_feedback(
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(default=None, pattern="^(open|in_review|solved)$"),
-) -> dict[str, Any]:
+) -> FeedbackListOut:
     _admin, org_id, _role = ctx
     base = (
         select(Feedback, User.full_name, User.email, Message.content)
@@ -210,20 +217,18 @@ async def list_feedback(
     }
 
 
-@router.patch("/feedback/{feedback_id}")
+@router.patch("/feedback/{feedback_id}", response_model=FeedbackReviewOut)
 async def review_feedback(
     feedback_id: str,
     body: FeedbackReviewUpdate,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> FeedbackReviewOut:
     admin, org_id, _role = ctx
     item = await db.scalar(
         select(Feedback).where(Feedback.id == feedback_id, Feedback.organization_id == org_id)
     )
     if item is None:
-        from app.core.exceptions import PermissionDeniedError
-
         logger.warning(
             "feedback_review_failed",
             reason="not_found",
@@ -259,14 +264,14 @@ async def review_feedback(
     return {"status": body.status}
 
 
-@router.get("/access-requests")
+@router.get("/access-requests", response_model=AccessRequestListOut)
 async def list_access_requests(
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(default=None, pattern="^(pending|approved|rejected)$"),
-) -> dict[str, Any]:
+) -> AccessRequestListOut:
     _admin, org_id, _role = ctx
     base = (
         select(RoleRequest, User.full_name, User.email)
@@ -297,13 +302,13 @@ async def list_access_requests(
     }
 
 
-@router.patch("/access-requests/{request_id}")
+@router.patch("/access-requests/{request_id}", response_model=AccessRequestStatusOut)
 async def decide_access_request(
     request_id: str,
     body: ReviewDecision,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> AccessRequestStatusOut:
     admin, org_id, _role = ctx
     request = await db.scalar(
         select(RoleRequest).where(
@@ -311,8 +316,6 @@ async def decide_access_request(
         )
     )
     if request is None or request.status != RoleRequestStatus.PENDING:
-        from app.core.exceptions import PermissionDeniedError
-
         logger.warning(
             "access_request_decision_failed",
             reason="not_available",

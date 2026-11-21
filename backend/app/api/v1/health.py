@@ -31,7 +31,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.redis import ping_redis
 from app.db.session import get_db
+from app.providers.embeddings import is_model_loaded
+from app.providers.vector_store import ping as ping_qdrant
+from app.schemas.health import HealthLiveResponse, HealthStatusResponse
 from app.workers.celery_app import celery_app
 
 logger = get_logger(__name__)
@@ -41,13 +45,13 @@ router = APIRouter(prefix="/health", tags=["health"])
 _migration_state: dict[str, str] = {}
 
 
-@router.get("/live")
-async def liveness() -> dict[str, str]:
+@router.get("/live", response_model=HealthLiveResponse)
+async def liveness() -> HealthLiveResponse:
     """Always returns 200. Used by Docker/k8s to check if the process is running."""
-    return {"status": "ok", "app": settings.app_name}
+    return HealthLiveResponse(status="ok", app=settings.app_name)
 
 
-@router.get("/ready")
+@router.get("/ready", response_model=HealthStatusResponse)
 async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """
     Returns 200 when the required dependencies are ready, 503 otherwise.
@@ -64,9 +68,6 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     except Exception as exc:
         checks["database"] = f"error: {type(exc).__name__}"
 
-    from app.providers.embeddings import is_model_loaded
-    from app.providers.vector_store import ping as ping_qdrant
-
     checks["embedding_model"] = "ok" if is_model_loaded() else "not_loaded"
 
     try:
@@ -75,7 +76,11 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     except Exception as exc:
         checks["qdrant"] = f"error: {type(exc).__name__}"
 
-    from app.core.redis import ping_redis
+    try:
+        await ping_qdrant()
+        checks["qdrant"] = "ok"
+    except Exception as exc:
+        checks["qdrant"] = f"error: {type(exc).__name__}"
 
     try:
         await ping_redis()
@@ -114,7 +119,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     )
 
 
-@router.get("/startup")
+@router.get("/startup", response_model=HealthStatusResponse)
 async def startup(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """One-shot check: are migrations applied and is the model warm?"""
     checks: dict[str, str] = {}
@@ -124,9 +129,6 @@ async def startup(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         checks["migrations"] = f"at_head:{current}"
     except Exception as exc:
         checks["migrations"] = f"error: {type(exc).__name__}"
-
-    from app.providers.embeddings import is_model_loaded
-    from app.providers.vector_store import ping as ping_qdrant
 
     checks["embedding_model"] = "ok" if is_model_loaded() else "not_loaded"
 

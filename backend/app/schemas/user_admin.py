@@ -32,6 +32,24 @@ class AdminUserListResponse(BaseModel):
     page_size: int
 
 
+class AdminMemberOut(BaseModel):
+    """A member row as surfaced on the admin overview and member list."""
+
+    id: uuid.UUID
+    full_name: str
+    email: str
+    role: str
+    status: str
+    joined_at: datetime
+
+
+class AdminMemberListOut(BaseModel):
+    items: list[AdminMemberOut]
+    total: int
+    page: int
+    page_size: int
+
+
 class AdminUserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=255)

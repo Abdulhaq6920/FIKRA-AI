@@ -32,3 +32,37 @@ class NotificationOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class NotificationListOut(BaseModel):
+    items: list[NotificationOut]
+    total: int
+    page: int
+    page_size: int
+    unread: int
+
+
+class AccessRequestOut(BaseModel):
+    id: uuid.UUID
+    user_name: str
+    user_email: str
+    reason: str | None
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AccessRequestListOut(BaseModel):
+    items: list[AccessRequestOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class AccessRequestStatusOut(BaseModel):
+    status: str
+
+
+class FeedbackReviewOut(BaseModel):
+    status: str

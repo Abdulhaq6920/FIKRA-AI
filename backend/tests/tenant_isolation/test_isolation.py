@@ -13,6 +13,7 @@ import uuid
 
 import pytest
 
+from app.services.rag_service import _extract_citations
 from app.services.retrieval_service import RetrievedPassage, _reciprocal_rank_fusion
 
 
@@ -67,8 +68,6 @@ class TestTenantIsolationLogic:
         A model cannot inject a citation to an unauthorized document by
         generating [Source 999] if 999 is not in the source_map.
         """
-        from app.services.rag_service import _extract_citations
-
         # Source map contains only documents from the authenticated org
         authorized_passage = RetrievedPassage(
             chunk_id=uuid.uuid4(),
@@ -98,8 +97,6 @@ class TestTenantIsolationLogic:
         different chunk_id. We verify the system uses chunk_id as key,
         not document content, so there's no way to 'smuggle' content.
         """
-        from app.services.rag_service import _extract_citations
-
         cross_org_passage = RetrievedPassage(
             chunk_id=uuid.uuid4(),
             document_id=uuid.uuid4(),

@@ -65,8 +65,8 @@ class TestBuildHistory:
         history = _build_history(messages, max_messages=10, max_tokens=1000)
 
         assert len(history) == 2
-        assert history[0].content == "Earlier question"
-        assert history[1].content == "Latest answer"
+        assert history[0]["content"] == "Earlier question"
+        assert history[1]["content"] == "Latest answer"
 
     def test_drops_oldest_turns_to_fit_budget(self) -> None:
         messages = [
@@ -78,7 +78,7 @@ class TestBuildHistory:
 
         history = _build_history(messages, max_messages=10, max_tokens=20)
 
-        assert [message.content for message in history] == [
+        assert [message["content"] for message in history] == [
             "Second question",
             "Second answer",
         ]
@@ -92,9 +92,9 @@ class TestBuildHistory:
         history = _build_history(messages, max_messages=10, max_tokens=100)
 
         assert len(history) == 2
-        assert history[0].content == "Question"
-        assert _count_tokens(str(history[1].content)) <= 60
-        assert str(history[1].content).endswith("…")
+        assert history[0]["content"] == "Question"
+        assert _count_tokens(str(history[1]["content"])) <= 60
+        assert str(history[1]["content"]).endswith("…")
 
     def test_zero_budget_returns_no_history(self) -> None:
         messages = [SimpleNamespace(role=MessageRole.USER, content="Question")]

@@ -50,3 +50,10 @@ class ProcessingJobOut(BaseModel):
     completed_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class ReindexResponse(BaseModel):
+    """Accepted re-index job acknowledgement."""
+
+    task_id: str
+    status: str

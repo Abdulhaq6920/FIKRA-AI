@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass
-from typing import Protocol
-
-from langchain_core.messages import BaseMessage
+from typing import Any, Protocol
 
 
 @dataclass
@@ -37,7 +35,7 @@ class LLMClient(Protocol):
 
     async def generate(
         self,
-        messages: Sequence[ChatMessage | BaseMessage],
+        messages: Sequence[Any],
         *,
         model: str | None = None,
         max_tokens: int | None = None,
@@ -47,7 +45,7 @@ class LLMClient(Protocol):
 
     def generate_stream(
         self,
-        messages: Sequence[ChatMessage | BaseMessage],
+        messages: Sequence[Any],
         *,
         model: str | None = None,
         max_tokens: int | None = None,

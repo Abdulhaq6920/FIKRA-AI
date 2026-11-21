@@ -9,7 +9,6 @@ from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
 import httpx
-from langchain_core.messages import BaseMessage
 
 from app.core.config import settings
 from app.core.exceptions import ProviderUnavailableError
@@ -21,19 +20,23 @@ _ollama_semaphore = asyncio.Semaphore(settings.ollama_max_concurrent_requests)
 
 
 def _serialize_messages(
-    messages: Sequence[ChatMessage | BaseMessage],
+    messages: Sequence[Any],
     system_prompt: str | None,
 ) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     if system_prompt:
         result.append({"role": "system", "content": system_prompt})
     for message in messages:
-        if isinstance(message, BaseMessage):
-            role = {"human": "user", "ai": "assistant"}.get(message.type, message.type)
-            content = message.content
-        else:
+        if isinstance(message, ChatMessage):
             role = message.role
             content = message.content
+        else:
+            role = getattr(message, "type", "user") or "user"
+            content = getattr(message, "content", "")
+            if role == "human":
+                role = "user"
+            elif role == "ai":
+                role = "assistant"
         result.append({"role": role, "content": str(content)})
     return result
 
@@ -48,7 +51,7 @@ class OllamaClient:
 
     def _payload(
         self,
-        messages: Sequence[ChatMessage | BaseMessage],
+        messages: Sequence[Any],
         *,
         model: str | None,
         max_tokens: int | None,
@@ -71,7 +74,7 @@ class OllamaClient:
 
     async def generate(
         self,
-        messages: Sequence[ChatMessage | BaseMessage],
+        messages: Sequence[Any],
         *,
         model: str | None = None,
         max_tokens: int | None = None,
@@ -139,7 +142,7 @@ class OllamaClient:
 
     async def generate_stream(
         self,
-        messages: Sequence[ChatMessage | BaseMessage],
+        messages: Sequence[Any],
         *,
         model: str | None = None,
         max_tokens: int | None = None,
