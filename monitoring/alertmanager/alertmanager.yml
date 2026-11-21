@@ -1,0 +1,44 @@
+# Alertmanager routing. The destination is injected from the environment so
+# no webhook URL or Slack token ever lands in Git.
+#
+# ALERT_WEBHOOK_URL must be set in the monitoring stack's .env. It can be a
+# Slack webhook relay, PagerDuty integration, Opsgenie, or any HTTP endpoint
+# that accepts Alertmanager's JSON payload.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: webhook
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    # Page quickly for anything an operator must act on now.
+    - receiver: webhook
+      matchers:
+        - severity=~"critical|warning"
+      group_wait: 10s
+      repeat_interval: 1h
+    # Informational alerts digest slowly and rarely.
+    - receiver: webhook
+      matchers:
+        - severity="info"
+      group_wait: 5m
+      repeat_interval: 24h
+
+inhibit_rules:
+  # A critical outage supersedes the slower warning version of the same SLO.
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ["alertname"]
+
+receivers:
+  - name: webhook
+    webhook_configs:
+      - url: ${ALERT_WEBHOOK_URL}
+        send_resolved: true
+        max_alerts: 20

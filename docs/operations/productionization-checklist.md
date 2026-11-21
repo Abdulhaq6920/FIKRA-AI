@@ -47,12 +47,13 @@ Legend:
 | 3.1 | Structured JSON logs with request IDs and redaction | ✅ | `core/logging.py` |
 | 3.2 | Prometheus metrics (HTTP, RAG stages, LLM, ingestion, pool) | ✅ | `core/metrics.py` (17 families), `/metrics` |
 | 3.3 | Liveness / readiness / startup probes | ✅ | `api/v1/health.py`, wired in `docker-compose.prod.yml` |
-| 3.4 | Alert rules for the documented SLOs | 📋 | `monitoring/prometheus/alerts.yml` |
-| 3.5 | Grafana dashboard (golden signals, RAG, ingestion, cost) | 📋 | `monitoring/grafana/dashboard.json` |
-| 3.6 | Prometheus + Grafana stack definition | 📋 | `docker-compose.monitoring.yml` |
-| 3.7 | SLO targets and a runbook per alert | 📋 | `docs/operations/slo-and-alerts.md` |
-| 3.8 | Scraper, Alertmanager and dashboards actually deployed | ⬜ | Requires a host with capacity and notification channel |
+| 3.4 | Alert rules for the documented SLOs | 📋 | `monitoring/prometheus/alerts.yml` — 18 rules across availability, RAG, ingestion, infra/cost |
+| 3.5 | Grafana dashboard (golden signals, RAG, ingestion, cost) | 📋 | `monitoring/grafana/dashboards/fikra.json` — 13 panels, auto-provisioned |
+| 3.6 | Prometheus + Grafana stack definition | 📋 | `docker-compose.monitoring.yml`, `monitoring/{prometheus,alertmanager,grafana}/` |
+| 3.7 | SLO targets and a runbook per alert | 📋 | `docs/operations/slo-and-alerts.md` — SLO table + 18 runbook entries |
+| 3.8 | Scraper, Alertmanager and dashboards actually deployed | ⬜ | Requires `ALERT_WEBHOOK_URL`, `GRAFANA_ADMIN_PASSWORD` and a host with capacity |
 | 3.9 | Synthetic login → ask → citation probe every 5 min | ⬜ | Script + scheduler; the only check that proves RAG works end to end |
+| 3.10 | Alert delivery rehearsed against a real webhook | ⬜ | Fire a test alert after setting `ALERT_WEBHOOK_URL`; do not assume routing works |
 
 ## 4. Data protection and durability
 
@@ -60,7 +61,7 @@ Legend:
 |---|---|---|---|
 | 4.1 | Migrations applied by a one-shot job before rollout | ✅ | `cd.yml` / `deploy.sh` `migrate` service |
 | 4.2 | Backup/restore rehearsed once | ✅ | `phase-gates.md` §G3.x (historical baseline) |
-| 4.3 | Automated nightly backups with retention + restore drill | 📋 | `scripts/backup_postgres.sh`, `scripts/restore_postgres.sh`, schedule on host |
+| 4.3 | Automated nightly backups with retention + restore drill | 📋 | `scripts/backup_postgres.sh`, `scripts/restore_postgres.sh`, `docs/operations/backup-and-restore.md`; cron + offsite copy + quarterly drill still to schedule |
 | 4.4 | PITR / WAL archiving | ⬜ | Requires managed Postgres or `archive_command` + object storage |
 | 4.5 | Retention purge for expired sessions / usage records | ⬜ | Celery beat task, not yet implemented |
 | 4.6 | Uploads on shared object storage before scaling past one node | ⬜ | `storage/interface.py` abstraction exists; S3 backend not implemented |
@@ -85,7 +86,7 @@ Legend:
 |---|---|---|---|
 | 6.1 | Type-check and production build pass | ✅ | CI `frontend` job |
 | 6.2 | Error / loading / not-found boundaries | ✅ | `app/error.tsx` et al. |
-| 6.3 | ESLint config committed and runnable | 🔧 | `frontend/.eslintrc.json` |
+| 6.3 | ESLint config committed and runnable | 🔧 | `frontend/.eslintrc.json`; `npm run lint` clean (4 unescaped quotes fixed in admin page) |
 | 6.4 | `/chat` first load reduced from 419 kB | ⬜ | Split markdown/theme chunks with `next/dynamic` (O-9) |
 | 6.5 | Dead dependencies removed | ⬜ | `swr`, `js-cookie`, CVA and unused Radix packages (plan §5.1) |
 
@@ -103,10 +104,14 @@ Legend:
 
 ## Execution order
 
-1. **Do now (in repo, no external dependency):** items 1.4, 1.5, 2.4, 2.5, 3.4–3.7, 4.3, 6.3, 7.2.
-2. **Next (needs a host / credentials):** 3.8, 3.9, 1.7, 7.4, 4.4.
+1. **Done in this pass (repo-only):** items 1.4, 1.5, 2.4, 2.5, 3.4–3.7, 4.3 (scripts + doc), 6.3, 7.2.
+   Validation: `ruff check app/`, `mypy app/`, 115 unit/tenant tests, `npm run lint`,
+   `npm run type-check`, YAML/JSON parse and `bash -n` all pass locally.
+2. **Next (needs a host / credentials):** 3.8, 3.10, 3.9, 1.7, 7.4, 4.4. Start with the monitoring
+   stack and a test alert, then schedule backups and an offsite copy.
 3. **Then (behavioural changes, each with tests):** 5.4–5.7, 6.4, 6.5, 4.5, 2.6.
 4. **Last (capacity and DR):** 5.2, 4.6, 4.7, 7.5.
 
-Nothing in the "Do now" group changes application behaviour except the rate limiter, which keeps a
-local fallback and is therefore safe to roll out with Redis unavailable.
+Nothing in the first group changes application behaviour except the rate limiter, which keeps a
+local fallback and is therefore safe to roll out with Redis unavailable. Items marked 📋 are
+deliverables, not live guarantees — they only close when the operator deploys and verifies them.

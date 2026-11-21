@@ -1,0 +1,312 @@
+# FIKRA AI — Prometheus alert rules.
+#
+# Every rule maps to an SLO in docs/operations/slo-and-alerts.md. The
+# `summary`/`description` text is what operators see in Alertmanager, so keep
+# it actionable: say what is broken and where to look, not just that a number
+# crossed a threshold.
+#
+# Thresholds deliberately use `clamp_min` on denominators so a quiet service
+# does not divide by zero and fire a false alarm.
+
+groups:
+  # ---------------------------------------------------------------------------
+  # Availability / golden signals
+  # ---------------------------------------------------------------------------
+  - name: fikra-availability
+    rules:
+      - alert: FikraBackendDown
+        expr: up{job="fikra-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: fikra
+          slo: availability
+        annotations:
+          summary: "FIKRA API is not scrapeable ({{ $labels.instance }})"
+          description: >-
+            Prometheus has not reached /metrics for 2 minutes. Check the
+            container (docker compose ps), then the process logs. If the
+            container is up but /metrics fails, the app may be stuck loading
+            the embedding model.
+          runbook: "docs/operations/slo-and-alerts.md#fikrabackenddown"
+
+      - alert: FikraMetricsMissing
+        expr: absent(up{job="fikra-backend"})
+        for: 5m
+        labels:
+          severity: critical
+          team: fikra
+          slo: availability
+        annotations:
+          summary: "FIKRA API target has disappeared from Prometheus"
+          description: >-
+            The scrape target itself is gone, not merely down. Verify that
+            prometheus.yml still lists fikra-backend and that the config
+            reload succeeded.
+          runbook: "docs/operations/slo-and-alerts.md#fikrametricsmissing"
+
+      - alert: FikraReadinessFailing
+        expr: probe_success{probe="readiness"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: fikra
+          slo: availability
+        annotations:
+          summary: "FIKRA readiness probe failing at {{ $labels.instance }}"
+          description: >-
+            /api/v1/health/ready returns 503: PostgreSQL, Qdrant or the
+            embedding model is unavailable. Open the response body to see
+            which check failed before restarting anything.
+          runbook: "docs/operations/slo-and-alerts.md#fikrareadinessfailing"
+
+      - alert: FikraFrontendDown
+        expr: probe_success{probe="frontend"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          team: fikra
+          slo: availability
+        annotations:
+          summary: "FIKRA frontend is not serving the root page"
+          description: >-
+            The Next.js server did not return 2xx. Check the frontend
+            container and whether the baked BACKEND_URL points at a reachable
+            API.
+          runbook: "docs/operations/slo-and-alerts.md#fikrafrontenddown"
+
+      - alert: FikraHighServerErrorRate
+        expr: >-
+          sum(rate(http_requests_total{status_class="5xx"}[5m]))
+          / clamp_min(sum(rate(http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: fikra
+          slo: availability
+        annotations:
+          summary: "FIKRA 5xx rate above 5%"
+          description: >-
+            More than one request in twenty is failing. Correlate with the
+            request-ID in the structured logs and the RAG outcome metric
+            before rolling back.
+          runbook: "docs/operations/slo-and-alerts.md#fikrahighservererrorrate"
+
+      - alert: FikraElevatedServerErrorRate
+        expr: >-
+          sum(rate(http_requests_total{status_class="5xx"}[15m]))
+          / clamp_min(sum(rate(http_requests_total[15m])), 0.001) > 0.01
+        for: 15m
+        labels:
+          severity: warning
+          team: fikra
+          slo: availability
+        annotations:
+          summary: "FIKRA 5xx rate above 1% (15m)"
+          description: "Low-volume but sustained server errors. Investigate during business hours."
+          runbook: "docs/operations/slo-and-alerts.md#fikraelevatedservererrorrate"
+
+      - alert: FikraHighRequestLatencyP95
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{
+                route!~"/metrics|/api/v1/health/.*"
+              }[5m])
+            )
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: fikra
+          slo: latency
+        annotations:
+          summary: "FIKRA p95 request latency above 2 s"
+          description: >-
+            Health and metrics routes are excluded. Use the RAG stage panels
+            to separate retrieval, prompt building and LLM generation.
+          runbook: "docs/operations/slo-and-alerts.md#fikrahighrequestlatencyp95"
+
+  # ---------------------------------------------------------------------------
+  # RAG quality — the core product promise
+  # ---------------------------------------------------------------------------
+  - name: fikra-rag
+    rules:
+      - alert: FikraRagFailureRate
+        expr: >-
+          sum(rate(rag_requests_total{outcome=~"error|app_error"}[10m]))
+          / clamp_min(sum(rate(rag_requests_total[10m])), 0.001) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          team: fikra
+          slo: quality
+        annotations:
+          summary: "More than 5% of chat answers fail"
+          description: >-
+            Check the Groq provider (timeouts, 429s, model availability) and
+            Qdrant connectivity before blaming retrieval quality.
+          runbook: "docs/operations/slo-and-alerts.md#fikraragfailurerate"
+
+      - alert: FikraRagNoCitations
+        expr: >-
+          sum(rate(rag_requests_total{outcome="no_citations"}[15m]))
+          / clamp_min(sum(rate(rag_requests_total[15m])), 0.001) > 0.30
+        for: 15m
+        labels:
+          severity: warning
+          team: fikra
+          slo: quality
+        annotations:
+          summary: "Over 30% of answers have no citations"
+          description: >-
+            Retrieval is returning nothing usable, or documents were deleted
+            without a Qdrant reindex. Check ingestion_jobs_total{status="dead"}
+            and the retrieval_candidates histogram.
+          runbook: "docs/operations/slo-and-alerts.md#fikraragnocitations"
+
+      - alert: FikraRagRetrievalSlow
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(rag_stage_duration_seconds_bucket{stage="retrieve"}[10m]))
+          ) > 4
+        for: 10m
+        labels:
+          severity: warning
+          team: fikra
+          slo: latency
+        annotations:
+          summary: "RAG retrieval p95 above 4 s"
+          description: >-
+            Split the stage panels (embed_query, vector_search, keyword_search,
+            fusion, rerank) to find the slow component. A cold Qdrant or an
+            oversized keyword index are common causes.
+          runbook: "docs/operations/slo-and-alerts.md#fikraragretrievalslow"
+
+  # ---------------------------------------------------------------------------
+  # Ingestion and data pipeline
+  # ---------------------------------------------------------------------------
+  - name: fikra-ingestion
+    rules:
+      - alert: FikraIngestionDeadJobs
+        expr: increase(ingestion_jobs_total{status="dead"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: fikra
+          slo: data
+        annotations:
+          summary: "Document ingestion jobs reached DEAD state"
+          description: >-
+            At least one document failed after exhausting retries. Check
+            ingestion_task_error logs, then the document's processing job row.
+          runbook: "docs/operations/slo-and-alerts.md#fikraingestiondeadjobs"
+
+      - alert: FikraIngestionQueueBacklog
+        expr: ingestion_queue_depth{queue="ingestion"} > 50
+        for: 15m
+        labels:
+          severity: warning
+          team: fikra
+          slo: data
+        annotations:
+          summary: "Ingestion queue is backed up ({{ $value }} pending)"
+          description: >-
+            Workers are not keeping up or are stopped. Verify the Celery
+            worker is running and consuming the `ingestion` queue.
+          runbook: "docs/operations/slo-and-alerts.md#fikraingestionqueuebacklog"
+
+      - alert: FikraWorkerQuiet
+        expr: absent_over_time(ingestion_jobs_total{status=~"ready|dead|timeout"}[30m])
+        for: 15m
+        labels:
+          severity: info
+          team: fikra
+          slo: data
+        annotations:
+          summary: "No ingestion job samples in 30 minutes"
+          description: >-
+            Usually harmless — it means nobody uploaded a document. If
+            uploads are pending, check that the Celery worker is running and
+            connected to Redis. Consider adding a worker heartbeat metric if
+            this alert is too noisy.
+          runbook: "docs/operations/slo-and-alerts.md#fikraworkerquiet"
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure, abuse and cost
+  # ---------------------------------------------------------------------------
+  - name: fikra-infrastructure
+    rules:
+      - alert: FikraDbPoolSaturation
+        expr: db_pool_in_use / clamp_min(db_pool_size, 1) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          team: fikra
+          slo: latency
+        annotations:
+          summary: "Database connection pool above 85%"
+          description: >-
+            Requests will start queueing soon. Check for long-running queries
+            and slow LLM calls holding sessions open before raising pool size.
+          runbook: "docs/operations/slo-and-alerts.md#fikradbpoolsaturation"
+
+      - alert: FikraAuthFailureSpike
+        expr: sum(rate(auth_failures_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: fikra
+          slo: security
+        annotations:
+          summary: "More than one authentication failure per second"
+          description: >-
+            Likely credential stuffing. Confirm the `reason` label; the
+            per-IP login rate limit should already be throttling the source.
+          runbook: "docs/operations/slo-and-alerts.md#fikraauthfailurespike"
+
+      - alert: FikraRateLimitSpike
+        expr: sum(rate(rate_limit_blocked_total[10m])) > 5
+        for: 10m
+        labels:
+          severity: info
+          team: fikra
+          slo: security
+        annotations:
+          summary: "Sustained rate-limit rejections"
+          description: >-
+            Either an abuse attempt or a client retry loop. Check the `scope`
+            label and correlate with auth_failures_total.
+          runbook: "docs/operations/slo-and-alerts.md#fikraratelimitspike"
+
+      - alert: FikraLlmCostSpike
+        expr: sum(rate(llm_cost_usd_total[1h])) * 3600 > 10
+        for: 30m
+        labels:
+          severity: warning
+          team: fikra
+          slo: cost
+        annotations:
+          summary: "Estimated LLM spend above $10/hour"
+          description: >-
+            Compare llm_tokens_total by model. A retry storm or a model
+            switch is the usual cause; cap concurrency if needed.
+          runbook: "docs/operations/slo-and-alerts.md#fikrallmcostspike"
+
+      - alert: FikraHostDiskFilling
+        expr: >-
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+          / clamp_min(node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}, 1) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+          team: fikra
+          slo: availability
+        annotations:
+          summary: "Less than 15% free disk on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: >-
+            PostgreSQL WAL, uploads and logs share this host. Check the
+            backup retention policy and prune old log files.
+          runbook: "docs/operations/slo-and-alerts.md#fikrahostdiskfilling"

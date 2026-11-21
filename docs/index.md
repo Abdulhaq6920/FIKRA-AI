@@ -43,7 +43,10 @@ Welcome. This documentation explains every part of the system for developers at 
 
 - [Production Readiness Plan](operations/production-readiness-plan.md) — phased path to GA
 - [Release Checklist](operations/release-checklist.md) — the gates this release was verified against, with evidence and open items
+- [Productionization Checklist](operations/productionization-checklist.md) — working backlog with status for every hardening item
 - [CD Pipeline](operations/cd-pipeline.md) — build, push, deploy and rollback on main
+- [SLOs, Alerts and Runbook](operations/slo-and-alerts.md) — targets, alert inventory and first response
+- [Backup and Restore](operations/backup-and-restore.md) — nightly dumps, offsite copy and restore drill
 - [Audit Findings Register](operations/audit-findings.md) — every defect found, with severity and file:line
 - [Configuration Reference](operations/configuration-reference.md)
 - [Security Checklist](operations/security-checklist.md)

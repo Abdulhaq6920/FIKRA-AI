@@ -819,7 +819,7 @@ function FeedbackTab() {
                       <StatusBadge status={item.review_status} />
                     </div>
                     <p className="text-xs text-surface-400">{item.user_name} · {item.user_email}</p>
-                    {item.comment && <p className="mt-1 text-xs text-surface-300 italic">"{item.comment}"</p>}
+                    {item.comment && <p className="mt-1 text-xs text-surface-300 italic">&quot;{item.comment}&quot;</p>}
                     <p className="mt-1 text-xs text-surface-500 line-clamp-2">{item.message_excerpt}</p>
                   </div>
                 </div>
@@ -933,7 +933,7 @@ function AccessRequestsTab() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-surface-200">{item.user_name}</p>
                     <p className="text-xs text-surface-500">{item.user_email}</p>
-                    {item.reason && <p className="mt-1 text-xs text-surface-400 italic">"{item.reason}"</p>}
+                    {item.reason && <p className="mt-1 text-xs text-surface-400 italic">&quot;{item.reason}&quot;</p>}
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-1">
                     <StatusBadge status={item.status} />

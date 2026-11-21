@@ -1,0 +1,75 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    environment: production
+    service: fikra
+
+# Alert rules are mounted read-only from ./monitoring/prometheus/alerts.yml.
+rule_files:
+  - /etc/prometheus/rules/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+      timeout: 10s
+
+scrape_configs:
+  # ---------------------------------------------------------------------------
+  # Self-observability. If this target disappears, dashboards alone are not
+  # evidence that alerts are still being evaluated.
+  # ---------------------------------------------------------------------------
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+
+  # ---------------------------------------------------------------------------
+  # FastAPI /metrics endpoint. `host.docker.internal` reaches the port that
+  # docker-compose.prod.yml publishes on 127.0.0.1:8000. If monitoring is
+  # attached to the app's compose network instead, replace this with
+  # `backend:8000`, which is a little cheaper (no host network hop).
+  # ---------------------------------------------------------------------------
+  - job_name: fikra-backend
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+
+  # ---------------------------------------------------------------------------
+  # End-to-end blackbox probes. /ready returns 503 when PostgreSQL, Qdrant or
+  # the embedding model are unavailable, so this catches failures that an
+  # in-process /metrics scrape cannot (e.g. a dead HTTP listener).
+  # ---------------------------------------------------------------------------
+  - job_name: fikra-readiness
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ["http://host.docker.internal:8000/api/v1/health/ready"]
+        labels:
+          probe: readiness
+      - targets: ["http://host.docker.internal:8000/api/v1/health/live"]
+        labels:
+          probe: liveness
+      - targets: ["http://host.docker.internal:3000/"]
+        labels:
+          probe: frontend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Host-level signals (CPU, memory, disk, I/O). Essential for spotting an
+  # embedder memory leak or a full uploads volume before the app errors out.
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]

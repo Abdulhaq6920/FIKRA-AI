@@ -1,0 +1,93 @@
+name: fikra-monitoring
+
+# FIKRA AI — observability stack.
+#
+# Run alongside docker-compose.prod.yml on the same host:
+#   docker compose -f docker-compose.monitoring.yml up -d
+#
+# Required in the host .env (or export before running):
+#   ALERT_WEBHOOK_URL  — where Alertmanager sends notifications (required)
+#   GRAFANA_ADMIN_PASSWORD — initial admin password (required)
+#
+# All UI ports are bound to 127.0.0.1. Put Grafana behind an authenticating
+# reverse proxy before exposing it beyond the host.
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/rules/alerts.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    environment:
+      # Alertmanager expands ${VAR} in its config file at startup. Refusing to
+      # start without a destination is intentional: silently dropping alerts
+      # is worse than an obvious failed deploy.
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:?set in .env}
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: http://127.0.0.1:3001/
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    restart: unless-stopped
+
+  # Probes /api/v1/health/* and the frontend root from outside the app
+  # containers, so a dead listener is visible even when /metrics is unreachable.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Host CPU, memory, disk and I/O. Disk is especially important here because
+  # Postgres WAL, uploads and logs share one volume.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
