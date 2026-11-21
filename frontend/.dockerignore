@@ -1,0 +1,25 @@
+# Dependencies are installed inside the image with npm ci.
+node_modules/
+.next/
+out/
+
+# Secrets and local env files
+.env
+.env.*
+!.env.example
+
+# Logs, test artifacts and caches
+*.log
+npm-debug.log*
+yarn-error.log*
+test-results/
+playwright-report/
+playwright/.cache/
+tsconfig.tsbuildinfo
+
+# VCS / editor metadata
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store

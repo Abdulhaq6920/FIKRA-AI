@@ -238,6 +238,10 @@ class Settings(BaseSettings):
     rate_limit_chat: str = Field(default="30/minute")
     rate_limit_upload: str = Field(default="5/minute")
     rate_limit_password_reset: str = Field(default="5/hour")
+    # None = follow APP_ENV (on in production, off in development/tests).
+    # Redis-backed limits are global across workers/replicas; the in-process
+    # sliding window remains the fallback when Redis is unreachable.
+    rate_limit_distributed: bool | None = Field(default=None)
 
     # ------------------------------------------------------------------
     # Public sign-up
@@ -304,6 +308,13 @@ class Settings(BaseSettings):
         if self.llm_provider == "ollama":
             return self.ollama_temperature
         return self.groq_temperature
+
+    @property
+    def use_distributed_rate_limit(self) -> bool:
+        """Whether rate limits are shared through Redis instead of one process."""
+        if self.rate_limit_distributed is not None:
+            return self.rate_limit_distributed
+        return self.is_production
 
     @property
     def public_signup_orgs(self) -> frozenset[str]:

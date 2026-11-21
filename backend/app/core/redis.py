@@ -28,6 +28,35 @@ def _client() -> Redis:
     return client
 
 
+_shared_client: Redis | None = None
+
+
+def get_shared_redis() -> Redis:
+    """Return the long-lived client used by cross-process primitives.
+
+    Rate limiting needs one client per worker process, not one connection per
+    request. Created lazily so importing this module never requires Redis.
+    """
+    global _shared_client
+    if _shared_client is None:
+        client: Redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=1,
+            socket_timeout=1,
+        )
+        _shared_client = client
+    return _shared_client
+
+
+async def close_shared_redis() -> None:
+    """Close the shared client during application shutdown."""
+    global _shared_client
+    if _shared_client is not None:
+        await _shared_client.aclose()
+        _shared_client = None
+
+
 async def ping_redis() -> None:
     """Raise if Redis is unreachable; return normally on a successful PING."""
     client = _client()

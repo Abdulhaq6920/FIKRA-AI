@@ -13,15 +13,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Dependency layer (cached unless pyproject.toml changes) ──────────────
-COPY pyproject.toml .
-RUN uv venv .venv && \
-    uv pip install --python .venv/bin/python torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu && \
-    uv pip install --python .venv/bin/python -e ".[dev]"
+# ── Dependency layer ──────────────────────────────────────────────────────
+# Only runtime dependencies are installed. Tests and developer tools are run
+# by CI outside the image, so pytest/mypy/ruff never ship to production.
+# `app/` is copied here because setuptools needs the package to build the
+# editable install; the full source is copied again in the runtime stage.
+FROM base AS deps
+COPY pyproject.toml ./
+COPY app ./app
+RUN uv venv /opt/venv && \
+    uv pip install --python /opt/venv/bin/python torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu && \
+    uv pip install --python /opt/venv/bin/python -e .
 
-ENV PATH="/app/.venv/bin:$PATH"
+# ── Runtime image ─────────────────────────────────────────────────────────
+FROM base AS runtime
 
-# ── Application code ─────────────────────────────────────────────────────
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+COPY --from=deps /opt/venv /opt/venv
 COPY . .
 
 # Non-root user for security

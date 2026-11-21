@@ -1,0 +1,33 @@
+# Secrets — must never enter the build context or an image layer.
+.env
+.env.*
+!.env.example
+
+# Local virtual environments and Python caches
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Runtime and test artifacts
+*.log
+*.log.*
+uploads/
+logs/
+test-results/
+playwright-report/
+*.sqlite
+*.db
+
+# VCS / editor metadata
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store

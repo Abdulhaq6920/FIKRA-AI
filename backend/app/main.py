@@ -26,7 +26,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
     app_exception_handler,
 )
-from app.core.rate_limit import RateSpec, limiter, parse_rate
+from app.core.rate_limit import RateSpec, check_rate_limit, parse_rate
 from app.core.telemetry import setup_telemetry
 
 # Initialize logging first, before anything else
@@ -122,8 +122,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     logger.info("application_shutting_down")
+    from app.core.redis import close_shared_redis
     from app.providers.vector_store import close_qdrant_client
 
+    await close_shared_redis()
     await close_qdrant_client()
     await engine.dispose()
 
@@ -193,7 +195,7 @@ def create_app() -> FastAPI:
             for prefix, methods, spec in rate_policies:
                 if path.startswith(prefix) and request.method in methods:
                     client_ip = request.client.host if request.client else "unknown"
-                    allowed, retry_after = limiter.check(f"{prefix}:{client_ip}", spec)
+                    allowed, retry_after = await check_rate_limit(f"{prefix}:{client_ip}", spec)
                     if not allowed:
                         logger.warning(
                             "rate_limit_hit",
