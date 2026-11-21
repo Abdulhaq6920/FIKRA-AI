@@ -39,7 +39,7 @@ operational or in-flight work; they must close, or be accepted in writing, befor
 backend$  python -c "import app.main"                       import ok
 backend$  ruff check app/ && ruff format --check app/       All checks passed / 64 files formatted
 backend$  mypy app/                                         Success: no issues found in 64 source files
-backend$  pytest tests/unit tests/tenant_isolation -q       105 passed (incl. 3 logging tests)
+backend$  pytest tests/unit tests/tenant_isolation -q       121 passed (incl. 5 logging tests)
 backend$  TEST_DATABASE_URL=<scratch PostgreSQL> pytest tests/integration -q
                                                            55 passed (4 warnings)
 backend$  alembic heads / current                           0005 (head) / 0004  ← see O-13
@@ -69,7 +69,7 @@ live      GET /health/live 200 · /health/ready 200 (database, embedding_model, 
 
 | # | Gate | Status | Evidence |
 |---|---|---|---|
-| B-1 | Unit + tenant-isolation suites | ✅ | `pytest tests/unit tests/tenant_isolation -q` → **105 passed**, including 3 logging/rotation tests (re-verified 2026-11-21) |
+| B-1 | Unit + tenant-isolation suites | ✅ | `pytest tests/unit tests/tenant_isolation -q` → **121 passed**, including 5 logging/rotation tests (re-verified 2026-11-21) |
 | B-2 | Integration suite on real PostgreSQL | ✅ | Fresh scratch DB → **55 passed** (re-verified 2026-11-21; second full run after the logging change also 55 passed). Warnings are benign (pydantic namespace, pytest config, passlib). |
 | B-3 | Tenant-isolation tests gate the two historical fail-opens | ✅ | `test_retrieval_access.py` proves the JWT `role` claim is never returned and a demoted admin is refused on the next request |
 | B-4 | Favourite questions are isolated per user **and** per tenant | ✅ | `tests/integration/test_favorite_questions_isolation.py`: same-org colleague sees `[]`, cross-tenant delete → 404, save is idempotent + whitespace-normalised |
@@ -130,7 +130,7 @@ live      GET /health/live 200 · /health/ready 200 (database, embedding_model, 
 | F-6 | A slow answer is explainable | ✅ | One measured request: embed_query 1.09 s, retrieve 1.42 s, prompt_build 0.26 s, llm_generate 0.67 s — now fully attributable |
 | F-7 | Route labels are templates, not raw paths | ✅ | `route="/api/v1/chat/favorites"`, no UUIDs in label values |
 | F-8 | Dashboards + alert rules + SLOs | ⚠️ | Metrics are exported but nothing scrapes or alerts — see **O-2** |
-| F-9 | Structured logs persisted to rotating `.log` files | ✅ | `core/logging.py` writes the same structlog JSON to stdout and `backend/logs/{backend,celery}.log`; `RotatingFileHandler` at 10 MiB × 5 backups. Verified by `tests/unit/test_logging.py` (3 passed, incl. rotation + redaction) and by live API/worker log files after restart. Config in `configuration-reference.md`. |
+| F-9 | Structured logs persisted to a rotating log file | ✅ | `core/logging.py` writes the same structlog JSON to stdout and the shared `backend/logs/app.logs`; `ConcurrentRotatingFileHandler` at 20 MiB × 10 backups with wraparound. Verified by `tests/unit/test_logging.py` (5 passed, incl. rotation, redaction, process-safe handler and defaults). Config in `configuration-reference.md`. |
 
 ### G · Performance
 

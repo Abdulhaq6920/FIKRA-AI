@@ -17,8 +17,8 @@ from celery import Celery
 from app.core.config import settings
 from app.core.logging import configure_logging
 
-# Install the same stdout + rotating-file sinks before Celery boots. With
-# worker_hijack_root_logger=False below, Celery will not replace them.
+# Install the same stdout + process-safe app.logs sink before Celery boots.
+# With worker_hijack_root_logger=False below, Celery will not replace them.
 configure_logging()
 
 celery_app = Celery(

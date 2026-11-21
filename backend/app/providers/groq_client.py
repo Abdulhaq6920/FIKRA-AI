@@ -18,13 +18,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncGenerator, Mapping, Sequence
+from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
 import groq
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
-from pydantic import SecretStr
+from groq import AsyncGroq
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -129,22 +127,20 @@ class GroqClient:
             raise RuntimeError(
                 "GROQ_API_KEY is not configured. " "Set it in .env before starting the application."
             )
-        # LangChain owns provider invocation and message interoperability;
-        # this wrapper retains the application's error and usage contracts.
-        self._llm = ChatGroq(
-            model=settings.groq_primary_model,
-            api_key=SecretStr(settings.groq_api_key),
+        # Raw Groq SDK (AsyncGroq) — no LangChain, so there are no LangChain
+        # pydantic forward-reference issues at import time. The Groq SDK is
+        # the only Groq dependency this module uses.
+        self._client = AsyncGroq(
+            api_key=settings.groq_api_key,
+            max_retries=0,  # retries are handled by this wrapper's policy
             timeout=settings.groq_timeout_seconds,
-            max_retries=0,
-            temperature=settings.groq_temperature,
-            max_tokens=settings.groq_max_tokens,
         )
         self._primary_model = settings.groq_primary_model
         self._fallback_model = settings.groq_fallback_model
 
     async def generate(
         self,
-        messages: Sequence[ChatMessage | BaseMessage],
+        messages: Sequence[Any],
         *,
         model: str | None = None,
         max_tokens: int | None = None,
@@ -167,7 +163,7 @@ class GroqClient:
             GenerationResult with content and usage metadata.
         """
         target_model = model or self._primary_model
-        all_messages = self._build_messages(messages, system_prompt)
+        groq_messages = self._to_groq_messages(messages, system_prompt)
         models = _model_chain(target_model, self._fallback_model)
         last_error: AppError | None = None
         last_retry_exc: BaseException | None = None
@@ -177,17 +173,18 @@ class GroqClient:
             for candidate in models:
                 if candidate != target_model:
                     logger.info("groq_fallback_attempt", model=candidate)
-                llm = self._llm.bind(
-                    model=candidate,
-                    max_tokens=max_tokens or settings.groq_max_tokens,
-                    temperature=(
-                        temperature if temperature is not None else settings.groq_temperature
-                    ),
+                effective_temperature = (
+                    temperature if temperature is not None else settings.groq_temperature
                 )
                 start = time.perf_counter()
                 try:
                     async with _groq_semaphore:
-                        response = await llm.ainvoke(all_messages)
+                        response = await self._client.chat.completions.create(
+                            model=candidate,
+                            messages=groq_messages,
+                            max_tokens=max_tokens or settings.groq_max_tokens,
+                            temperature=effective_temperature,
+                        )
                 except Exception as exc:
                     last_error = _map_groq_error(exc)
                     if _is_retryable(exc):
@@ -196,15 +193,16 @@ class GroqClient:
                     continue
 
                 latency_ms = int((time.perf_counter() - start) * 1000)
-                usage: Mapping[str, Any] = getattr(response, "usage_metadata", {}) or {}
+                choice = response.choices[0]
+                usage = response.usage
                 result = GenerationResult(
-                    content=str(response.content or ""),
-                    finish_reason=response.response_metadata.get("finish_reason", "stop"),
+                    content=str(choice.message.content or ""),
+                    finish_reason=choice.finish_reason or "stop",
                     usage=UsageMetadata(
-                        model=response.response_metadata.get("model_name", candidate),
-                        input_tokens=usage.get("input_tokens", 0),
-                        output_tokens=usage.get("output_tokens", 0),
-                        total_tokens=usage.get("total_tokens", 0),
+                        model=response.model or candidate,
+                        input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
+                        output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) if usage else 0,
                         latency_ms=latency_ms,
                     ),
                 )
@@ -235,7 +233,7 @@ class GroqClient:
 
     async def generate_stream(
         self,
-        messages: Sequence[ChatMessage | BaseMessage],
+        messages: Sequence[Any],
         *,
         model: str | None = None,
         max_tokens: int | None = None,
@@ -251,7 +249,7 @@ class GroqClient:
         partial answer.
         """
         target_model = model or self._primary_model
-        all_messages = self._build_messages(messages, system_prompt)
+        groq_messages = self._to_groq_messages(messages, system_prompt)
         models = _model_chain(target_model, self._fallback_model)
         last_error: AppError | None = None
         last_retry_exc: BaseException | None = None
@@ -261,21 +259,24 @@ class GroqClient:
             for candidate in models:
                 if candidate != target_model:
                     logger.info("groq_fallback_attempt", model=candidate)
-                llm = self._llm.bind(
-                    model=candidate,
-                    max_tokens=max_tokens or settings.groq_max_tokens,
-                    temperature=(
-                        temperature if temperature is not None else settings.groq_temperature
-                    ),
-                )
                 yielded = False
+                effective_temperature = (
+                    temperature if temperature is not None else settings.groq_temperature
+                )
                 try:
                     async with _groq_semaphore:
-                        async for chunk in llm.astream(all_messages):
-                            delta = chunk.content
-                            if delta:
+                        stream = await self._client.chat.completions.create(
+                            model=candidate,
+                            messages=groq_messages,
+                            max_tokens=max_tokens or settings.groq_max_tokens,
+                            temperature=effective_temperature,
+                            stream=True,
+                        )
+                        async for chunk in stream:
+                            delta = chunk.choices[0].delta
+                            if delta and delta.content:
                                 yielded = True
-                                yield str(delta)
+                                yield str(delta.content)
                     return
                 except Exception as exc:
                     last_error = _map_groq_error(exc)
@@ -321,29 +322,33 @@ class GroqClient:
             return False
 
     @staticmethod
-    def _build_messages(
-        messages: Sequence[ChatMessage | BaseMessage],
+    def _to_groq_messages(
+        messages: Sequence[Any],
         system_prompt: str | None,
-    ) -> list[BaseMessage]:
+    ) -> list[dict[str, str]]:
         """
         Build the message list in the format expected by the Groq API.
 
-        The system prompt always comes first if provided.
-        Document content is treated as context in the user/system messages —
-        never trusted as instructions to the model.
+        Accepts app ChatMessage objects (role/content attributes) or langchain
+        BaseMessage objects (type/content attributes). Document content is
+        treated as context — never trusted as instructions to the model.
         """
-        result: list[BaseMessage] = []
+        result: list[dict[str, str]] = []
         if system_prompt:
-            result.append(SystemMessage(content=system_prompt))
+            result.append({"role": "system", "content": system_prompt})
         for msg in messages:
-            if isinstance(msg, BaseMessage):
-                result.append(msg)
-            elif msg.role == "system":
-                result.append(SystemMessage(content=msg.content))
-            elif msg.role == "assistant":
-                result.append(AIMessage(content=msg.content))
-            else:
-                result.append(HumanMessage(content=msg.content))
+            role = getattr(msg, "role", None) or getattr(msg, "type", "user")
+            if role == "human":
+                role = "user"
+            elif role == "ai":
+                role = "assistant"
+            content = getattr(msg, "content", "")
+            if isinstance(content, list):
+                content = "".join(
+                    part.get("text", "") if isinstance(part, dict) else str(part)
+                    for part in content
+                )
+            result.append({"role": role, "content": str(content)})
         return result
 
 

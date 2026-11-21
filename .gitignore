@@ -21,15 +21,13 @@ htmlcov/
 .coverage
 coverage.xml
 *.log
-*.log.*
 logs/
 
-# ── Runtime artifacts (created when starting dev servers) ─────────────────
-*-run.err
-*-run.out
+# ── Runtime artifacts (local dev servers, logs, dumps) ────────────────────
+*.err
+*.out
+*.dump
 dump.rdb
-pgvector-pg18/
-*.evidence
 
 # ── Node / Next.js ────────────────────────────────────────────────────────
 node_modules/
@@ -41,16 +39,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# ── Docker / uploads ─────────────────────────────────────────────────────
+# ── Database / storage uploads ────────────────────────────────────────────
 uploads/
+*.sqlite
+*.db
 # Frontend upload helper source is code, not runtime upload data.
 !frontend/src/lib/uploads/
 !frontend/src/lib/uploads/**
-*.sqlite
-*.db
 
-# ── IDE ───────────────────────────────────────────────────────────────────
-.vscode/settings.json
+# ── IDE ────────────────────────────────────────────────────────────────────
+.vscode/
 .idea/
 *.swp
 *.swo
@@ -59,8 +57,8 @@ Thumbs.db
 
 # ── Secrets ───────────────────────────────────────────────────────────────
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 secrets/
 *.pem
 *.key
@@ -71,14 +69,12 @@ test-results/
 playwright-report/
 playwright/.cache/
 
-# ── Agent-only guidance (never shipped) ───────────────────────────────────
+# ── Agent-only guidance (never shipped) ────────────────────────────────────
 .opencode/
 
-# Local agent / scratch evidence directories
+# ── Local agent / scratch evidence directories ────────────────────────────
 .testmuai/
 
-# Local reference material / docs with embedded credentials
+# ── Local reference material / docs with embedded credentials ─────────────
 3.docx
 *.docx
-.vercel
-.env*

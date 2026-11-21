@@ -43,7 +43,7 @@ import {
   MenuButton,
   SseLoadingIndicator,
   StreamingBubble,
-} from "@/components/chat";
+} from "@/features/chat";
 
 // ─── Context bridge — AppShell needs to know about active conversation ─────
 // We use a global event bus so AppShell can react to new conversations

@@ -135,9 +135,9 @@ All configuration is loaded from environment variables (or `.env` file in develo
 | `LOG_FORMAT` | `json` | `json` (production) or `console` (development) |
 | `LOG_TO_FILE` | `true` | Also write logs to a rotating file (stdout always receives logs) |
 | `LOG_DIR` | `logs` | Directory for log files, relative to the backend working directory |
-| `LOG_FILE` | `backend.log` | Active log filename. Set `celery.log` for the Celery worker |
-| `LOG_FILE_MAX_BYTES` | `10485760` | Rotate when the active file reaches this size (10 MiB) |
-| `LOG_FILE_BACKUP_COUNT` | `5` | Number of rotated files to keep (`.log.1` … `.log.5`) |
+| `LOG_FILE` | `app.logs` | Active log filename, shared by the API and Celery worker |
+| `LOG_FILE_MAX_BYTES` | `20971520` | Rotate when the active file reaches this size (20 MiB) |
+| `LOG_FILE_BACKUP_COUNT` | `10` | Rotated files to keep (`app.logs.1` … `app.logs.10`) |
 
 Both sinks share the same structlog processors, so redaction, request IDs and
 formatting are identical on console and disk. Log files live at
@@ -145,9 +145,10 @@ formatting are identical on console and disk. Log files live at
 commit it. A read-only log directory disables file logging with a stderr
 warning but does not stop the application.
 
-`RotatingFileHandler` is process-local: give each uvicorn worker or Celery process
-a distinct `LOG_FILE` (for example `backend-1.log`, `backend-2.log`) and collect
-them centrally. Pointing several processes at the same active file is not safe.
+`ConcurrentRotatingFileHandler` coordinates rollover with a lock file, so the
+API and Celery workers can safely append to the same `app.logs`. Once the active
+file reaches 20 MiB it becomes `app.logs.1` (existing backups shift up by one),
+the oldest of the 10 backups is discarded, and a fresh `app.logs` is started.
 
 ## CORS
 

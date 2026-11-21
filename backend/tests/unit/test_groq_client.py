@@ -1,6 +1,6 @@
 """Unit tests for Groq retry and fallback behaviour.
 
-These tests never touch the network: the LangChain runnable is replaced with a
+These tests never touch the network: the Groq SDK client is replaced with a
 small fake so the provider wrapper's retry policy can be exercised directly.
 """
 
@@ -30,49 +30,86 @@ def _rate_limit_error() -> groq.RateLimitError:
     )
 
 
-class _FakeRunnable:
-    """Minimal stand-in for a LangChain chat runnable."""
+class _FakeDelta:
+    def __init__(self, content: Any) -> None:
+        self.content = content
 
-    def __init__(
-        self,
-        handler: Any,
-        calls: list[str],
-        *,
-        stream: bool,
-    ) -> None:
-        self._handler = handler
-        self._calls = calls
-        self._stream = stream
-        self.model: str | None = None
 
-    def bind(self, **kwargs: Any) -> _FakeRunnable:
-        self.model = kwargs.get("model")
+class _FakeChatStreamChunk:
+    def __init__(self, delta_content: Any) -> None:
+        self.choices = [SimpleNamespace(delta=_FakeDelta(delta_content))]
+
+
+class _FakeAsyncStream:
+    """Async iterator over streaming chunks."""
+
+    def __init__(self, pieces: list[Any]) -> None:
+        self._pieces = list(pieces)
+
+    def __aiter__(self) -> _FakeAsyncStream:
         return self
 
-    async def astream(self, _messages: list[Any]) -> Any:
-        assert self.model is not None
-        self._calls.append(self.model)
-        for piece in self._handler(self.model):
-            if isinstance(piece, BaseException):
-                raise piece
-            yield SimpleNamespace(content=piece)
+    async def __anext__(self) -> Any:
+        if not self._pieces:
+            raise StopAsyncIteration
+        piece = self._pieces.pop(0)
+        if isinstance(piece, BaseException):
+            raise piece
+        return _FakeChatStreamChunk(piece)
 
-    async def ainvoke(self, _messages: list[Any]) -> SimpleNamespace:
-        assert self.model is not None
-        self._calls.append(self.model)
-        result = self._handler(self.model)
+
+class _FakeCompletionResponse:
+    def __init__(self, content: str, model: str) -> None:
+        self.choices = [
+            SimpleNamespace(
+                message=SimpleNamespace(content=content),
+                finish_reason="stop",
+            )
+        ]
+        self.model = model
+        self.usage = SimpleNamespace(
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+        )
+
+
+class _FakeCompletions:
+    """Minimal stand-in for AsyncGroq's chat.completions client."""
+
+    def __init__(self, handler: Any, calls: list[str]) -> None:
+        self._handler = handler
+        self._calls = calls
+
+    async def create(self, **kwargs: Any) -> Any:
+        model = kwargs.get("model")
+        assert model is not None
+        self._calls.append(model)
+        result = self._handler(model)
+        if kwargs.get("stream"):
+            return _FakeAsyncStream(list(result))
         if isinstance(result, BaseException):
             raise result
-        return SimpleNamespace(
-            content=result,
-            usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
-            response_metadata={"finish_reason": "stop", "model_name": self.model},
-        )
+        if isinstance(result, str):
+            return _FakeCompletionResponse(result, model)
+        raise AssertionError(f"unexpected handler result: {type(result)}")
+
+
+class _FakeChat:
+    def __init__(self, completions: _FakeCompletions) -> None:
+        self.completions = completions
+
+
+class _FakeGroqClient:
+    """Minimal stand-in for AsyncGroq."""
+
+    def __init__(self, handler: Any, calls: list[str]) -> None:
+        self.chat = _FakeChat(_FakeCompletions(handler, calls))
 
 
 def _make_client(handler: Any, calls: list[str], *, stream: bool) -> GroqClient:
     client = GroqClient.__new__(GroqClient)
-    client._llm = _FakeRunnable(handler, calls, stream=stream)  # type: ignore[assignment]
+    client._client = _FakeGroqClient(handler, calls)  # type: ignore[assignment]
     client._primary_model = PRIMARY
     client._fallback_model = FALLBACK
     return client
