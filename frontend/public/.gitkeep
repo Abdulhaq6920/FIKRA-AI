@@ -1,0 +1,2 @@
+# Keeps this directory tracked by Git. Next.js serves static files from here,
+# and the production Dockerfile copies /app/public into the runtime image.
