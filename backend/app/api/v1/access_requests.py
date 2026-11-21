@@ -10,11 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser
 from app.core.exceptions import ConflictError
+from app.core.logging import get_logger
 from app.db.models.audit import Notification, RoleRequest, RoleRequestStatus
 from app.db.models.user import OrganizationMembership, OrgRole
 from app.db.session import get_db
 from app.schemas.workflow import RoleRequestCreate
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/access-requests", tags=["access requests"])
 
 
@@ -64,4 +66,11 @@ async def request_org_admin_access(
             )
         )
     await db.commit()
+    logger.info(
+        "access_request_submitted",
+        request_id=str(request.id),
+        user_id=str(user.id),
+        organization_id=str(org_id),
+        admins_notified=len(admin_ids),
+    )
     return {"status": "pending"}

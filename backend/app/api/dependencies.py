@@ -33,6 +33,7 @@ from app.core.exceptions import (
     InvalidTokenError,
     PermissionDeniedError,
 )
+from app.core.logging import get_logger
 from app.core.security import decode_token
 from app.db.models.user import OrganizationMembership, OrgRole, User, UserStatus
 from app.db.session import get_db
@@ -41,6 +42,7 @@ from app.providers.llm import LLMClient
 from app.providers.ollama_client import OllamaClient
 
 _bearer = HTTPBearer(auto_error=False)
+logger = get_logger(__name__)
 
 
 async def _get_token_payload(
@@ -62,6 +64,7 @@ async def _get_token_payload(
         token = credentials.credentials
 
     if not token:
+        logger.warning("authentication_failed", reason="missing_token")
         raise AuthenticationError("Authentication required.")
 
     return decode_token(token, expected_type="access")
@@ -76,10 +79,16 @@ async def get_current_user(
     try:
         user_id = uuid.UUID(user_id_str)
     except ValueError as exc:
+        logger.warning("authentication_failed", reason="invalid_subject")
         raise InvalidTokenError() from exc
 
     user = await db.get(User, user_id)
     if user is None or user.status != UserStatus.ACTIVE:
+        logger.warning(
+            "authentication_failed",
+            reason="user_unavailable",
+            user_id=str(user_id),
+        )
         raise AuthenticationError("User account not found or inactive.")
     return user
 
@@ -113,10 +122,17 @@ async def get_current_user_and_org(
         user_id = uuid.UUID(user_id_str)
         org_id = uuid.UUID(org_id_str)
     except ValueError as exc:
+        logger.warning("authentication_failed", reason="invalid_identity_claims")
         raise InvalidTokenError() from exc
 
     user = await db.get(User, user_id)
     if user is None or user.status != UserStatus.ACTIVE:
+        logger.warning(
+            "authentication_failed",
+            reason="user_unavailable",
+            user_id=str(user_id),
+            organization_id=str(org_id),
+        )
         raise AuthenticationError("User account not found or inactive.")
 
     # Verify the membership still exists and is active
@@ -128,6 +144,12 @@ async def get_current_user_and_org(
         )
     )
     if membership is None:
+        logger.warning(
+            "authentication_failed",
+            reason="no_active_membership",
+            user_id=str(user_id),
+            organization_id=str(org_id),
+        )
         raise PermissionDeniedError("No active membership in this organization.")
 
     # Stamp identity for the access log and HTTP metrics. Done before the role
@@ -135,6 +157,12 @@ async def get_current_user_and_org(
     request.state.user_id = str(user.id)
     request.state.org_id = str(org_id)
     request.state.role = membership.role.value
+    logger.debug(
+        "authentication_ok",
+        user_id=str(user.id),
+        organization_id=str(org_id),
+        role=membership.role.value,
+    )
 
     # Authorize on the database row, never on the claim.
     return user, org_id, membership.role.value
@@ -165,8 +193,15 @@ async def require_org_admin(
     ``role`` is the membership role value (``OrgRole`` is a str enum, so the
     comparison holds), never the role claim from the token.
     """
-    user, _org_id, role = ctx
+    user, org_id, role = ctx
     if role != OrgRole.ORG_ADMIN and not user.is_platform_admin:
+        logger.warning(
+            "authorization_failed",
+            reason="org_admin_required",
+            user_id=str(user.id),
+            organization_id=str(org_id),
+            role=role,
+        )
         raise PermissionDeniedError("Organization admin role required.")
     return ctx
 
@@ -177,6 +212,13 @@ async def require_platform_admin(
     """Platform admin only."""
     user, org_id, role = ctx
     if not user.is_platform_admin:
+        logger.warning(
+            "authorization_failed",
+            reason="platform_admin_required",
+            user_id=str(user.id),
+            organization_id=str(org_id),
+            role=role,
+        )
         raise PermissionDeniedError("Platform admin role required.")
     return ctx
 

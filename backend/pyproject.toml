@@ -61,9 +61,14 @@ dependencies = [
     "numpy==1.26.4",
     "tiktoken==0.7.0",
     "langchain-text-splitters>=0.3.8,<1.0.0",
+    # Pin langchain-core: newer transitive versions introduce pydantic 2.x
+    # forward-reference failures (e.g. undefined FeedbackConfigSchema) at
+    # import time under pydantic 2.7.4. 1.7.6 is verified working locally.
+    "langchain-core==1.7.6",
     "langchain-groq>=0.2.0,<2.0.0",
     "langchain-huggingface>=0.1.2,<2.0.0",
     # Logging & Observability
+    "concurrent-log-handler==0.9.31",
     "structlog==24.2.0",
     "opentelemetry-api==1.25.0",
     "opentelemetry-sdk==1.25.0",

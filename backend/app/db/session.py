@@ -29,6 +29,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # SSL connect_args — required for Neon and most cloud Postgres providers.
@@ -82,8 +85,15 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
-        except Exception:
+            logger.debug("db_session_committed")
+        except Exception as exc:
             await session.rollback()
+            logger.debug(
+                "db_session_rolled_back",
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
             raise
         finally:
             await session.close()
+            logger.debug("db_session_closed")

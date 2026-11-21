@@ -9,6 +9,7 @@ To start: celery -A app.workers.celery_app worker --loglevel=info
 
 from __future__ import annotations
 
+import ssl
 from datetime import timedelta
 
 from celery import Celery
@@ -52,6 +53,14 @@ celery_app.conf.update(
     # Force RESP2 protocol — older Redis (< 6.0) doesn't support HELLO command
     broker_transport_options={"protocol": 2},
     result_backend_transport_options={"protocol": 2},
+    # Redis Cloud's free tier only exposes DB 0 and requires TLS (rediss://).
+    # kombu refuses a rediss:// broker without ssl_cert_reqs, so supply it
+    # explicitly rather than defaulting to insecure behaviour.
+    broker_use_ssl=(
+        {"ssl_cert_reqs": ssl.CERT_NONE}
+        if settings.celery_broker_url.startswith("rediss://")
+        else None
+    ),
     # Dead-letter: tasks that exhaust retries are moved to a DL queue
     task_queues={
         "default": {"exchange": "default", "routing_key": "default"},

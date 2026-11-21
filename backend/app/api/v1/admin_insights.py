@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import OrgAdminUser
 from app.core.exceptions import NotFoundError
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.schemas.analytics import (
     AdminDocumentDetailOut,
@@ -37,6 +38,7 @@ from app.services.insights_service import (
     user_analytics_rows,
 )
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -75,7 +77,13 @@ async def organization_user_analytics(
     days: int = Query(default=14, ge=1, le=90),
 ) -> UserAnalyticsDetailOut:
     """Per-user analytics for an active or inactive member of this organization."""
-    _admin, org_id, _role = ctx
+    admin, org_id, _role = ctx
+    logger.info(
+        "admin_user_analytics_viewed",
+        admin_id=str(admin.id),
+        organization_id=str(org_id),
+        user_id=str(user_id),
+    )
 
     row = await user_analytics_row(db, org_id, user_id)
     if row is None:
@@ -127,7 +135,13 @@ async def admin_question_detail(
     db: AsyncSession = Depends(get_db),
 ) -> QuestionDetailOut:
     """Full question flow: answer, retrieval sources, usage, and feedback."""
-    _admin, org_id, _role = ctx
+    admin, org_id, _role = ctx
+    logger.info(
+        "admin_question_detail_viewed",
+        admin_id=str(admin.id),
+        organization_id=str(org_id),
+        message_id=str(message_id),
+    )
     return await question_detail(db, org_id, message_id)
 
 
@@ -162,5 +176,11 @@ async def admin_document_detail(
     db: AsyncSession = Depends(get_db),
 ) -> AdminDocumentDetailOut:
     """Document metadata, processing jobs, and chunk previews."""
-    _admin, org_id, _role = ctx
+    admin, org_id, _role = ctx
+    logger.info(
+        "admin_document_detail_viewed",
+        admin_id=str(admin.id),
+        organization_id=str(org_id),
+        document_id=str(document_id),
+    )
     return await document_detail(db, org_id, document_id)

@@ -21,6 +21,9 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.core.exceptions import InvalidTokenError, TokenExpiredError
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Password hashing — Argon2id
@@ -125,11 +128,22 @@ def decode_token(token: str, *, expected_type: str = "access") -> dict[str, Any]
             options={"require": ["exp", "iat", "sub", "type"]},
         )
     except jwt.ExpiredSignatureError as exc:
+        logger.debug("token_expired", expected_type=expected_type)
         raise TokenExpiredError() from exc
     except jwt.PyJWTError as exc:
+        logger.warning(
+            "token_decode_failed",
+            expected_type=expected_type,
+            error_type=type(exc).__name__,
+        )
         raise InvalidTokenError() from exc
 
     if payload.get("type") != expected_type:
+        logger.warning(
+            "token_type_mismatch",
+            expected_type=expected_type,
+            actual_type=payload.get("type"),
+        )
         raise InvalidTokenError(f"Expected token type '{expected_type}'")
 
     return payload

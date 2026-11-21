@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.schemas.analytics import PersonalAnalyticsOut
 from app.services.insights_service import (
@@ -19,6 +20,7 @@ from app.services.insights_service import (
     top_sources,
 )
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
@@ -30,6 +32,12 @@ async def personal_analytics(
 ) -> PersonalAnalyticsOut:
     """Return the caller's own question, token, source, and activity analytics."""
     user, org_id, _role = ctx
+    logger.debug(
+        "personal_analytics_generated",
+        user_id=str(user.id),
+        organization_id=str(org_id),
+        days=days,
+    )
 
     summary = await build_summary(db, org_id, user_id=user.id)
     daily = await daily_activity(db, org_id, user_id=user.id, days=days)

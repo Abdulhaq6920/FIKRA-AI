@@ -13,6 +13,9 @@ from typing import cast
 from redis.asyncio import Redis
 
 from app.core.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _client() -> Redis:
@@ -46,6 +49,7 @@ def get_shared_redis() -> Redis:
             socket_timeout=1,
         )
         _shared_client = client
+        logger.debug("redis_shared_client_created")
     return _shared_client
 
 
@@ -55,6 +59,7 @@ async def close_shared_redis() -> None:
     if _shared_client is not None:
         await _shared_client.aclose()
         _shared_client = None
+        logger.debug("redis_shared_client_closed")
 
 
 async def ping_redis() -> None:
@@ -62,6 +67,10 @@ async def ping_redis() -> None:
     client = _client()
     try:
         await client.ping()
+        logger.debug("redis_ping_ok")
+    except Exception as exc:
+        logger.warning("redis_ping_failed", error_type=type(exc).__name__)
+        raise
     finally:
         await client.aclose()
 
@@ -80,5 +89,12 @@ async def queue_depths(queues: tuple[str, ...]) -> dict[str, int]:
             # always the awaitable.
             counts[queue] = int(await cast("Awaitable[int]", client.llen(queue)))
         return counts
+    except Exception as exc:
+        logger.warning(
+            "redis_queue_depth_failed",
+            queues=list(queues),
+            error_type=type(exc).__name__,
+        )
+        raise
     finally:
         await client.aclose()

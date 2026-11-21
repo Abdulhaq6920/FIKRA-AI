@@ -273,13 +273,14 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     log_level: str = Field(default="INFO")
     log_format: Literal["json", "console"] = Field(default="json")
-    # Structured logs go to stdout and to a rotating file. LOG_FILE defaults to
-    # backend.log for the API; set LOG_FILE=celery.log for the worker process.
+    # Structured logs go to stdout and to a shared, process-safe rotating file.
+    # API and Celery both write to logs/app.logs; a cross-process lock prevents
+    # concurrent workers from clobbering each other during rollover.
     log_to_file: bool = Field(default=True)
     log_dir: str = Field(default="logs")
-    log_file: str = Field(default="backend.log")
-    log_file_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
-    log_file_backup_count: int = Field(default=5, ge=0)
+    log_file: str = Field(default="app.logs")
+    log_file_max_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
+    log_file_backup_count: int = Field(default=10, ge=0)
     # SQL echo is a debugging aid, not a property of DEBUG: leaving it tied to
     # `debug` prints every statement in any environment that turns DEBUG on.
     sql_echo: bool = Field(default=False)

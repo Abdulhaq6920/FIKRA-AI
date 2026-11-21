@@ -11,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser
 from app.core.exceptions import PermissionDeniedError
+from app.core.logging import get_logger
 from app.db.models.audit import Notification
 from app.db.session import get_db
 from app.schemas.workflow import NotificationOut
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
@@ -67,6 +69,19 @@ async def mark_read(
         )
     )
     if item is None:
+        logger.warning(
+            "notification_mark_read_failed",
+            reason="not_found",
+            notification_id=str(notification_id),
+            user_id=str(user.id),
+            organization_id=str(org_id),
+        )
         raise PermissionDeniedError("Notification not found.")
     item.is_read = True
     await db.commit()
+    logger.info(
+        "notification_marked_read",
+        notification_id=str(notification_id),
+        user_id=str(user.id),
+        organization_id=str(org_id),
+    )

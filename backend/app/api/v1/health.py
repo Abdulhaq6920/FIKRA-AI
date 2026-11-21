@@ -30,9 +30,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.workers.celery_app import celery_app
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/health", tags=["health"])
 
 # Cached so a scrape storm does not query alembic_version on every probe.
@@ -96,6 +98,10 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         and checks["qdrant"] == "ok"
         and checks["embedding_model"] == "ok"
     )
+    if required_ok:
+        logger.debug("readiness_check_ok", checks=checks)
+    else:
+        logger.warning("readiness_check_failed", checks=checks)
 
     return JSONResponse(
         status_code=200 if required_ok else 503,
@@ -135,5 +141,9 @@ async def startup(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         and checks["qdrant"] == "ok"
         and checks["embedding_model"] == "ok"
     )
+    if ready:
+        logger.debug("startup_check_ok", checks=checks)
+    else:
+        logger.warning("startup_check_failed", checks=checks)
     payload: dict[str, Any] = {"status": "started" if ready else "starting", "checks": checks}
     return JSONResponse(status_code=200 if ready else 503, content=payload)

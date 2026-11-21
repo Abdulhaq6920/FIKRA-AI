@@ -7,6 +7,10 @@
 
 FROM python:3.12-slim AS base
 
+# Cache-buster: bump this value to force a full rebuild of all Docker layers
+# when source/config changes are not picked up from the cached build.
+ENV FIKRA_REFRESHED_AT=20261121-2
+
 # Install uv for fast dependency management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 

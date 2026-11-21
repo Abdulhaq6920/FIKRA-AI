@@ -25,6 +25,7 @@ from app.core.exceptions import (
     PermissionDeniedError,
     UserNotFoundError,
 )
+from app.core.logging import get_logger
 from app.core.security import hash_password
 from app.db.models.audit import AuditLog
 from app.db.models.user import (
@@ -44,6 +45,7 @@ from app.schemas.user_admin import (
     AdminUserUpdate,
 )
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/admin/users", tags=["admin"])
 
 
@@ -228,6 +230,13 @@ async def create_user(
         {"role": body.role, "is_active": True},
     )
     await db.flush()
+    logger.info(
+        "admin_user_created",
+        user_id=str(user.id),
+        organization_id=str(org_id),
+        actor_id=str(actor.id),
+        role=body.role,
+    )
     return _to_out(user, membership, actor.id)
 
 
@@ -284,6 +293,13 @@ async def update_user(
     if changes:
         _audit(db, request, org_id, actor.id, "user.updated", user, changes)
         await db.flush()
+        logger.info(
+            "admin_user_updated",
+            user_id=str(user.id),
+            organization_id=str(org_id),
+            actor_id=str(actor.id),
+            fields=sorted(changes),
+        )
 
     return _to_out(user, membership, actor.id)
 
@@ -309,3 +325,9 @@ async def reset_user_password(
     await _revoke_sessions(db, user.id)
     _audit(db, request, org_id, actor.id, "user.password_reset", user, {})
     await db.flush()
+    logger.info(
+        "admin_user_password_reset",
+        user_id=str(user.id),
+        organization_id=str(org_id),
+        actor_id=str(actor.id),
+    )

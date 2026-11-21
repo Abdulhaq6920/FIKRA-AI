@@ -77,6 +77,13 @@ async def retrieve(
 
     k = top_k or settings.retrieval_top_k
     reranker_n = settings.reranker_top_n
+    logger.debug(
+        "retrieval_started",
+        organization_id=str(organization_id),
+        top_k=k,
+        include_restricted=include_restricted,
+        reranker_enabled=settings.reranker_enabled,
+    )
 
     # Step 1: Embed the query
     # Local embedding and reranking run on CPU. Offload them so an active
@@ -137,6 +144,14 @@ async def retrieve(
         observe_retrieval_candidates("returned", len(filtered))
         if filtered:
             observe_retrieval_top_score(max(p.score for p in filtered))
+        logger.debug(
+            "retrieval_completed",
+            organization_id=str(organization_id),
+            strategy="reranked",
+            candidates=len(fused),
+            reranked=len(reranked),
+            returned=len(filtered),
+        )
         return filtered
 
     # Same gate for the fusion-only path. It is per-branch: a passage passes if
@@ -151,6 +166,13 @@ async def retrieve(
     best_similarity = [p.similarity for p in filtered if p.similarity is not None]
     if best_similarity:
         observe_retrieval_top_score(max(best_similarity))
+    logger.debug(
+        "retrieval_completed",
+        organization_id=str(organization_id),
+        strategy="fusion",
+        candidates=len(fused[:k]),
+        returned=len(filtered),
+    )
     return filtered
 
 
@@ -234,6 +256,11 @@ async def _vector_search(
         min(limit * 2, 200),
     )
     if not hits:
+        logger.debug(
+            "qdrant_vector_hits_empty",
+            organization_id=str(organization_id),
+            requested=min(limit * 2, 200),
+        )
         return []
 
     hit_scores = {hit.chunk_id: hit.score for hit in hits}
@@ -257,6 +284,14 @@ async def _vector_search(
     )
 
     rows = (await db.execute(stmt)).all()
+    dropped_hits = len(hit_scores) - len(rows)
+    if dropped_hits > 0:
+        logger.warning(
+            "qdrant_hits_dropped_by_sql_recheck",
+            organization_id=str(organization_id),
+            hits=len(hit_scores),
+            dropped=dropped_hits,
+        )
     results: list[RetrievedPassage] = []
     for row in rows:
         score = hit_scores.get(row.id)

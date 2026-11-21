@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import OrgAdminUser
+from app.core.logging import get_logger
 from app.db.models.audit import Notification, RoleRequest, RoleRequestStatus, UsageRecord
 from app.db.models.conversation import Conversation, Feedback, Message, MessageRole
 from app.db.models.document import Document, DocumentProcessingJob, JobStatus
@@ -17,6 +18,7 @@ from app.db.models.user import OrganizationMembership, OrgRole, User
 from app.db.session import get_db
 from app.schemas.workflow import FeedbackReviewUpdate, ReviewDecision
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -222,6 +224,13 @@ async def review_feedback(
     if item is None:
         from app.core.exceptions import PermissionDeniedError
 
+        logger.warning(
+            "feedback_review_failed",
+            reason="not_found",
+            feedback_id=feedback_id,
+            organization_id=str(org_id),
+            admin_id=str(admin.id),
+        )
         raise PermissionDeniedError("Feedback not found.")
     item.review_status = body.status
     item.admin_note = body.note
@@ -240,6 +249,13 @@ async def review_feedback(
         )
     )
     await db.commit()
+    logger.info(
+        "feedback_reviewed",
+        feedback_id=feedback_id,
+        organization_id=str(org_id),
+        admin_id=str(admin.id),
+        status=body.status,
+    )
     return {"status": body.status}
 
 
@@ -297,10 +313,18 @@ async def decide_access_request(
     if request is None or request.status != RoleRequestStatus.PENDING:
         from app.core.exceptions import PermissionDeniedError
 
+        logger.warning(
+            "access_request_decision_failed",
+            reason="not_available",
+            request_id=request_id,
+            organization_id=str(org_id),
+            admin_id=str(admin.id),
+        )
         raise PermissionDeniedError("Access request is not available for review.")
     request.status = RoleRequestStatus(body.status)
     request.reviewed_by = admin.id
     request.reviewer_note = body.note
+    membership_updated = False
     if request.status == RoleRequestStatus.APPROVED:
         membership = await db.scalar(
             select(OrganizationMembership).where(
@@ -311,6 +335,7 @@ async def decide_access_request(
         )
         if membership:
             membership.role = OrgRole.ORG_ADMIN
+            membership_updated = True
     db.add(
         Notification(
             organization_id=org_id,
@@ -328,4 +353,13 @@ async def decide_access_request(
         )
     )
     await db.commit()
+    logger.info(
+        "access_request_decided",
+        request_id=request_id,
+        requester_id=str(request.requested_by),
+        organization_id=str(org_id),
+        admin_id=str(admin.id),
+        decision=request.status.value,
+        membership_updated=membership_updated,
+    )
     return {"status": request.status.value}

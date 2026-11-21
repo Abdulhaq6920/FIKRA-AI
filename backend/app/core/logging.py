@@ -8,11 +8,13 @@ Every log event includes:
 - correlation_id (set per request via middleware)
 - Additional context added by callers
 
-Logs are written to stdout **and** to a rotating ``.log`` file under ``LOG_DIR``
-(``backend/logs/`` by default). The active file is ``LOG_FILE`` (``backend.log``
-for the API, ``celery.log`` for the worker); once it reaches
-``LOG_FILE_MAX_BYTES`` it is rotated into ``.log.1``, ``.log.2`` … up to
-``LOG_FILE_BACKUP_COUNT`` files. Both sinks share the same processor chain, so
+Logs are written to stdout **and** to a process-safe rotating file under
+``LOG_DIR`` (``logs/`` by default). The active file is ``LOG_FILE``
+(``app.logs`` for both the API and Celery worker). Once it reaches
+``LOG_FILE_MAX_BYTES`` (20 MB by default), a cross-process lock rotates it into
+``app.logs.1``, ``app.logs.2`` … up to ``LOG_FILE_BACKUP_COUNT`` (10) files. The
+oldest backup is discarded and the active file starts fresh, so rotation wraps
+without unbounded disk growth. Both sinks share the same processor chain, so
 redaction and correlation IDs apply equally to console and disk.
 
 Never log passwords, API keys, tokens, or raw document content.
@@ -22,12 +24,12 @@ from __future__ import annotations
 
 import logging
 import sys
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Lock
 from typing import Any, cast
 
 import structlog
+from concurrent_log_handler import ConcurrentRotatingFileHandler
 from structlog.types import EventDict, Processor
 
 from app.core.config import settings
@@ -127,19 +129,22 @@ def _formatter(processors: list[Processor]) -> structlog.stdlib.ProcessorFormatt
 
 
 def _file_handler() -> logging.Handler | None:
-    """Create the rotating file handler, or None if the sink is unavailable.
+    """Create the process-safe rotating file sink, or None if unavailable.
 
+    ``ConcurrentRotatingFileHandler`` coordinates rollover through a lock file,
+    so the API and Celery workers can safely append to the same ``app.logs``.
     A read-only filesystem must not take the API down: console logging stays
     active and the reason is printed to stderr (logging is not wired yet here).
     """
     try:
         log_dir = Path(settings.log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
-        return RotatingFileHandler(
-            log_dir / settings.log_file,
+        return ConcurrentRotatingFileHandler(
+            filename=log_dir / settings.log_file,
             maxBytes=settings.log_file_max_bytes,
             backupCount=settings.log_file_backup_count,
             encoding="utf-8",
+            keep_file_open=True,
         )
     except OSError as exc:
         message = f"cannot open log file {settings.log_dir}/{settings.log_file}: {exc}\n"
