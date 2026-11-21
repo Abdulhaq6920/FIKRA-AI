@@ -129,6 +129,36 @@ jobs:
           # Use the same revision as `publish`, including for manual rollbacks.
           ref: ${{ inputs.ref || github.sha }}
 
+      # Fail fast with an actionable message. Without this, an unconfigured
+      # Environment produces `SSH_TARGET: @` and a confusing ssh usage dump.
+      - name: Validate deployment configuration
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          missing=()
+          [[ -n "$DEPLOY_HOST" ]] || missing+=(DEPLOY_HOST)
+          [[ -n "$DEPLOY_USER" ]] || missing+=(DEPLOY_USER)
+          [[ -n "$DEPLOY_PATH" ]] || missing+=(DEPLOY_PATH)
+          [[ -n "$SSH_PRIVATE_KEY" ]] || missing+=(SSH_PRIVATE_KEY)
+          [[ -n "$SSH_KNOWN_HOSTS" ]] || missing+=(SSH_KNOWN_HOSTS)
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing GitHub Environment 'production' configuration: ${missing[*]}"
+            echo "::error::See docs/operations/cd-pipeline.md §4 for the full variable/secret list."
+            exit 1
+          fi
+
+          if [[ "$DEPLOY_PATH" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path (e.g. /opt/fikra), got: $DEPLOY_PATH"
+            exit 1
+          fi
+
+          echo "Deployment target: $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH"
+
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}

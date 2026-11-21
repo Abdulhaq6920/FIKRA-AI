@@ -104,6 +104,16 @@ following in it:
 `Settings → Secrets and variables → Actions → Variables` only if the API is not reachable at that
 Docker service name during the build.
 
+The `deploy` job begins with a **Validate deployment configuration** step that checks all five
+required values and that `DEPLOY_PATH` is absolute. If the Environment is unconfigured, the job
+fails immediately with a list of missing names instead of an opaque `ssh` usage error like
+`SSH_TARGET: @`. NOTE: variables/secrets must be defined on the **Environment**, not just at
+repository level; repository-level values with the same names are not inherited by an Environment
+unless that environment has no overrides — define them explicitly to be safe.
+
+> If you saw `SSH_TARGET: @` in a failed run, that is exactly this case: configure the Environment
+> and re-run the workflow.
+
 The workflow uses the built-in `GITHUB_TOKEN` with `packages: write`, so **no registry PAT is
 needed**. The token is passed to the host only for the duration of `docker login`; it expires when
 the job ends. A later manual `docker pull` on the host needs a new login — that is intentional.

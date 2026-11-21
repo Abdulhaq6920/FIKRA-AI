@@ -173,4 +173,3 @@ async def check_rate_limit(key: str, spec: RateSpec) -> tuple[bool, int]:
     except Exception as exc:  # fail open, but log loudly
         logger.warning("rate_limit_redis_unavailable", key=key, error=str(exc))
         return limiter.check(key, spec)
-
