@@ -1,8 +1,15 @@
 import { api } from "./client";
+import { uploadViaVercelBlob } from "@/lib/uploads/blob";
 import type { Document, DocumentListResponse, ProcessingJob } from "@/types";
+
+const UPLOAD_MODE = process.env.NEXT_PUBLIC_UPLOAD_MODE ?? "multipart";
 
 export const documentsApi = {
   upload: (file: File) => {
+    // On Vercel, files go directly to Blob. Local/Docker deployments keep the
+    // original multipart endpoint unless explicitly switched to Blob mode.
+    if (UPLOAD_MODE === "blob") return uploadViaVercelBlob(file);
+
     const form = new FormData();
     form.append("file", file);
     return api.upload<Document>("/documents/upload", form);

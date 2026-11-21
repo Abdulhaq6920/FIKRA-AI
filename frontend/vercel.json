@@ -1,14 +1,16 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
+  "installCommand": "npm ci --legacy-peer-deps",
   "outputDirectory": ".next",
-  "installCommand": "npm install --legacy-peer-deps",
   "env": {
-    "NEXT_PUBLIC_APP_NAME": "FIKRA AI"
+    "NEXT_PUBLIC_APP_NAME": "FIKRA AI",
+    "NEXT_PUBLIC_UPLOAD_MODE": "blob"
   },
   "build": {
     "env": {
-      "NEXT_PUBLIC_APP_NAME": "FIKRA AI"
+      "NEXT_PUBLIC_APP_NAME": "FIKRA AI",
+      "NEXT_PUBLIC_UPLOAD_MODE": "blob"
     }
   }
 }

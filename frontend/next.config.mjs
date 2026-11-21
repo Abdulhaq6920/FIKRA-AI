@@ -10,8 +10,10 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/:path*",
-        destination: `${process.env.BACKEND_URL || "http://localhost:8000"}/api/:path*`,
+        // Only backend routes are proxied locally. `/api/blob/*` is owned by
+        // the Next.js Blob-token route handler and must stay inside Next.
+        source: "/api/v1/:path*",
+        destination: `${process.env.BACKEND_URL || "http://localhost:8000"}/api/v1/:path*`,
       },
     ];
   },

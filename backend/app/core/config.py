@@ -186,6 +186,14 @@ class Settings(BaseSettings):
         ]
     )
     upload_dir: str = Field(default="./uploads")
+    # `local` writes to upload_dir (Docker Compose / local dev). `vercel_blob`
+    # uses the Vercel Blob Python SDK behind the StorageBackend interface.
+    storage_backend: Literal["local", "vercel_blob"] = Field(default="local")
+    # Must match the access mode of the connected Vercel Blob store.
+    blob_access: Literal["private", "public"] = Field(default="private")
+    # Used only to build public delivery URLs; OIDC/token auth is read directly
+    # from BLOB_STORE_ID / BLOB_READ_WRITE_TOKEN by the SDK.
+    blob_store_id: str = Field(default="")
 
     @field_validator("allowed_extensions", mode="before")
     @classmethod

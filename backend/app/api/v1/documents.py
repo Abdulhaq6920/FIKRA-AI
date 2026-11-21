@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import hashlib
 import mimetypes
+import re
 import uuid
 from datetime import UTC
 from pathlib import Path
@@ -46,7 +47,12 @@ from app.db.models.document import (
 )
 from app.db.models.user import OrgRole
 from app.db.session import get_db
-from app.schemas.document import DocumentListResponse, DocumentOut, ProcessingJobOut
+from app.schemas.document import (
+    BlobUploadFinalize,
+    DocumentListResponse,
+    DocumentOut,
+    ProcessingJobOut,
+)
 from app.storage.local_storage import get_storage
 
 # Optional native dependency: python-magic needs the libmagic system library
@@ -74,6 +80,10 @@ def _dispatch_inline_task(coro: Any) -> None:
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+# Blob pathnames are minted by the Next.js token route. Enforcing the exact
+# shape prevents a client from pointing a document row at another tenant's blob.
+_BLOB_PATH_RE = re.compile(r"^uploads/[0-9a-f-]{36}/[0-9a-f-]{36}\.[a-z0-9]{1,10}$")
 
 
 # Static extension → MIME fallback for environments where python-magic
@@ -120,6 +130,113 @@ def _safe_download_filename(name: str) -> str:
     return cleaned[:512]
 
 
+async def _register_and_dispatch_document(
+    *,
+    user: Any,
+    org_id: Any,
+    original_name: str,
+    ext: str,
+    file_bytes: bytes,
+    db: AsyncSession,
+    storage_path: str | None = None,
+    already_stored: bool = False,
+) -> DocumentOut:
+    """Persist a validated upload, enqueue ingestion and return its DTO."""
+    # Detect actual MIME type (not trusting the client's Content-Type).
+    if _magic is not None:
+        detected_mime = _magic.from_buffer(file_bytes[:4096], mime=True)
+    else:
+        detected_mime = _extension_mime(ext)
+
+    # Hash off the event loop: SHA-256 over a 50 MB upload is pure CPU and would
+    # otherwise stall /health/live, login and chat for every other request.
+    checksum = await asyncio.to_thread(_sha256_hex, file_bytes)
+
+    doc_uuid = uuid.uuid4()
+    if storage_path is None:
+        # Generate a safe storage path — never use the user-supplied filename.
+        storage_path = f"{org_id}/{doc_uuid}/{doc_uuid}.{ext}"
+
+    storage = get_storage()
+    if not already_stored:
+        await storage.save(file_bytes, storage_path)
+
+    document = Document(
+        id=doc_uuid,
+        organization_id=org_id,
+        uploaded_by=user.id,
+        title=Path(original_name).stem,
+        original_filename=original_name,
+        storage_path=storage_path,
+        mime_type=detected_mime,
+        file_extension=ext,
+        file_size_bytes=len(file_bytes),
+        checksum_sha256=checksum,
+        status=DocumentStatus.QUEUED,
+    )
+    job = DocumentProcessingJob(
+        document_id=doc_uuid,
+        organization_id=org_id,
+        status=JobStatus.PENDING,
+    )
+    try:
+        db.add(document)
+        await db.flush()
+        db.add(job)
+        await db.commit()
+    except Exception:
+        # A failed insert must not leave an orphan behind in either backend.
+        await db.rollback()
+        with contextlib.suppress(Exception):
+            await storage.delete(storage_path)
+        raise
+
+    # Dispatch background ingestion task. Kept function-local on purpose:
+    # the workers module pulls in the Celery app and the ingestion pipeline
+    # (sentence-transformers), which must not load at API import time.
+    from app.workers.document_tasks import ingest_document
+
+    # The try covers the *publish* only. Anything after a successful publish
+    # (persisting the task id) must never start a second pipeline: the queued
+    # task and the inline fallback would both DELETE+INSERT this document's
+    # chunks and duplicate every row.
+    try:
+        task = ingest_document.apply_async(
+            args=[str(doc_uuid), str(org_id)],
+            queue="ingestion",
+        )
+    except Exception as exc:
+        logger.warning(
+            "celery_unavailable_processing_inline",
+            document_id=str(doc_uuid),
+            error=str(exc)[:200],
+        )
+        _dispatch_inline_task(
+            _process_document_inline(doc_uuid, org_id, str(doc_uuid), storage_path, ext)
+        )
+    else:
+        logger.info(
+            "document_upload_queued",
+            document_id=str(doc_uuid),
+            org_id=str(org_id),
+            file=original_name,
+            size=len(file_bytes),
+            celery_task=task.id,
+        )
+        try:
+            job.celery_task_id = task.id
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            logger.warning(
+                "document_job_task_id_not_persisted",
+                document_id=str(doc_uuid),
+                error=str(exc)[:200],
+            )
+
+    return DocumentOut.model_validate(document)
+
+
 @router.post("/upload", response_model=DocumentOut, status_code=201)
 async def upload_document(
     ctx: OrgAdminUser,
@@ -150,7 +267,6 @@ async def upload_document(
     file_bytes = b"".join(chunks)
     del chunks
 
-    # Validate extension
     original_name = file.filename or "unknown"
     ext = Path(original_name).suffix.lstrip(".").lower()
     if ext not in settings.allowed_extensions:
@@ -159,107 +275,80 @@ async def upload_document(
             f"Allowed: {', '.join(settings.allowed_extensions)}"
         )
 
-    # Detect actual MIME type (not trusting the client's Content-Type).
-    # If libmagic is unavailable, fall back to a static extension map —
-    # echoing the client-supplied Content-Type would let an upload choose
-    # its own content class (e.g. text/html payloads stored as .txt).
-    if _magic is not None:
-        detected_mime = _magic.from_buffer(file_bytes[:4096], mime=True)
-    else:
-        detected_mime = _extension_mime(ext)
+    return await _register_and_dispatch_document(
+        user=user,
+        org_id=org_id,
+        original_name=original_name,
+        ext=ext,
+        file_bytes=file_bytes,
+        db=db,
+    )
 
-    # Hash off the event loop: SHA-256 over a 50 MB upload is pure CPU and would
-    # otherwise stall /health/live, login and chat for every other request.
-    checksum = await asyncio.to_thread(_sha256_hex, file_bytes)
 
-    # Generate a safe storage path — never use the user-supplied filename in the path
-    doc_uuid = uuid.uuid4()
-    storage_path = f"{org_id}/{doc_uuid}/{doc_uuid}.{ext}"
+@router.post("/blob/finalize", response_model=DocumentOut, status_code=201)
+async def finalize_blob_upload(
+    payload: BlobUploadFinalize,
+    ctx: OrgAdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> DocumentOut:
+    """
+    Register a file that the browser uploaded directly to Vercel Blob.
 
-    # Save to storage
+    The browser never sends file bytes to Vercel Functions (4.5 MB body cap).
+    It receives a short-lived presigned PUT URL from the Next.js token route,
+    uploads to Blob, then calls this endpoint to create the document row and
+    start ingestion. Bytes are read back here only for hashing and validation.
+    """
+    user, org_id, role = ctx
+
+    if settings.storage_backend != "vercel_blob":
+        raise InvalidFileTypeError("Direct Blob uploads are not enabled for this deployment.")
+
+    pathname = payload.pathname
+    if not _BLOB_PATH_RE.fullmatch(pathname):
+        raise InvalidFileTypeError("Invalid upload path returned by the storage provider.")
+    ext = pathname.rsplit(".", 1)[1].lower()
+    if ext not in settings.allowed_extensions:
+        raise InvalidFileTypeError(
+            f"File type '.{ext}' is not supported. "
+            f"Allowed: {', '.join(settings.allowed_extensions)}"
+        )
+
+    original_ext = Path(payload.original_filename).suffix.lstrip(".").lower()
+    if original_ext != ext:
+        raise InvalidFileTypeError("Filename extension does not match the uploaded file.")
+
+    max_bytes = settings.max_upload_size_bytes
+    if payload.size_bytes > max_bytes:
+        raise FileTooLargeError(f"File exceeds {settings.max_upload_size_mb}MB limit.")
+
+    # A pathname must never be reused across tenants or documents.
+    claimed = await db.scalar(select(Document.id).where(Document.storage_path == pathname))
+    if claimed is not None:
+        raise ConflictError("This upload has already been registered.")
+
     storage = get_storage()
-    await storage.save(file_bytes, storage_path)
+    if not await storage.exists(pathname):
+        raise InvalidFileTypeError("The uploaded file could not be found. Retry the upload.")
 
-    # Create document record
-    document = Document(
-        id=doc_uuid,
-        organization_id=org_id,
-        uploaded_by=user.id,
-        title=Path(original_name).stem,
-        original_filename=original_name,
-        storage_path=storage_path,
-        mime_type=detected_mime,
-        file_extension=ext,
-        file_size_bytes=len(file_bytes),
-        checksum_sha256=checksum,
-        status=DocumentStatus.QUEUED,
+    file_bytes = await storage.read(pathname)
+    if not file_bytes:
+        raise InvalidFileTypeError("The uploaded file is empty.")
+    if len(file_bytes) > max_bytes:
+        raise FileTooLargeError(f"File exceeds {settings.max_upload_size_mb}MB limit.")
+    if len(file_bytes) != payload.size_bytes:
+        raise InvalidFileTypeError("The uploaded file size does not match its metadata.")
+
+    return await _register_and_dispatch_document(
+        user=user,
+        org_id=org_id,
+        original_name=payload.original_filename,
+        ext=ext,
+        file_bytes=file_bytes,
+        db=db,
+        storage_path=pathname,
+        already_stored=True,
     )
-    # Create processing job record
-    job = DocumentProcessingJob(
-        document_id=doc_uuid,
-        organization_id=org_id,
-        status=JobStatus.PENDING,
-    )
-    try:
-        db.add(document)
-        await db.flush()
-        db.add(job)
-        await db.commit()
-    except Exception:
-        # The file is already on disk: a failed insert must not leave it behind
-        # as an orphan that no row points at.
-        await db.rollback()
-        with contextlib.suppress(Exception):
-            await storage.delete(storage_path)
-        raise
-
-    # Dispatch background ingestion task. Kept function-local on purpose:
-    # the workers module pulls in the Celery app and the ingestion pipeline
-    # (sentence-transformers), which must not load at API import time.
-    from app.workers.document_tasks import ingest_document
-
-    # The try covers the *publish* only. Anything after a successful publish
-    # (persisting the task id) must never start a second pipeline: the queued
-    # task and the inline fallback would both DELETE+INSERT this document's
-    # chunks and duplicate every row.
-    try:
-        task = ingest_document.apply_async(
-            args=[str(doc_uuid), str(org_id)],
-            queue="ingestion",
-        )
-    except Exception as exc:
-        # Celery/Redis unavailable — process document inline as background task
-        logger.warning(
-            "celery_unavailable_processing_inline",
-            document_id=str(doc_uuid),
-            error=str(exc)[:200],
-        )
-        _dispatch_inline_task(
-            _process_document_inline(doc_uuid, org_id, str(doc_uuid), storage_path, ext)
-        )
-    else:
-        logger.info(
-            "document_upload_queued",
-            document_id=str(doc_uuid),
-            org_id=str(org_id),
-            file=original_name,
-            size=len(file_bytes),
-            celery_task=task.id,
-        )
-        try:
-            job.celery_task_id = task.id
-            await db.commit()
-        except Exception as exc:
-            # The task is already queued and will run; only the traceability
-            # link is missing. Roll back and let the request succeed.
-            await db.rollback()
-            logger.warning(
-                "document_job_task_id_not_persisted",
-                document_id=str(doc_uuid),
-                error=str(exc)[:200],
-            )
-
-    return DocumentOut.model_validate(document)
 
 
 @router.get("", response_model=DocumentListResponse)

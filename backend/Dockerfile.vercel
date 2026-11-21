@@ -1,0 +1,50 @@
+# Vercel-specific runtime image for the backend Service and Celery Daemon.
+#
+# Vercel container Functions receive traffic on port 80 by default, so this
+# Dockerfile differs from backend/Dockerfile only in its PORT default and CMD.
+# The same image is reused by the Daemon with a `command` override in
+# vercel.json, which keeps local Docker Compose and Vercel builds aligned.
+
+FROM python:3.12-slim AS base
+
+# Install uv for fast dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# System dependencies for document processing (OCR, PDF rendering, magic).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    poppler-utils \
+    libmagic1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Dependency layer ──────────────────────────────────────────────────────
+FROM base AS deps
+COPY pyproject.toml ./
+COPY app ./app
+RUN uv venv /opt/venv && \
+    uv pip install --python /opt/venv/bin/python torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu && \
+    uv pip install --python /opt/venv/bin/python -e .
+
+# ── Runtime image ─────────────────────────────────────────────────────────
+FROM base AS runtime
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=80
+
+COPY --from=deps /opt/venv /opt/venv
+COPY . .
+
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 80
+
+# Shell form is required so $PORT expands. Vercel sets PORT=80 for container
+# services; the default keeps `docker build && docker run` working locally.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"${PORT:-80}\""]

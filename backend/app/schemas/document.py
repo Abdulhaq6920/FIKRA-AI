@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DocumentOut(BaseModel):
@@ -29,6 +29,14 @@ class DocumentListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class BlobUploadFinalize(BaseModel):
+    """Metadata for a file uploaded directly to Vercel Blob by the browser."""
+
+    pathname: str = Field(min_length=1, max_length=950)
+    original_filename: str = Field(min_length=1, max_length=512)
+    size_bytes: int = Field(ge=1)
 
 
 class ProcessingJobOut(BaseModel):

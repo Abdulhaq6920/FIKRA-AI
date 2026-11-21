@@ -100,12 +100,17 @@ class LocalStorageBackend(StorageBackend):
         return None
 
 
-# Application singleton
-_storage: LocalStorageBackend | None = None
+# Application singleton. The concrete backend is selected by STORAGE_BACKEND.
+_storage: StorageBackend | None = None
 
 
-def get_storage() -> LocalStorageBackend:
+def get_storage() -> StorageBackend:
     global _storage
     if _storage is None:
-        _storage = LocalStorageBackend()
+        if settings.storage_backend == "vercel_blob":
+            from app.storage.vercel_blob_storage import VercelBlobStorageBackend
+
+            _storage = VercelBlobStorageBackend()
+        else:
+            _storage = LocalStorageBackend()
     return _storage

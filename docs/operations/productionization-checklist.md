@@ -27,6 +27,7 @@ Legend:
 | 1.6 | Frontend image runs as non-root | ✅ | `frontend/Dockerfile` `USER node` |
 | 1.7 | Dependency / container / secret scanning in CI | ⬜ | Add `pip-audit`, `npm audit --omit=dev`, Trivy, gitleaks once the current advisories are triaged (npm currently reports 15) |
 | 1.8 | Pin third-party Actions to commit SHAs | ⬜ | Supply-chain hardening; requires a Dependabot-style update flow |
+| 1.9 | Full-stack Vercel deployment definition | 🔧 | `vercel.json`, `backend/Dockerfile.vercel`, Blob upload flow, `docs/operations/vercel-deployment.md`; Vercel project + external services still to be wired |
 
 ## 2. Security
 
@@ -64,7 +65,7 @@ Legend:
 | 4.3 | Automated nightly backups with retention + restore drill | 📋 | `scripts/backup_postgres.sh`, `scripts/restore_postgres.sh`, `docs/operations/backup-and-restore.md`; cron + offsite copy + quarterly drill still to schedule |
 | 4.4 | PITR / WAL archiving | ⬜ | Requires managed Postgres or `archive_command` + object storage |
 | 4.5 | Retention purge for expired sessions / usage records | ⬜ | Celery beat task, not yet implemented |
-| 4.6 | Uploads on shared object storage before scaling past one node | ⬜ | `storage/interface.py` abstraction exists; S3 backend not implemented |
+| 4.6 | Uploads on shared object storage before scaling past one node | 🔧 | `storage/vercel_blob_storage.py` + client-direct Blob flow for Vercel; S3 backend still open for non-Vercel hosting |
 | 4.7 | Encryption at rest on DB volume | ⬜ | Host / managed-service responsibility |
 
 ## 5. Reliability and performance

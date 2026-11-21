@@ -1,0 +1,74 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["iad1"],
+  "env": {
+    "NEXT_PUBLIC_APP_NAME": "FIKRA AI",
+    "NEXT_PUBLIC_UPLOAD_MODE": "blob"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_APP_NAME": "FIKRA AI",
+      "NEXT_PUBLIC_UPLOAD_MODE": "blob"
+    }
+  },
+  "services": {
+    "frontend": {
+      "root": "frontend/",
+      "framework": "nextjs",
+      "installCommand": "npm ci --legacy-peer-deps",
+      "buildCommand": "npm run build",
+      "outputDirectory": ".next",
+      "functions": {
+        "src/app/api/**/route.ts": {
+          "maxDuration": 60
+        }
+      },
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_INTERNAL_URL"
+        }
+      ]
+    },
+    "backend": {
+      "root": "backend/",
+      "runtime": "container",
+      "entrypoint": "Dockerfile.vercel",
+      "functions": {
+        "**": {
+          "maxDuration": 300
+        }
+      }
+    }
+  },
+  "daemons": {
+    "worker": {
+      "root": "backend/",
+      "entrypoint": "Dockerfile.vercel",
+      "command": [
+        "celery",
+        "-A",
+        "app.workers.celery_app",
+        "worker",
+        "--loglevel=info",
+        "-Q",
+        "default,ingestion"
+      ],
+      "instances": {
+        "iad1": 1
+      },
+      "resources": {
+        "requests": {
+          "memory": "1Gi"
+        }
+      },
+      "terminationGracePeriodSeconds": 60
+    }
+  },
+  "rewrites": [
+    { "source": "/api/v1/(.*)", "destination": { "service": "backend" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
+}

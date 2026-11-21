@@ -107,9 +107,11 @@ Docker service name during the build.
 The `deploy` job begins with a **Validate deployment configuration** step that checks all five
 required values and that `DEPLOY_PATH` is absolute. If the Environment is unconfigured, the job
 fails immediately with a list of missing names instead of an opaque `ssh` usage error like
-`SSH_TARGET: @`. NOTE: variables/secrets must be defined on the **Environment**, not just at
-repository level; repository-level values with the same names are not inherited by an Environment
-unless that environment has no overrides — define them explicitly to be safe.
+`SSH_TARGET: @`.
+
+> Variables can be defined at repository level or on the Environment; Environment values win when
+> both define the same name. Secrets, however, must be defined on the Environment for this job to
+> see them. If you see empty values in the validation output, they are set in neither place.
 
 > If you saw `SSH_TARGET: @` in a failed run, that is exactly this case: configure the Environment
 > and re-run the workflow.
