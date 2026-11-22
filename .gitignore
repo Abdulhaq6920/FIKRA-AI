@@ -71,6 +71,7 @@ playwright/.cache/
 
 # ── Agent-only guidance (never shipped) ────────────────────────────────────
 .opencode/
+AGENTS.md
 
 # ── Local agent / scratch evidence directories ────────────────────────────
 .testmuai/
