@@ -6,7 +6,7 @@ This deployment runs the whole application in one Vercel project:
 |---|---|---|
 | Next.js UI | Service (Next.js runtime) | `frontend/` |
 | FastAPI API | Service (container runtime) | `backend/Dockerfile.vercel` |
-| Celery ingestion worker | Daemon (1 GiB, `iad1`) | `backend/Dockerfile.vercel` + command override |
+| Celery ingestion worker | *Not deployed* — inline fallback | n/a |
 | Document files | Vercel Blob (private store) | browser → Blob → FastAPI finalize |
 | Postgres / Redis / Qdrant | External providers | configured by environment variables |
 
@@ -27,18 +27,16 @@ The Hobby plan can host this app, but with tight limits:
 
 - Functions: 2 GB memory, 300 s maximum duration, 4.5 MB request bodies.
   Client-direct Blob uploads avoid the body limit.
-- Daemons: 1 GiB or 2 GiB only. Monthly quota is **5 Active CPU-hours** and
-  **420 GB-hours of Provisioned Memory**. A single 1 GiB daemon that runs
-  continuously uses the whole memory quota in ~17.5 days; 2 GiB lasts ~9 days.
-  When the quota is exhausted, Vercel stops daemons until the next UTC month.
-- Daemons run only in Production (no preview daemons).
+- No daemon is deployed (the Celery worker was removed from the Vercel project
+  in favour of the built-in inline ingestion fallback). If you ever want the
+  daemon back, re-add it to the `daemons` key in the root `vercel.json` and
+  re-check the quota below.
 - Python function bundle limit is 500 MB; the container runtime is used for the
   backend so Tesseract, Poppler and libmagic are available.
 
-The daemon is configured at **1 GiB** to maximise uptime. If ingestion OOMs,
-raise it to 2 GiB in `vercel.json` and accept the shorter monthly window, or
-move the worker off Hobby. Do not run the reranker in the worker (it is only
-loaded by the API lifespan, not by Celery).
+The API container runs the FastAPI service only; ingestion tasks are processed
+inline by the API process when no Celery worker is present (see
+`celery_unavailable_processing_inline` in `app/api/v1/documents.py`).
 
 ## 2. External services
 
@@ -166,8 +164,8 @@ rewrite because `/api/blob/token` is a Next.js route handler.
 1. `GET https://<domain>/api/v1/health/live` → `200`.
 2. `GET https://<domain>/api/v1/health/ready` → `200` (DB, Redis, Qdrant, models).
 3. Log in, upload a small PDF, and watch it reach `READY`.
-4. Inspect the worker: `npx vercel@latest daemons ls` and
-   `npx vercel@latest daemons logs worker`.
+4. No worker/daemon to inspect (this deployment runs without Celery; ingestion
+   falls back to inline processing).
 5. In the Blob store dashboard, confirm an object under `uploads/`.
 
 ## 8. Rollback and recovery

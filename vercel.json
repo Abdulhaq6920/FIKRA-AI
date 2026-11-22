@@ -43,30 +43,6 @@
       }
     }
   },
-  "daemons": {
-    "worker": {
-      "root": "backend/",
-      "entrypoint": "Dockerfile.vercel",
-      "command": [
-        "celery",
-        "-A",
-        "app.workers.celery_app",
-        "worker",
-        "--loglevel=info",
-        "-Q",
-        "default,ingestion"
-      ],
-      "instances": {
-        "iad1": 1
-      },
-      "resources": {
-        "requests": {
-          "memory": "1Gi"
-        }
-      },
-      "terminationGracePeriodSeconds": 60
-    }
-  },
   "rewrites": [
     { "source": "/api/v1/(.*)", "destination": { "service": "backend" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }
