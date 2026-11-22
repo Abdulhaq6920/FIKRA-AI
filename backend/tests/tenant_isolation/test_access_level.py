@@ -99,9 +99,9 @@ def _assert_no_bare_true(statement: Any) -> None:
     ``true()`` renders as the literal ``true`` under the PostgreSQL dialect, so
     the check is made per conjunct rather than by substring on the whole query.
     """
-    assert "true" not in _conjuncts(statement), (
-        "a bare `true` WHERE term means an access predicate was dropped"
-    )
+    assert "true" not in _conjuncts(
+        statement
+    ), "a bare `true` WHERE term means an access predicate was dropped"
 
 
 def _fake_search(
@@ -126,9 +126,7 @@ async def _vector_statement(
     rows: list[_Row] | None = None,
 ) -> Any:
     db = _CapturingSession(rows=rows if rows is not None else [_Row(cid) for cid in _CHUNK_IDS])
-    stub_hits = hits if hits is not None else [
-        (cid, 0.9 - i) for i, cid in enumerate(_CHUNK_IDS)
-    ]
+    stub_hits = hits if hits is not None else [(cid, 0.9 - i) for i, cid in enumerate(_CHUNK_IDS)]
     monkeypatch.setattr(vector_store, "search_vectors", _fake_search(stub_hits))
     await _vector_search(
         query_vector=_QUERY_VECTOR,
@@ -189,9 +187,7 @@ class TestRestrictedDocumentsAreFiltered:
 class TestTenantPredicateIsInTheQuery:
     """The org filter must be part of both the Qdrant and SQL queries."""
 
-    async def test_vector_search_is_tenant_scoped(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_vector_search_is_tenant_scoped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         sql = _compiled(await _vector_statement(monkeypatch, include_restricted=False))
         assert "document_chunks.organization_id" in sql
         assert "documents.organization_id" in sql
@@ -213,9 +209,7 @@ class TestTenantPredicateIsInTheQuery:
 class TestVectorHitResolution:
     """Qdrant hits are resolved safely against relational rows."""
 
-    async def test_stale_qdrant_ids_are_skipped(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_stale_qdrant_ids_are_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         unknown = uuid.uuid4()
         db = _CapturingSession(rows=[_Row(_CHUNK_IDS[0])])
         monkeypatch.setattr(vector_store, "search_vectors", _fake_search([(unknown, 0.9)]))
@@ -227,9 +221,7 @@ class TestVectorHitResolution:
         )
         assert passages == []
 
-    async def test_qdrant_ranking_is_preserved(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_qdrant_ranking_is_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # SQLAlchemy returns rows in insertion order; Qdrant ranks them 3, 1, 2.
         rows = [_Row(cid) for cid in _CHUNK_IDS]
         hits = [(_CHUNK_IDS[2], 0.95), (_CHUNK_IDS[0], 0.8), (_CHUNK_IDS[1], 0.6)]

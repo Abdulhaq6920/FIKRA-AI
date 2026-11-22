@@ -1,0 +1,16 @@
+storage:
+  storage_path: C:\Users\Lenovo\Documents\RAG\.local\qdrant\data
+  on_disk_payload: true
+  copy_snippets_to_replay: true
+  max_processes_size: 512
+  max_points_per_condition_check: 10000
+
+cluster:
+  enabled: false
+  advertise_uri: 127.0.0.1
+  grpc_port: 6334
+
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  https_port: null

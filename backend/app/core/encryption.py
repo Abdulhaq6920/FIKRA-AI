@@ -42,8 +42,8 @@ def _get_cipher() -> FernetType:
         if not key:
             raise RuntimeError(
                 "DATA_ENCRYPTION_KEY is not configured. Generate one with: "
-                "python -c \"from cryptography.fernet import Fernet; "
-                "print(Fernet.generate_key().decode())\" and set it in .env."
+                'python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())" and set it in .env.'
             )
         try:
             _cipher = Fernet(key.encode() if isinstance(key, str) else key)

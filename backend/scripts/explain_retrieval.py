@@ -113,7 +113,9 @@ async def show(conn, label: str, sql: str, params: dict) -> list[str]:
     plan = "\n".join(row[0] for row in rows)
     print(f"\n--- {label} ---")
     for line in plan.splitlines():
-        if any(key in line for key in ("Scan", "Sort", "Buffers", "Execution Time", "Index Searches")):
+        if any(
+            key in line for key in ("Scan", "Sort", "Buffers", "Execution Time", "Index Searches")
+        ):
             print(line)
     return [line.strip() for line in plan.splitlines()]
 
@@ -126,10 +128,7 @@ async def ids(conn, sql: str, params: dict) -> list[str]:
 async def ids_and_distances(conn, sql: str, params: dict) -> list[tuple[str, float]]:
     rows = (
         await conn.execute(
-            text(
-                "select id, embedding <=> cast(:v as vector) as dist "
-                f"from ({sql}) t"
-            ),
+            text("select id, embedding <=> cast(:v as vector) as dist " f"from ({sql}) t"),
             params,
         )
     ).all()

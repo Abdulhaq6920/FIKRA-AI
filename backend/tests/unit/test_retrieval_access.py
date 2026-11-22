@@ -197,9 +197,9 @@ class TestFusionHasNoSideEffects:
         assert after == snapshot, "fusion mutated a passage shared with its input lists"
 
         inputs = [*vector, *keyword]
-        assert all(all(f is not p for p in inputs) for f in fused), (
-            "fused passages must be copies, not aliases of the input objects"
-        )
+        assert all(
+            all(f is not p for p in inputs) for f in fused
+        ), "fused passages must be copies, not aliases of the input objects"
 
     def test_rrf_scores_are_unchanged(self) -> None:
         first = _passage(score=0.9)

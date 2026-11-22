@@ -119,18 +119,12 @@ class TestRelevanceGate:
         passage.similarity = 0.9
         monkeypatch.setattr(retrieval_service, "_vector_search", _fake_vector_search(passage))
         monkeypatch.setattr(retrieval_service, "_keyword_search", _fake_keyword_search([]))
-        monkeypatch.setattr(
-            "app.providers.embeddings.embed_query", lambda _q: [0.0] * 384
-        )
+        monkeypatch.setattr("app.providers.embeddings.embed_query", lambda _q: [0.0] * 384)
 
-        monkeypatch.setattr(
-            "app.providers.reranker.rerank", lambda _q, _texts, top_n: [(0, 0.05)]
-        )
+        monkeypatch.setattr("app.providers.reranker.rerank", lambda _q, _texts, top_n: [(0, 0.05)])
         assert await retrieve("question", uuid.uuid4(), None) == []  # type: ignore[arg-type]
 
-        monkeypatch.setattr(
-            "app.providers.reranker.rerank", lambda _q, _texts, top_n: [(0, 0.97)]
-        )
+        monkeypatch.setattr("app.providers.reranker.rerank", lambda _q, _texts, top_n: [(0, 0.97)])
         result = await retrieve("question", uuid.uuid4(), None)  # type: ignore[arg-type]
         assert [p.chunk_id for p in result] == [passage.chunk_id]
         assert result[0].retrieval_method == "reranked"

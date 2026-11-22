@@ -76,9 +76,7 @@ class Document(UUIDMixin, TimestampMixin, Base):
     )
     # Encrypted at rest — titles and filenames are tenant PII.
     title: Mapped[str] = mapped_column(EncryptedType(String(1024)), nullable=False)
-    original_filename: Mapped[str] = mapped_column(
-        EncryptedType(String(1024)), nullable=False
-    )
+    original_filename: Mapped[str] = mapped_column(EncryptedType(String(1024)), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
