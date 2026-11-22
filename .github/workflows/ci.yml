@@ -108,8 +108,10 @@ jobs:
         run: alembic check
 
       - name: Unit and tenant-isolation tests
-        # -p no:langsmith disables the langsmith pytest plugin, which crashes
-        # during import under pydantic 2.x (NameError: FeedbackConfigSchema).
+        # langsmith is pinned below 0.16 (pyproject.toml) because >=0.16 ships a
+        # pydantic-2.x-incompatible FeedbackConfigSchema that crashes pytest plugin
+        # import under pydantic 2.x (NameError: FeedbackConfigSchema). -p no:langsmith
+        # is kept as a belt-and-suspenders disable of the langsmith pytest plugin.
         run: pytest tests/unit tests/tenant_isolation -q --override-ini=addopts= -p no:langsmith --cov=app --cov-report=term-missing
 
       - name: Integration tests (PostgreSQL)
