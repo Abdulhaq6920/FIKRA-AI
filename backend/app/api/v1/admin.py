@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
@@ -36,7 +37,7 @@ async def organization_overview(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-) -> AdminOverviewOut:
+) -> dict[str, Any]:
     """Return live, tenant-scoped dashboard metrics and recent members."""
     _user, org_id, _role = ctx
 
@@ -136,7 +137,7 @@ async def list_members(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(default=None, max_length=255),
-) -> AdminMemberListOut:
+) -> dict[str, Any]:
     """Paginated, searchable list of organization members."""
     _admin, org_id, _role = ctx
 
@@ -181,7 +182,7 @@ async def list_feedback(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(default=None, pattern="^(open|in_review|solved)$"),
-) -> FeedbackListOut:
+) -> dict[str, Any]:
     _admin, org_id, _role = ctx
     base = (
         select(Feedback, User.full_name, User.email, Message.content)
@@ -222,7 +223,7 @@ async def review_feedback(
     body: FeedbackReviewUpdate,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> FeedbackReviewOut:
+) -> dict[str, Any]:
     admin, org_id, _role = ctx
     item = await db.scalar(
         select(Feedback).where(Feedback.id == feedback_id, Feedback.organization_id == org_id)
@@ -270,7 +271,7 @@ async def list_access_requests(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(default=None, pattern="^(pending|approved|rejected)$"),
-) -> AccessRequestListOut:
+) -> dict[str, Any]:
     _admin, org_id, _role = ctx
     base = (
         select(RoleRequest, User.full_name, User.email)
@@ -307,7 +308,7 @@ async def decide_access_request(
     body: ReviewDecision,
     ctx: OrgAdminUser,
     db: AsyncSession = Depends(get_db),
-) -> AccessRequestStatusOut:
+) -> dict[str, Any]:
     admin, org_id, _role = ctx
     request = await db.scalar(
         select(RoleRequest).where(

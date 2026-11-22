@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncGenerator, Sequence
-from typing import Any
+from collections.abc import AsyncGenerator, Iterable, Sequence
+from typing import Any, cast
 
 import groq
 from groq import AsyncGroq
+from groq.types.chat import ChatCompletionMessageParam
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -181,7 +182,7 @@ class GroqClient:
                     async with _groq_semaphore:
                         response = await self._client.chat.completions.create(
                             model=candidate,
-                            messages=groq_messages,
+                            messages=cast(Iterable[ChatCompletionMessageParam], groq_messages),
                             max_tokens=max_tokens or settings.groq_max_tokens,
                             temperature=effective_temperature,
                         )
@@ -267,7 +268,7 @@ class GroqClient:
                     async with _groq_semaphore:
                         stream = await self._client.chat.completions.create(
                             model=candidate,
-                            messages=groq_messages,
+                            messages=cast(Iterable[ChatCompletionMessageParam], groq_messages),
                             max_tokens=max_tokens or settings.groq_max_tokens,
                             temperature=effective_temperature,
                             stream=True,
@@ -337,7 +338,7 @@ class GroqClient:
         if system_prompt:
             result.append({"role": "system", "content": system_prompt})
         for msg in messages:
-            role = getattr(msg, "role", None) or getattr(msg, "type", "user")
+            role = str(getattr(msg, "role", None) or getattr(msg, "type", "user") or "user")
             if role == "human":
                 role = "user"
             elif role == "ai":

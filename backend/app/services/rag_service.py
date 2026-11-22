@@ -296,7 +296,7 @@ class RAGService:
                 recent_messages=recent_messages,
                 context_text=context_text,
             )
-            input_text = "\n".join(str(message.content) for message in chat_messages)
+            input_text = "\n".join(str(message.get("content") or "") for message in chat_messages)
 
         model = settings.active_llm_model
         answer_parts: list[str] = []
