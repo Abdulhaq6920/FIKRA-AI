@@ -70,8 +70,10 @@ dependencies = [
     # Pin langsmith in main dependencies too: a transitive dep of the
     # langchain-* packages ships a pydantic-2.x-incompatible feedback schema
     # that crashes the RAG chat stream at runtime (NameError: FeedbackConfigSchema).
-    # Must satisfy langchain-core==1.7.6 (>=0.14.9,<1.0.0) and stay below 1.0.0.
-    "langsmith>=0.14.9,<1.0.0",
+    # Must satisfy langchain-core==1.7.6 (>=0.14.9,<1.0.0). Stay below 0.16.0:
+    # langsmith >=0.16 reintroduces the broken FeedbackConfigSchema that crashes
+    # pytest plugin import under pydantic 2.x.
+    "langsmith>=0.14.9,<0.16.0",
     # Logging & Observability
     "concurrent-log-handler==0.9.31",
     "structlog==24.2.0",
@@ -103,7 +105,7 @@ dev = [
     "faker==26.0.0",
     "ruff==0.5.1",
     "mypy==1.10.1",
-    "langsmith>=0.14.9,<1.0.0",  # must stay in sync with the main-dependency pin above
+    "langsmith>=0.14.9,<0.16.0",  # must stay in sync with the main-dependency pin above
     "types-python-jose==3.3.4.20240106",
     "types-passlib==1.7.7.20240327",
     "types-aiofiles==23.2.0.20240403",
