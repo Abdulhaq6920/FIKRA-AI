@@ -19,38 +19,38 @@ def key(monkeypatch: pytest.MonkeyPatch) -> str:
 
 
 class TestEncryption:
-    def test_round_trip(self, key: str):
+    def test_round_trip(self, key: str) -> None:
         ciphertext = encrypt("admin@fikra.ai")
         assert ciphertext != "admin@fikra.ai"
         assert decrypt(ciphertext) == "admin@fikra.ai"
 
-    def test_ciphertext_is_nondeterministic(self, key: str):
+    def test_ciphertext_is_nondeterministic(self, key: str) -> None:
         """Fernet uses a random IV, so equal plaintexts produce different tokens."""
         assert encrypt("same") != encrypt("same")
 
-    def test_empty_values_pass_through(self, key: str):
+    def test_empty_values_pass_through(self, key: str) -> None:
         assert encrypt("") == ""
         assert decrypt("") == ""
 
-    def test_decrypt_rejects_tampered_token(self, key: str):
-        with pytest.raises(Exception):
+    def test_decrypt_rejects_tampered_token(self, key: str) -> None:
+        with pytest.raises(RuntimeError):
             decrypt("not-a-fernet-token")
 
 
 class TestEncryptedTypeHelpers:
-    def test_encrypt_value_without_key_is_noop(self, monkeypatch: pytest.MonkeyPatch):
+    def test_encrypt_value_without_key_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Local dev/tests without DATA_ENCRYPTION_KEY must keep working."""
         monkeypatch.setattr("app.db.types.encrypted.settings.data_encryption_key", "")
         assert encrypt_value("plain") == "plain"
 
-    def test_decrypt_value_without_key_is_noop(self, monkeypatch: pytest.MonkeyPatch):
+    def test_decrypt_value_without_key_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("app.db.types.encrypted.settings.data_encryption_key", "")
         assert decrypt_value("plain") == "plain"
 
-    def test_encrypt_value_with_key(self, key: str):
+    def test_encrypt_value_with_key(self, key: str) -> None:
         assert encrypt_value("secret") != "secret"
         assert decrypt_value(encrypt_value("secret")) == "secret"
 
-    def test_decrypt_value_tolerates_plaintext_rows(self, key: str):
+    def test_decrypt_value_tolerates_plaintext_rows(self, key: str) -> None:
         """Rows written before encryption was enabled must still read."""
         assert decrypt_value("legacy-plaintext@example.com") == "legacy-plaintext@example.com"

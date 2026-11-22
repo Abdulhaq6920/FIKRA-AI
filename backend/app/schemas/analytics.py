@@ -109,6 +109,8 @@ class CitationSourceOut(BaseModel):
 
 
 class QuestionListItem(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     id: uuid.UUID
     user_id: uuid.UUID
     user_name: str
@@ -144,6 +146,8 @@ class FlowStep(BaseModel):
 
 
 class QuestionDetailOut(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     id: uuid.UUID
     question: str
     asked_at: datetime
@@ -167,6 +171,8 @@ class QuestionDetailOut(BaseModel):
 
 
 class RecentQuestion(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     id: uuid.UUID
     conversation_id: uuid.UUID
     conversation_title: str

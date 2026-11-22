@@ -19,7 +19,6 @@ SQLAlchemy TypeDecorator (see app/db/types/encrypted.py).
 
 from __future__ import annotations
 
-import base64
 from typing import TYPE_CHECKING
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -42,9 +41,9 @@ def _get_cipher() -> FernetType:
         key = settings.data_encryption_key
         if not key:
             raise RuntimeError(
-                "DATA_ENCRYPTION_KEY is not configured. "
-                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" "
-                "and set it in .env."
+                "DATA_ENCRYPTION_KEY is not configured. Generate one with: "
+                "python -c \"from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())\" and set it in .env."
             )
         try:
             _cipher = Fernet(key.encode() if isinstance(key, str) else key)

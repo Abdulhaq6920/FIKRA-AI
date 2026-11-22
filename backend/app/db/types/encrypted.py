@@ -54,13 +54,13 @@ class EncryptedType(TypeDecorator):
             kwargs["length"] = 4096
         super().__init__(*args, **kwargs)
 
-    def process_bind_param(self: "EncryptedType", value: Any, dialect: Any) -> Any:
+    def process_bind_param(self: EncryptedType, value: Any, dialect: Any) -> Any:
         """Encrypt before writing to the database."""
         if value is None:
             return None
         return encrypt_value(str(value))
 
-    def process_result_value(self: "EncryptedType", value: Any, dialect: Any) -> Any:
+    def process_result_value(self: EncryptedType, value: Any, dialect: Any) -> Any:
         """Decrypt after reading from the database."""
         if value is None:
             return None

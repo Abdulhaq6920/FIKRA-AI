@@ -34,7 +34,7 @@ _WIDEN: tuple[tuple[str, str, int, int], ...] = (
 
 
 def upgrade() -> None:
-    for table, column, old_length, new_length in _WIDEN:
+    for table, column, _old_length, new_length in _WIDEN:
         op.execute(
             f"ALTER TABLE {table} ALTER COLUMN {column} "
             f"TYPE varchar({new_length}) USING {column}::varchar({new_length})"

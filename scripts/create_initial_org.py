@@ -121,7 +121,7 @@ async def create_initial_data() -> None:
 
     print("\nInitial data ready.")
     print(f"  Organization ID for login: {ORG_ID}")
-    print(f"  Login at: http://localhost:3000/login")
+    print("  Login at: http://localhost:3000/login")
 
 
 if __name__ == "__main__":

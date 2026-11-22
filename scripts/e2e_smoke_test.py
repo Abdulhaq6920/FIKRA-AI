@@ -6,8 +6,6 @@ This script lives OUTSIDE the backend dir so it doesn't trigger uvicorn reloads.
 import asyncio
 import httpx
 import io
-import json
-import time
 
 BACKEND = "http://localhost:8000"
 ORG_ID = "00000000-0000-0000-0000-000000000001"
@@ -92,7 +90,7 @@ async def main():
                     print(f"  ✓ Document processed! ({chunks} chunks)")
                     break
                 elif status == "failed":
-                    print(f"  ✗ Document processing failed!")
+                    print("  ✗ Document processing failed!")
                     # Check job status for error
                     r2 = await c.get(
                         f"{BACKEND}/api/v1/documents/{doc_id}/status", cookies=cookies
@@ -134,7 +132,7 @@ async def main():
         print(f"  Response status: {r.status_code}")
         if r.status_code == 200:
             data = r.json()
-            print(f"  ✓ Answer received!")
+            print("  ✓ Answer received!")
             print(f"  Model: {data['model_used']}")
             print(f"  Tokens: in={data['input_tokens']}, out={data['output_tokens']}")
             print(f"  Latency: {data['latency_ms']}ms")
@@ -162,14 +160,14 @@ async def main():
             answer_lower = data["answer"].lower()
             has_bge = "bge" in answer_lower or "bge-small" in answer_lower
             has_baai = "baai" in answer_lower
-            print(f"  Quality check:")
+            print("  Quality check:")
             print(f"    Contains 'bge': {has_bge}")
             print(f"    Contains 'baai': {has_baai}")
             print(f"    Has citations: {len(data['citations']) > 0}")
             if has_bge or has_baai:
-                print(f"  ✓ Answer correctly references the embedding model!")
+                print("  ✓ Answer correctly references the embedding model!")
             else:
-                print(f"  ⚠ Answer may not fully reference the expected model name")
+                print("  ⚠ Answer may not fully reference the expected model name")
         else:
             print(f"  ✗ Error: {r.text[:500]}")
             return

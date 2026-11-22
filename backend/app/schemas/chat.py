@@ -55,6 +55,8 @@ class CitationOut(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     answer: str
     citations: list[CitationOut]
     conversation_id: uuid.UUID
@@ -73,7 +75,7 @@ class MessageOut(BaseModel):
     model_used: str | None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class MessageListOut(BaseModel):
