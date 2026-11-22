@@ -67,6 +67,11 @@ dependencies = [
     "langchain-core==1.7.6",
     "langchain-groq>=0.2.0,<2.0.0",
     "langchain-huggingface>=0.1.2,<2.0.0",
+    # Pin langsmith in main dependencies too: a transitive dep of the
+    # langchain-* packages ships a pydantic-2.x-incompatible feedback schema
+    # that crashes the RAG chat stream at runtime (NameError: FeedbackConfigSchema).
+    # Keep in sync with the dev pin below.
+    "langsmith>=0.1.0,<0.3.0",
     # Logging & Observability
     "concurrent-log-handler==0.9.31",
     "structlog==24.2.0",
