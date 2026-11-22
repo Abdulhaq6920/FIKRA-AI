@@ -19,7 +19,6 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -453,7 +452,9 @@ async def ask_stream(
     )
 
 
-@router.post("/messages/{message_id}/feedback", status_code=201, response_model=FeedbackSubmitResponse)
+@router.post(
+    "/messages/{message_id}/feedback", status_code=201, response_model=FeedbackSubmitResponse
+)
 async def submit_feedback_by_message(
     message_id: uuid.UUID,
     body: FeedbackRequest,

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import OrgAdminUser
-from app.core.exceptions import AppError, PermissionDeniedError
+from app.core.exceptions import PermissionDeniedError
 from app.core.logging import get_logger
 from app.db.models.audit import Notification, RoleRequest, RoleRequestStatus, UsageRecord
 from app.db.models.conversation import Conversation, Feedback, Message, MessageRole
