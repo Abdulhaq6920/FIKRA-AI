@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+from app.db.types.encrypted import EncryptedType
 
 if TYPE_CHECKING:
     from app.db.models.conversation import Conversation, Feedback
@@ -42,12 +43,16 @@ class OrgRole(str, enum.Enum):
 class User(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "users"
 
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
+    # PII — encrypted at rest (Fernet). Lookups use email_normalized, which
+    # stays plaintext so login can query by it without decrypting every row.
+    email: Mapped[str] = mapped_column(
+        EncryptedType(String(1024)), unique=True, nullable=False, index=True
+    )
     email_normalized: Mapped[str] = mapped_column(
         String(320), unique=True, nullable=False, index=True
     )
     hashed_password: Mapped[str] = mapped_column(String(1024), nullable=False)
-    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[str] = mapped_column(EncryptedType(String(1024)), nullable=False)
     status: Mapped[UserStatus] = mapped_column(
         Enum(UserStatus, name="user_status", values_callable=_vc),
         default=UserStatus.PENDING,
@@ -75,7 +80,8 @@ class User(UUIDMixin, TimestampMixin, Base):
     )
 
     def __repr__(self) -> str:
-        return f"<User id={self.id} email={self.email}>"
+        # Never log PII (email) — use the stable id only.
+        return f"<User id={self.id}>"
 
 
 class OrganizationMembership(UUIDMixin, TimestampMixin, Base):

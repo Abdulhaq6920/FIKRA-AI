@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+from app.db.types.encrypted import EncryptedType
 
 if TYPE_CHECKING:
     from app.db.models.organization import Organization
@@ -73,8 +74,11 @@ class Document(UUIDMixin, TimestampMixin, Base):
         nullable=True,
         index=True,
     )
-    title: Mapped[str] = mapped_column(String(512), nullable=False)
-    original_filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Encrypted at rest — titles and filenames are tenant PII.
+    title: Mapped[str] = mapped_column(EncryptedType(String(1024)), nullable=False)
+    original_filename: Mapped[str] = mapped_column(
+        EncryptedType(String(1024)), nullable=False
+    )
     storage_path: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)

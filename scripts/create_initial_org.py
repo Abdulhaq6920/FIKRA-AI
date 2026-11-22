@@ -33,6 +33,7 @@ ADMIN_NAME = "Platform Admin"
 async def create_initial_data() -> None:
     from app.core.config import settings
     from app.core.security import hash_password
+    from app.db.types.encrypted import encrypt_value
 
     # asyncpg uses plain postgres:// URLs, not postgresql+asyncpg://
     raw_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
@@ -86,10 +87,10 @@ async def create_initial_data() -> None:
                      NOW(), NOW())
                 """,
                 admin_id,
-                ADMIN_EMAIL,
+                encrypt_value(ADMIN_EMAIL),
                 ADMIN_EMAIL.lower(),
                 hashed,
-                ADMIN_NAME,
+                encrypt_value(ADMIN_NAME),
             )
             print(f"Created admin user: {ADMIN_EMAIL}")
             print(f"  Password: {ADMIN_PASSWORD}")

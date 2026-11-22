@@ -17,6 +17,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+from app.db.types.encrypted import EncryptedType
 
 if TYPE_CHECKING:
     from app.db.models.organization import Organization
@@ -56,7 +57,9 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    title: Mapped[str] = mapped_column(String(512), default="New Conversation", nullable=False)
+    title: Mapped[str] = mapped_column(
+        EncryptedType(String(1024)), default="New Conversation", nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -106,7 +109,7 @@ class Message(UUIDMixin, TimestampMixin, Base):
     role: Mapped[MessageRole] = mapped_column(
         Enum(MessageRole, name="message_role", values_callable=_vc), nullable=False
     )
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(EncryptedType(Text), nullable=False)
     model_used: Mapped[str | None] = mapped_column(String(100), nullable=True)
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -137,7 +140,7 @@ class ConversationSummary(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    summary_text: Mapped[str] = mapped_column(EncryptedType(Text), nullable=False)
     covers_up_to_message_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
@@ -181,7 +184,7 @@ class FavoriteQuestion(UUIDMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    question: Mapped[str] = mapped_column(String(500), nullable=False)
+    question: Mapped[str] = mapped_column(EncryptedType(String(1024)), nullable=False)
 
     def __repr__(self) -> str:
         return f"<FavoriteQuestion id={self.id} user_id={self.user_id}>"
@@ -225,11 +228,11 @@ class Feedback(UUIDMixin, TimestampMixin, Base):
     feedback_type: Mapped[FeedbackType] = mapped_column(
         Enum(FeedbackType, name="feedback_type", values_callable=_vc), nullable=False
     )
-    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comment: Mapped[str | None] = mapped_column(EncryptedType(Text), nullable=True)
     review_status: Mapped[str] = mapped_column(
         String(32), default="open", nullable=False, index=True
     )
-    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_note: Mapped[str | None] = mapped_column(EncryptedType(Text), nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

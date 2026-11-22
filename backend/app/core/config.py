@@ -91,6 +91,14 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = Field(default=7, ge=1)
 
     # ------------------------------------------------------------------
+    # Data-at-rest encryption (Fernet)
+    # ------------------------------------------------------------------
+    # Encrypts sensitive fields (email, names, document titles, chat
+    # content) before they are written to PostgreSQL. Generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    data_encryption_key: str = Field(default="")
+
+    # ------------------------------------------------------------------
     # CORS
     # ------------------------------------------------------------------
     allowed_origins: list[str] = Field(default=["http://localhost:3000"])
