@@ -150,5 +150,7 @@ cd frontend; npm.cmd run build
 - **204 routes:** FastAPI 0.111 treats `-> None` as a response model and
   rejects it on `status_code=204`. Always pass `response_model=None` on 204
   route decorators (see `auth.py`, `documents.py`, `chat.py`).
-- Do not edit `backend/.env`, secrets, or credentials. Never run destructive git
-  or remote-changing commands; do not commit unless asked.
+- Do not edit `backend/.env`, secrets, or credentials.
+- Git commands are allowed as needed inside this repo (status, diff, add, commit,
+  push, branch, etc.). Agents may stage specific changed files and commit when
+  asked; never commit or edit secrets/credentials.
